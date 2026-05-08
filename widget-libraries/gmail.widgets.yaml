@@ -1,0 +1,610 @@
+_meta:
+  name: widget-libraries/gmail.widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-07
+  description: |
+    Gmail widget seed library. Source-of-truth for Gmail widget definitions,
+    drop-in extendable by per-org gmail manifests via `extends:` once Phase 9
+    of spec 60.1 lands the manifests/ subtree.
+  archetypes_used: [text_input, combobox, typeahead, modal_button, menu_action]
+  changelog:
+    - 0.1.0 (2026-05-07): initial seed (extracted from today's gmail v0 manifest;
+      currently the only Gmail-using manifest, so no overlay layer needed yet)
+
+# Gmail widgets. v0.1.0 = seed library extracted from manifest-redesign/manifests/gmail/widgets.yaml.
+# When Calendar/Drive land, common Google patterns may migrate into
+# widget-libraries/google-workspace.widgets.yaml as a parent extends.
+defaults_by_type:
+  text: gmail.compose_subject_input
+  email: gmail.compose_to_input
+  rich_text: gmail.compose_body_editor
+
+widgets:
+  # ── Compose ─────────────────────────────────────────────────
+  gmail.compose_button:
+    archetype: modal_button
+    invoke:
+      - id: click_compose
+        type: click
+        args:
+          selector:
+            - "div[role='button'][gh='cm']"
+            - "div.T-I.T-I-KE.L3[role='button']"
+            - "div[role='button']:has-text('Compose')"
+        verify:
+          type: selector_appears
+          selector: "div[role='region'][aria-label='New Message']"
+          timeout_ms: 10000
+
+  gmail.compose_to_input:
+    # Pattern matched from the working chrome-plugin recipe
+    # (gmail.json compose_to_input.set_value):
+    #   1. type_sequentially — uses pressSequentially (real keydown
+    #      per char) so Gmail's typeahead listener fires; Playwright's
+    #      .fill() uses a batch native-setter that bypasses React /
+    #      typeahead handlers. Same reason chrome-plugin uses
+    #      execCommand('insertText') instead of `el.value=x`.
+    #   2. press_key Enter (NO selector, fires on focused element)
+    #      to commit the typeahead chip.
+    archetype: typeahead
+    fill:
+      - id: type_to
+        type: type_sequentially
+        args:
+          selector:
+            - "input[aria-label='To recipients']"
+            - "div[name='to'] input[role='combobox']"
+          value: "{{value}}"
+          delay_ms: 30
+        verify:
+          type: element_value_equals
+          selector: "input[aria-label='To recipients']"
+          value: "{{value}}"
+    submit:
+      - id: enter_to_commit
+        type: press_key
+        args:
+          key: Enter
+        verify:
+          # After Enter on the focused To input, the typeahead
+          # commits and Send loses its T-I-JE disabled class.
+          type: selector_appears
+          selector: "div[role='button'][aria-label^='Send '][aria-label*='Ctrl-Enter']:not(.T-I-JE)"
+          timeout_ms: 5000
+
+  gmail.compose_cc_input:
+    archetype: typeahead
+    fill:
+      - id: open_cc
+        type: click
+        args:
+          selector:
+            - "span[aria-label*='Add Cc recipients']"
+            - "span[role='link'][aria-label*='Cc']"
+        verify:
+          type: selector_appears
+          selector: "div[name='cc'] input[role='combobox']"
+          timeout_ms: 5000
+      - id: type_cc
+        type: fill_text
+        args:
+          selector:
+            - "div[name='cc'] input[role='combobox']"
+            - "div[name='cc'] input[type='text']"
+          value: "{{value}}"
+        verify:
+          type: element_value_equals
+          selector: "div[name='cc'] input[role='combobox']"
+          value: "{{value}}"
+
+  gmail.compose_bcc_input:
+    archetype: typeahead
+    fill:
+      - id: open_bcc
+        type: click
+        args:
+          selector:
+            - "span[aria-label*='Add Bcc recipients']"
+            - "span[role='link'][aria-label*='Bcc']"
+        verify:
+          type: selector_appears
+          selector: "div[name='bcc'] input[role='combobox']"
+          timeout_ms: 5000
+      - id: type_bcc
+        type: fill_text
+        args:
+          selector:
+            - "div[name='bcc'] input[role='combobox']"
+            - "div[name='bcc'] input[type='text']"
+          value: "{{value}}"
+        verify:
+          type: element_value_equals
+          selector: "div[name='bcc'] input[role='combobox']"
+          value: "{{value}}"
+
+  gmail.compose_subject_input:
+    archetype: text_input
+    fill:
+      - id: type_subject
+        type: fill_text
+        args:
+          selector:
+            - "input[name='subjectbox']"
+            - "input[aria-label='Subject']"
+            - "input.aoT[aria-label='Subject']"
+          value: "{{value}}"
+        verify:
+          type: element_value_equals
+          selector: "input[name='subjectbox']"
+          value: "{{value}}"
+
+  gmail.compose_body_editor:
+    archetype: text_input
+    fill:
+      - id: type_body
+        type: fill_text
+        args:
+          selector:
+            - "div[role='textbox'][aria-label='Message Body']"
+            - "div.editable[aria-label='Message Body']"
+            - "div[contenteditable='true'][aria-label='Message Body']"
+          value: "{{value}}"
+        verify:
+          type: selector_text_equals
+          selector: "div[role='textbox'][aria-label='Message Body']"
+          contains: "{{value}}"
+
+  gmail.compose_send_button:
+    # When Gmail processes the Send, the button itself flips to
+    # DISABLED (gets the `T-I-JE` class) — this is the success
+    # signal in the deeplink (`?fs=1&tf=cm`) and inline composers.
+    # Page does NOT navigate; compose region stays in DOM. The
+    # "Message sent. Undo. Dismiss." toast appears separately and
+    # is checked at the action's outcome level.
+    archetype: modal_button
+    invoke:
+      - id: click_send
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label^='Send '][aria-label*='Ctrl-Enter']:not(.T-I-JE)"
+            - "div[role='button'][data-tooltip^='Send '][data-tooltip*='Ctrl-Enter']:not(.T-I-JE)"
+        verify:
+          type: selector_appears
+          selector: "div[role='button'][aria-label^='Send '][aria-label*='Ctrl-Enter'].T-I-JE"
+          timeout_ms: 10000
+
+  gmail.compose_discard_button:
+    archetype: modal_button
+    invoke:
+      - id: click_discard
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label^='Discard draft']"
+            - "div[role='button'][data-tooltip^='Discard draft']"
+        verify:
+          type: selector_disappears
+          selector: "div[role='region'][aria-label='New Message']"
+          timeout_ms: 10000
+
+  # ── Inbox / search ──────────────────────────────────────────
+  gmail.search_input:
+    archetype: text_input
+    fill:
+      - id: focus_and_type
+        type: fill_text
+        args:
+          selector:
+            - "input[name='q'][aria-label='Search mail']"
+            - "input[placeholder='Search mail']"
+            - "form#aso_search_form_anchor input[name='q']"
+          value: "{{value}}"
+        verify:
+          type: element_value_equals
+          selector: "input[name='q'][aria-label='Search mail']"
+          value: "{{value}}"
+    submit:
+      - id: press_enter
+        type: press_key
+        args:
+          selector: "input[name='q'][aria-label='Search mail']"
+          key: Enter
+        verify:
+          # Gmail's #search/<q> hash-route doesn't fire framenavigated
+          # AND the runner's url_matches is anchored to full URL — so
+          # verify on a search-view-specific affordance instead. The
+          # 'Clear search' button only renders inside the search results.
+          type: selector_appears
+          selector: "button[aria-label='Clear search']"
+          timeout_ms: 10000
+
+  gmail.thread_row_checkbox:
+    archetype: row_checkbox
+    invoke:
+      - id: click_row_checkbox
+        type: click
+        args:
+          selector:
+            - "tr.zA[aria-labelledby] div[role='checkbox'][aria-checked='false']"
+            - "tr.zA div[role='checkbox'].T-Jo[aria-checked='false']"
+            - "tr.zA[aria-label*='{{subject}}'] div[role='checkbox']"
+        verify:
+          type: selector_attribute_equals
+          selector: "tr.zA div[role='checkbox']"
+          attribute: aria-checked
+          value: "true"
+
+  gmail.thread_row_open:
+    archetype: modal_button
+    invoke:
+      - id: click_row
+        type: click
+        args:
+          selector:
+            - "tr.zA span.bog[data-thread-id]:has-text('{{subject}}')"
+            - "tr.zA span.bqe[data-thread-id]:has-text('{{subject}}')"
+            - "tr.zA[role='row']:has-text('{{subject}}')"
+        verify:
+          # `.adn` is Gmail's open-thread message container — only
+          # present when a thread is opened; not in inbox grid view.
+          # Avoids false-positive on hidden inbox-row data-thread-ids.
+          type: selector_appears
+          selector: "div.adn"
+          timeout_ms: 10000
+
+  gmail.thread_row_star:
+    # Click the first unstarred star icon in the inbox grid (the
+    # freshly-seeded message is at top after seedMessage). Verify
+    # by waiting for at least one `[aria-label='Starred']` span to
+    # appear inside the inbox grid — the click toggled an unstarred
+    # star to starred, so this selector goes from 0 matches → 1+.
+    archetype: row_checkbox
+    invoke:
+      - id: click_star
+        type: click
+        args:
+          selector:
+            - "table[role='grid'] tr.zA span[aria-label='Not starred']"
+        verify:
+          # Gmail's class chain changes when starred: `aXw T-KT`
+          # → `T-KT T-KT-Jp T-KT-JW`. Match by aria-label only —
+          # T-KT is the only class consistent across states.
+          type: selector_appears
+          selector: "table[role='grid'] tr.zA span[role='button'][aria-label='Starred']"
+          timeout_ms: 5000
+
+  # ── Inbox toolbar (after row selected) ──────────────────────
+  gmail.toolbar_archive_button:
+    archetype: panel_button
+    invoke:
+      - id: click_archive
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='Archive'][data-tooltip='Archive']"
+            - "div[role='button'][aria-label='Archive']:not([aria-disabled='true'])"
+        verify:
+          type: selector_disappears
+          selector: "tr.zA[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  gmail.toolbar_delete_button:
+    archetype: panel_button
+    invoke:
+      - id: click_delete
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='Delete'][data-tooltip='Delete']"
+            - "div[role='button'][aria-label='Delete']:not([aria-disabled='true'])"
+        verify:
+          type: selector_disappears
+          selector: "tr.zA[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  gmail.toolbar_mark_read_button:
+    archetype: panel_button
+    invoke:
+      - id: click_mark_read
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='Mark as read'][data-tooltip='Mark as read']"
+            - "div[role='button'][aria-label='Mark as read']:not([aria-disabled='true'])"
+        verify:
+          type: selector_disappears
+          selector: "tr.zA.zE[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  gmail.toolbar_mark_unread_button:
+    archetype: panel_button
+    invoke:
+      - id: click_mark_unread
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='Mark as unread'][data-tooltip='Mark as unread']"
+            - "div[role='button'][aria-label='Mark as unread']:not([aria-disabled='true'])"
+        verify:
+          type: selector_appears
+          selector: "tr.zA.zE[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  gmail.toolbar_move_to_button:
+    archetype: panel_button
+    invoke:
+      - id: click_move_to
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='Move to'][data-tooltip='Move to']"
+            - "div[role='button'][aria-label='Move to']:not([aria-disabled='true'])"
+        verify:
+          type: selector_appears
+          selector: "div[role='menu']"
+          timeout_ms: 5000
+
+  gmail.toolbar_report_spam_button:
+    archetype: panel_button
+    invoke:
+      - id: click_report_spam
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='Report spam'][data-tooltip='Report spam']"
+            - "div[role='button'][aria-label='Report spam']:not([aria-disabled='true'])"
+        verify:
+          type: selector_disappears
+          selector: "tr.zA[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  gmail.toolbar_more_button:
+    # Inbox-toolbar More button (only visible after a row is selected).
+    # `aria-label='More email options'` (not 'More options' — that one
+    # belongs to the compose toolbar's More button, in the discovery
+    # DOM but a different affordance).
+    archetype: menu_action
+    invoke:
+      - id: click_more
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='More email options'][data-tooltip='More']"
+            - "div[role='button'][aria-label='More email options']"
+        verify:
+          # 3 div[role='menu'] elements exist in DOM (other context
+          # menus + the inbox-toolbar More). Most J-N menuitems live
+          # inside hidden menus (offsetWidth=0). Use the Playwright
+          # `:visible` pseudo to scope to the VISIBLE menu's first
+          # menuitem.
+          type: selector_appears
+          selector: "div[role='menuitem'].J-N:visible"
+          timeout_ms: 5000
+
+  # ── Toolbar More menu items (click-revealed; _heal_me) ──────
+  gmail.menu_label_as_item:
+    # Toolbar More menu's "Label as" entry. Has aria-haspopup='true'
+    # because hovering opens the submenu.
+    archetype: menu_action
+    invoke:
+      - id: click_label_as
+        type: click
+        args:
+          selector:
+            - "div[role='menuitem'][aria-haspopup='true']:has(div.J-N-Jz:text-is('Label as'))"
+            - "div.J-N.J-Ph[role='menuitem'][aria-haspopup='true']"
+            - "div[role='menuitem']:has-text('Label as')"
+        verify:
+          type: selector_appears
+          selector: "div[role='menuitemcheckbox']"
+          timeout_ms: 5000
+
+  gmail.menu_snooze_item:
+    # Toolbar More menu's "Snooze" entry. Variant class J-N-JT
+    # marks "opens a date picker" entries.
+    archetype: menu_action
+    invoke:
+      - id: click_snooze
+        type: click
+        args:
+          selector:
+            - "div.J-N.J-N-JT[role='menuitem']:has(div.J-N-Jz:text-is('Snooze'))"
+            - "div.J-N.J-N-JT[role='menuitem']"
+            - "div[role='menuitem']:has-text('Snooze')"
+        verify:
+          type: selector_appears
+          selector: "div.J-N[role='menuitem']:has(div.bsK)"
+          timeout_ms: 5000
+
+  gmail.menu_mute_item:
+    # Toolbar More menu's "Mute" entry. jslog id 56753 is Gmail's
+    # logging tag for this action; stable across renders.
+    archetype: menu_action
+    invoke:
+      - id: click_mute
+        type: click
+        args:
+          selector:
+            - "div[role='menuitem'][jslog^='56753']"
+            - "div.J-N[role='menuitem']:has(div.J-N-Jz:text-is('Mute'))"
+            - "div[role='menuitem']:has-text('Mute')"
+        verify:
+          type: selector_disappears
+          selector: "tr.zA[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  gmail.label_picker_item:
+    # Submenu item appearing after Label-as click; each label is
+    # `div[role='menuitemcheckbox'][title='<label_name>']`.
+    archetype: menu_action
+    invoke:
+      - id: click_label
+        type: click
+        args:
+          selector:
+            - "div[role='menuitemcheckbox'][title='{{label_name}}']"
+            - "div.J-LC[role='menuitemcheckbox'][title='{{label_name}}']"
+        verify:
+          type: selector_attribute_equals
+          selector: "div[role='menuitemcheckbox'][title='{{label_name}}']"
+          attribute: aria-checked
+          value: "true"
+
+  gmail.move_to_picker_item:
+    # Move-to picker uses the same menuitemcheckbox-by-title pattern
+    # as the Label-as submenu.
+    archetype: menu_action
+    invoke:
+      - id: click_destination
+        type: click
+        args:
+          selector:
+            - "div[role='menuitemcheckbox'][title='{{destination_label}}']"
+            - "div.J-LC[role='menuitemcheckbox'][title='{{destination_label}}']"
+        verify:
+          type: selector_disappears
+          selector: "tr.zA[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  gmail.snooze_preset_item:
+    # Snooze date picker presets: each preset is a J-N menuitem with
+    # an inner `div.bsK` containing the preset name (Tomorrow / This
+    # weekend / Next week / Pick date & time). 'Later today' surfaces
+    # only before 4pm local time.
+    archetype: menu_action
+    invoke:
+      - id: click_preset
+        type: click
+        args:
+          selector:
+            - "div.J-N[role='menuitem']:has(div.bsK:text-is('{{preset}}'))"
+            - "div[role='menuitem']:has(div.bsK:has-text('{{preset}}'))"
+        verify:
+          type: selector_disappears
+          selector: "tr.zA[aria-label*='{{subject}}']"
+          timeout_ms: 10000
+
+  # ── Thread footer triggers (resolved via probe 2026-05-07) ─
+  # Reply / Reply-all / Forward inside an opened thread are
+  # `<span role='link' class='ams bk?'>` where the second class is the
+  # variant: `bkH` = Reply, `bkG` = Forward. Reply-all surfaces only
+  # on threads with 2+ DISTINCT recipient addresses (probe seeded
+  # To+Cc=self → Gmail dedupes → reply_all stayed hidden, so its
+  # class suffix is still unknown).
+  gmail.thread_reply_button:
+    archetype: panel_button
+    invoke:
+      - id: click_reply
+        type: click
+        args:
+          selector:
+            - "span[role='link'].ams.bkH"
+            - "span[role='link'][class~='bkH']"
+            - "span[role='link'].ams:has-text('Reply'):not(:has-text('all'))"
+        verify:
+          type: selector_appears
+          selector: "div[role='region'][data-compose-id]"
+          timeout_ms: 10000
+
+  gmail.thread_reply_all_button:
+    # Resolved 2026-05-07 via focused probe of a real multi-recipient
+    # thread (FMfcgzQgLXtGHWVXTgPgbfbdBhJrJPlZ): class `ams bkI` —
+    # extends the bkG (Forward) / bkH (Reply) sibling pattern.
+    # Surfaces only when the thread has 2+ DISTINCT recipient
+    # addresses; Gmail dedupes self-addresses for the calculation so
+    # synthetic To+Cc=self seeds do NOT show this button (caller
+    # must use a real second-mailbox seed for live reply_all tests).
+    archetype: panel_button
+    invoke:
+      - id: click_reply_all
+        type: click
+        args:
+          selector:
+            - "span[role='link'].ams.bkI"
+            - "span[role='link'][class~='bkI']"
+            - "span[role='link'].ams:has-text('Reply all')"
+        verify:
+          type: selector_appears
+          selector: "div[role='region'][data-compose-id]"
+          timeout_ms: 10000
+
+  gmail.thread_forward_button:
+    archetype: panel_button
+    invoke:
+      - id: click_forward
+        type: click
+        args:
+          selector:
+            - "span[role='link'].ams.bkG"
+            - "span[role='link'][class~='bkG']"
+            - "span[role='link'].ams:has-text('Forward'):not(:has-text('attachment'))"
+        verify:
+          type: selector_appears
+          selector: "div[role='region'][data-compose-id]"
+          timeout_ms: 10000
+
+  # NOTE: thread_to_input / thread_body_editor / thread_send_button
+  # are no longer separate widgets — the inline forward/reply
+  # composer uses identical selectors to the standalone compose
+  # modal (peoplekit-id BbVjBd, aria-label='Message Body',
+  # aria-label='Send' Ctrl-Enter). Reply/Reply-all/Forward action
+  # recipes now reference compose_to_input / compose_body_editor /
+  # compose_send_button directly.
+
+  # ── Sidebar / labels ────────────────────────────────────────
+  gmail.create_label_button:
+    # Sidebar 'Create new label' button. Note: opens a Gmail
+    # dialog that does NOT use role='dialog' — it uses custom
+    # Material-style markup. Verify the H2 'New label' heading
+    # instead.
+    archetype: modal_button
+    invoke:
+      - id: click_create_label
+        type: click
+        args:
+          selector:
+            - "div[role='button'][aria-label='Create new label'][data-tooltip='Create new label']"
+            - "div.aAu.arN[role='button'][jsname='dlrqf']"
+        verify:
+          type: selector_appears
+          selector: "h2:has-text('New label')"
+          timeout_ms: 5000
+
+  gmail.create_label_dialog_input:
+    # New-label dialog input. The id is auto-generated (`c10`-ish),
+    # so anchor by jsname + type. The associated label reads
+    # 'Please enter a new label name:'.
+    archetype: text_input
+    fill:
+      - id: type_label_name
+        type: fill_text
+        args:
+          selector:
+            - "input[type='text'][jsname='YPqjbf'].qdOxv-K0-wGMbrd"
+            - "input[type='text'][jsname='YPqjbf']"
+          value: "{{value}}"
+        verify:
+          type: element_value_equals
+          selector: "input[type='text'][jsname='YPqjbf']"
+          value: "{{value}}"
+
+  gmail.create_label_dialog_create_button:
+    # Primary action button in the new-label dialog. Class `eV8l8d`
+    # is Gmail's affirmative-button variant; `Rb6pkf` would be the
+    # Cancel/dismissive variant. Has visible text 'Create'.
+    archetype: dialog_button
+    invoke:
+      - id: click_create
+        type: click
+        args:
+          selector:
+            - "button.mUIrbf-I.eV8l8d:has-text('Create')"
+            - "button.mUIrbf-I.eV8l8d"
+            - "button:has-text('Create'):not(:has-text('Cancel'))"
+        verify:
+          type: selector_disappears
+          selector: "h2:has-text('New label')"
+          timeout_ms: 10000

@@ -1,0 +1,16 @@
+# Build artifacts (none in this repo currently; placeholder)
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*~
+
+# Local-only experiments — name these so they're never committed
+local/
+scratch/
+*.local.md
+*.local.yaml
+*.local.json

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/manifest-v60.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/manifest-v60.json",
+      "version": "1.0.0-stub",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-07",
+      "description": "Spec 60 manifest format JSON Schema. STUB — to be replaced by generator output (see tools-build/gen-manifest-schema.ts). Run `pnpm gen-schema` from tools-build/ to regenerate from validator/manifest_types.ts in the main anvisio repo.",
+      "regenerate_with": "tools-build/gen-manifest-schema.ts",
+      "regenerate_requires": "anvisio main repo's validator/manifest_types.ts (path: ../../anvisio/manifest-redesign/validator/manifest_types.ts relative to tools-build/)",
+      "stub_validates": "top-level shape only; per-field constraints come from the generated version"
+    }
+  },
+  "title": "Spec 60 Manifest (top-level shape stub)",
+  "description": "Stub schema validating the top-level shape of a spec 60 manifest. The generated schema (replacing this stub) will validate every field. CI gate 2 in validate.yml uses this until the generator is wired.",
+  "type": "object",
+  "required": ["files"],
+  "additionalProperties": false,
+  "properties": {
+    "files": {
+      "type": "object",
+      "description": "Map from in-manifest file path to body. Loaded by the manifest-loader in the plugin.",
+      "patternProperties": {
+        "^[a-z][a-z0-9_-]*\\.md$": {
+          "type": "string",
+          "description": "Narrative file <integration>.md"
+        },
+        "^apis\\.yaml$": {
+          "type": "string",
+          "description": "API endpoint definitions"
+        },
+        "^widgets\\.yaml$": {
+          "type": "string",
+          "description": "Per-SaaS widget overrides; extends widget-libraries/<platform>.widgets.yaml"
+        },
+        "^schemas/[A-Z][a-zA-Z0-9]*\\.yaml$": {
+          "type": "string",
+          "description": "Entity schemas"
+        },
+        "^views/[A-Z][a-zA-Z0-9]*\\.yaml$": {
+          "type": "string",
+          "description": "View definitions"
+        },
+        "^actions/[a-z][a-z0-9_]*\\.yaml$": {
+          "type": "string",
+          "description": "Per-verb action recipes"
+        },
+        "^test_catalog\\.json$": {
+          "type": "string",
+          "description": "Generated test enumeration; validates against schemas/test-catalog-v60.json"
+        }
+      },
+      "minProperties": 1
+    }
+  }
+}

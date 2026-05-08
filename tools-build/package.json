@@ -1,0 +1,13 @@
+{
+  "name": "anvisio-data-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for anvisio-data. Pinned versions intentionally — bump only via reviewed PR.",
+  "scripts": {
+    "gen-schema": "tsx gen-manifest-schema.ts --types-source ../../anvisio/manifest-redesign/validator/manifest_types.ts --out ../schemas/manifest-v60.json"
+  },
+  "devDependencies": {
+    "ts-json-schema-generator": "2.3.0",
+    "tsx": "4.19.2"
+  }
+}

@@ -1,0 +1,33 @@
+# anvisio-data CODEOWNERS
+#
+# Per-directory maintainers. PRs touching a directory require approval from
+# at least one of its CODEOWNERS. Anvisio-core can override and merge anything.
+#
+# Until Phase 9 opens external contributions, every directory is owned by
+# @cd2k (sole maintainer). Per-SaaS maintainers are added as community
+# members emerge.
+#
+# Format: <path-pattern>  <maintainer>  [<additional-maintainers>...]
+
+# Default: cd2k owns everything
+*                                       @cd2k
+
+# Platform-level data (shared across all SaaS) — anvisio-core only when
+# the team grows beyond cd2k
+/prompts/                               @cd2k
+/schemas/                               @cd2k
+/tools/                                 @cd2k
+/.github/workflows/                     @cd2k
+
+# Per-platform widget vocabularies — owned by whoever first authored them
+/widget-libraries/lightning.widgets.yaml    @cd2k
+/widget-libraries/gmail.widgets.yaml        @cd2k
+
+# Per-SaaS manifests (added in Phase 9)
+# /manifests/salesforce/                @cd2k
+# /manifests/gmail/                     @cd2k
+# /manifests/github/                    @cd2k
+# /manifests/hubspot/                   @cd2k
+
+# Build tooling
+/tools-build/                           @cd2k

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/test-catalog-v60.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/test-catalog-v60.json",
+      "version": "1.0.0",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-07",
+      "description": "JSON Schema for test_catalog.json (output of stage 3 propose). Enumerates the action × flavor × outcome × user-action-variant test matrix per spec 60 §K test-catalog-as-unit-tests pattern.",
+      "related_prompts": ["prompts/propose.md"],
+      "changelog": [
+        "1.0.0 (2026-05-07): initial; matches prompts/propose.md v3.2.1 output shape"
+      ]
+    }
+  },
+  "title": "Spec 60 test_catalog.json",
+  "description": "Test enumeration produced by the propose stage. Per spec 60 §K (test-catalog-as-unit-tests), every (action × flavor × outcome × user-action-variant) combination becomes one test the runner executes during the heal-loop phase.",
+  "type": "object",
+  "required": ["integration_id", "tests"],
+  "properties": {
+    "integration_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the propose stage emitted this catalog."
+    },
+    "generated_by": {
+      "type": "object",
+      "description": "Provenance of the catalog (which prompt + which session produced it).",
+      "properties": {
+        "prompt_name": { "type": "string", "const": "prompts/propose.md" },
+        "prompt_version": { "type": "string" },
+        "session_id": { "type": "string" }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "description": "Enumerated tests. The runner executes each in turn and records the outcome.",
+      "items": { "$ref": "#/$defs/Test" }
+    }
+  },
+  "$defs": {
+    "Test": {
+      "type": "object",
+      "required": ["name", "action", "flavor", "expected_outcome"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Human-readable test description (e.g. 'send_email - dom_send - sent - auto-save')."
+        },
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Verb name from the manifest's actions/<verb>.yaml."
+        },
+        "flavor": {
+          "type": "string",
+          "description": "Flavor name from the action's flavors[]."
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["auto", "auto-save", "auto-cancel", "auto-x", "auto-confirm", "auto-discard", "manual"],
+          "default": "auto",
+          "description": "User-action variant — what the runner does AFTER the recipe fills the form. 'auto' = let the recipe finish; 'auto-save' = press the save button; 'auto-cancel' = cancel mid-flow; 'manual' = pause for a human."
+        },
+        "expected_outcome": {
+          "type": "string",
+          "description": "Outcome action name (matches one of the entries in the action's outcomes[])."
+        },
+        "fixture_required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Does this test need a pre-existing fixture record? (Per intent's fixture_dependencies + requires_state.)"
+        },
+        "seed_fixtures": {
+          "type": "array",
+          "description": "Fixtures the harness auto-creates before this test runs. Carries from intent's fixture_dependencies.",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": { "type": "string" },
+              "role": { "type": "string" }
+            }
+          }
+        },
+        "seed_state": {
+          "type": "object",
+          "description": "UI / entity state preconditions the harness ensures before running. Carries from intent's requires_state."
+        },
+        "inputs": {
+          "type": "object",
+          "description": "Inputs to pass to the recipe at execution time."
+        },
+        "expected_data": {
+          "type": "object",
+          "description": "Optional. Expected shape of the outcome's extracted data. Used for stronger assertions in the test runner."
+        },
+        "skip_reason": {
+          "type": "string",
+          "description": "If set, this test is skipped. Records WHY for eval to surface (e.g. 'requires manual fixture setup, not yet automated')."
+        }
+      }
+    }
+  }
+}

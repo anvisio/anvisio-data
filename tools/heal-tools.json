@@ -1,0 +1,138 @@
+{
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "tools/heal-tools.json",
+      "version": "0.1.0",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-07",
+      "description": "Anthropic tool definitions for tool-use heal LLM (spec 60.2). Five tools: query_dom, dispatch_event, wait_for, take_snapshot, read_attribute. Plugin's llm-healer-v60.ts passes the `tools[]` array directly to the SDK. Per-cycle budget: 30 tool calls / 60s wall / 2 MB combined result body.",
+      "related_prompts": ["prompts/heal.md"],
+      "related_schemas": ["schemas/manifest-v60.json"],
+      "changelog": [
+        "0.1.0 (2026-05-07): initial 5-tool catalog locked in spec 60.2 §2"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "query_dom",
+      "description": "Find DOM elements matching a CSS selector. Returns up to N matches with tag, classes, key attributes, computed visibility, visible size, and trimmed text. Use this to verify a selector exists and is reachable BEFORE proposing it as a patch. Issues opaque `uid` handles you reference in subsequent dispatch_event / read_attribute calls.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "CSS selector. Playwright text selectors (text=, :has-text) supported. Avoid :nth-child indices unless absolutely necessary."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Optional scoping selector. When set, the query runs inside the first match of this selector. Use to narrow into a dialog, panel, or row.",
+            "default": null
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max matches to return. Default 10, max 25.",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 25
+          }
+        },
+        "required": ["selector"]
+      }
+    },
+    {
+      "name": "dispatch_event",
+      "description": "Dispatch a DOM event on a previously-queried element (referenced by uid from query_dom or take_snapshot). Returns success + dom_mutated_within_500ms summary so you can tell whether the event had any visible effect. Real-event dispatch through the plugin's primitives layer (NOT synthetic JS clicks) — what you see is what the runner would see.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string",
+            "description": "Element handle from query_dom or take_snapshot."
+          },
+          "event": {
+            "type": "string",
+            "enum": ["click", "focus", "blur", "hover", "press_key", "input"],
+            "description": "Event to dispatch. press_key needs a key arg. input needs a value arg."
+          },
+          "args": {
+            "type": "object",
+            "description": "Event-specific args. press_key: { key: 'Enter' }. input: { value: 'foo' }.",
+            "default": {}
+          }
+        },
+        "required": ["uid", "event"]
+      }
+    },
+    {
+      "name": "wait_for",
+      "description": "Wait for a DOM condition. Polls every 100ms up to timeout_ms. Use when you've dispatched an event and need the page to settle before observing the result. Returns matched: bool plus elapsed_ms (NOT an error block on timeout — use matched: false in your reasoning).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string",
+            "enum": ["appears", "disappears", "attribute_equals"],
+            "default": "appears"
+          },
+          "attribute": {
+            "type": "string",
+            "description": "Required when condition=attribute_equals."
+          },
+          "value": {
+            "type": "string",
+            "description": "Required when condition=attribute_equals."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "default": 3000,
+            "minimum": 100,
+            "maximum": 8000
+          }
+        },
+        "required": ["selector"]
+      }
+    },
+    {
+      "name": "take_snapshot",
+      "description": "Capture compacted DOM at the current moment. Use SPARINGLY: snapshots are large (capped at 200 KB) and the initial heal context already includes one. Best use case: 'I clicked something, now I need to see the new dialog that appeared'. Returns dom_compact + a uid_index mapping uids to selectors so you can reference any element from the snapshot in a follow-up dispatch_event.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "description": "Optional scoping selector. Snapshot is rooted at the first match. Default: active dialog if visible, else body.",
+            "default": null
+          },
+          "include_invisible": {
+            "type": "boolean",
+            "description": "Include off-screen / display:none elements. Default false.",
+            "default": false
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "read_attribute",
+      "description": "Read one attribute or computed style of an element. Useful for checking aria-disabled, aria-pressed, value, computed display, etc. without a full re-query. Cheaper than query_dom (soft cost 0.5 calls). Returns null if attribute is absent (vs empty string for present-but-empty).",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "attribute": {
+            "type": "string",
+            "description": "Attribute name (e.g. 'aria-disabled', 'value', 'href') or 'computed:<style>' (e.g. 'computed:display')."
+          }
+        },
+        "required": ["uid", "attribute"]
+      }
+    }
+  ]
+}
