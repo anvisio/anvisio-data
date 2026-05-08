@@ -49,7 +49,10 @@ jobs:
 
       - name: Commit .cdn-index.json
         run: |
-          if git diff --quiet .cdn-index.json; then
+          # Detect both new (untracked) and modified files via porcelain.
+          # `git diff --quiet` returns 0 for untracked files, so it'd skip
+          # committing on first run. status --porcelain catches both.
+          if [ -z "$(git status --porcelain .cdn-index.json)" ]; then
             echo "No index change; skipping commit."
             exit 0
           fi
@@ -76,12 +79,13 @@ jobs:
         run: |
           # jsDelivr's cache TTL is 7 days for branch refs. Hitting the purge
           # endpoint forces edge-flush so the just-merged content is live
-          # within minutes instead of within a week.
+          # within minutes instead of within a week. Note: jsDelivr's purge
+          # API is GET (not POST). The endpoint returns JSON success/error.
           channel="${{ github.ref_name }}"
           # Purge index file
-          curl -s -X POST "https://purge.jsdelivr.net/gh/anvisio/anvisio-data@${channel}/.cdn-index.json"
+          curl -s "https://purge.jsdelivr.net/gh/anvisio/anvisio-data@${channel}/.cdn-index.json" || true
           # Purge changed files (best-effort; jsDelivr handles unknown paths fine)
-          for path in $(git diff --name-only HEAD~1 HEAD | grep -E '^(prompts|widget-libraries|schemas|tools|manifests)/'); do
-            curl -s -X POST "https://purge.jsdelivr.net/gh/anvisio/anvisio-data@${channel}/${path}" >/dev/null || true
+          for path in $(git diff --name-only HEAD~1 HEAD | grep -E '^(prompts|widget-libraries|schemas|tools|manifests)/' || true); do
+            curl -s "https://purge.jsdelivr.net/gh/anvisio/anvisio-data@${channel}/${path}" >/dev/null || true
           done
           echo "jsDelivr purge complete for channel: $channel"
