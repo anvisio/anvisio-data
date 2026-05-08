@@ -21,7 +21,7 @@ See CONTRIBUTING.md for the full contribution guide.
 - [ ] Onboarding session log attached (link to gist or paste cleaned excerpt)
 - [ ] All test_catalog tests pass live against the SaaS
 - [ ] PII scrubbed from session log + manifest fixtures
-- [ ] DCO sign-off on every commit (`git commit -s`)
+- [ ] DCO sign-off (`git commit -s`) — deferred until license is set; encouraged but not required during bootstrap phase
 
 ## For heal-patch promotions
 
@@ -44,7 +44,7 @@ The following CI checks run automatically. All must pass before merge:
 - [ ] **Version bump** — new `version` greater than prior; bump type matches change
 - [ ] **Cross-ref integrity** — `related_*` fields point at valid files
 - [ ] **Manifest replay** — for `manifests/<saas>/` PRs, test catalog runs against recorded fixture
-- [ ] **License** — MIT header on new files
+- [ ] **License** — no-op until a license is set (see README); will check headers once license is chosen
 - [ ] **PII scrub** — no emails, phone numbers, names from common fixtures
 - [ ] **Size** — files <200 KB (override label `gate-override: size` if needed)
 

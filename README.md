@@ -82,7 +82,7 @@ All three carry the same fields: `name` (path with extension), `version` (semver
 
 ## License
 
-[MIT](./LICENSE). Pull request authors retain copyright on their contributions; merging is governed by the project's DCO sign-off requirement.
+**TBD.** No license is set during the bootstrap phase. Until a license is chosen, this repo is "All Rights Reserved" by default and no usage rights are granted to third parties beyond what GitHub's TOS allows (forking, viewing). We'll choose a real license once the v0 pipeline (Phases 7-8 of [spec 60.1](https://github.com/anvisio/anvisio/blob/main/planning/impl_plans/60.1-plugin-runtime-pivot.md)) proves out — likely PolyForm Noncommercial 1.0.0 or similar source-available terms.
 
 ---
 

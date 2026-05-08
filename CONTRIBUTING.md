@@ -52,11 +52,11 @@ All gates must pass before merge. CI runs in `pull_request` mode (sandboxed; no 
 
 Gate 5 is the strongest one: a PR that breaks an existing recipe can't merge.
 
-## DCO sign-off
+## DCO sign-off (deferred)
 
-Every commit must include a `Signed-off-by: Your Name <email>` line. This is the [Developer Certificate of Origin](https://developercertificate.org/) — by signing off you confirm you have the right to contribute the change under MIT.
+The bootstrap phase has no license set, so there's no DCO requirement yet. Once a license is chosen (after Phase 8 of spec 60.1 — see [README](./README.md#license)), all contributions will require `Signed-off-by:` per [Developer Certificate of Origin](https://developercertificate.org/) and CI will enforce.
 
-`git commit -s` adds the line automatically. PRs with un-signed commits are blocked by CI.
+Until then, `git commit -s` is encouraged but not required. The license CI gate (gate 6) is a no-op for now.
 
 ## Branch policy
 
