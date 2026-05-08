@@ -31,14 +31,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install replay harness
-        run: |
-          # Pinned. The replay harness runs the recipe-runner code path
-          # against a recorded DOM snapshot fixture — no live SaaS,
-          # no real user session.
-          npm install --no-save \
-            playwright@1 \
-            yaml@2
+      - name: Install CI helpers (pinned via tools-build/package.json)
+        # Replay harness will be added to package.json devDependencies once
+        # Phase 9 of spec 60.1 lands the manifests/ subtree + replay engine.
+        run: cd tools-build && npm install --no-audit --no-fund
 
       - name: Resolve affected manifests
         id: resolve

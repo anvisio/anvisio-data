@@ -35,55 +35,43 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install validators
+      - name: Install CI helpers (pinned via tools-build/package.json)
+        run: cd tools-build && npm install --no-audit --no-fund
+
+      # Pass PR labels to CI scripts so gate-override:* labels can bypass
+      # specific gates (size, pii). Format: comma-separated list.
+      - name: Resolve PR labels
+        id: labels
         run: |
-          # Pinned versions; update intentionally
-          npm install --no-save \
-            ajv@8 \
-            ajv-formats@3 \
-            yaml@2 \
-            gray-matter@4 \
-            semver@7
+          labels=$(jq -r '[.labels[].name] | join(",")' "$GITHUB_EVENT_PATH" 2>/dev/null || echo "")
+          echo "PR_LABELS=$labels" >> $GITHUB_ENV
 
       # ───────── Gate 1 — Frontmatter ──────────
-      # Every changed data file has well-formed `_meta:` / frontmatter /
-      # $comment.data_cdn_meta with required fields per spec 60.3 §3.4.
       - name: Gate 1 - Frontmatter
         run: node tools-build/ci/check-frontmatter.mjs
 
       # ───────── Gate 2 — Schema ──────────
-      # Files validate against their JSON Schema:
-      #   manifests/<saas>/**/*.yaml → schemas/manifest-v60.json
-      #   intent.yaml fixtures        → schemas/intent-v60.json
-      #   test_catalog.json           → schemas/test-catalog-v60.json
       - name: Gate 2 - Schema
         run: node tools-build/ci/check-schema.mjs
 
       # ───────── Gate 3 — Version bump ──────────
-      # New `version` field in changed files is greater than prior;
-      # bump type (patch/minor/major) matches change scope per spec 60.3 §3.5.
       - name: Gate 3 - Version bump rule
         run: node tools-build/ci/check-version-bump.mjs
 
       # ───────── Gate 4 — Cross-ref integrity ──────────
-      # `related_*` fields point at files that exist + are not retired.
       - name: Gate 4 - Cross-ref integrity
         run: node tools-build/ci/check-cross-refs.mjs
 
       # ───────── Gate 6 — License ──────────
-      # New files carry MIT license header; no GPL / proprietary content.
-      # Override: PR carrying label `gate-override: license` (maintainer-only).
+      # Currently a no-op stub (license deferred during bootstrap phase).
       - name: Gate 6 - License
         run: node tools-build/ci/check-license.mjs
 
       # ───────── Gate 7 — PII scrub ──────────
-      # Session-log artifacts in PRs don't contain emails, phone numbers,
-      # known fixture names. Heuristic-based; not a complete privacy filter.
       - name: Gate 7 - PII scrub
         run: node tools-build/ci/check-pii.mjs
 
       # ───────── Gate 8 — Size ──────────
-      # No file exceeds 200 KB without `gate-override: size` label.
       - name: Gate 8 - Size
         run: node tools-build/ci/check-size.mjs
 

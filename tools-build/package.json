@@ -2,12 +2,20 @@
   "name": "anvisio-data-tools",
   "private": true,
   "type": "module",
-  "description": "Build tooling for anvisio-data. Pinned versions intentionally — bump only via reviewed PR.",
+  "description": "Build tooling + CI helpers for anvisio-data. Pinned versions intentionally — bump only via reviewed PR.",
   "scripts": {
-    "gen-schema": "tsx gen-manifest-schema.ts --types-source ../../anvisio/manifest-redesign/validator/manifest_types.ts --out ../schemas/manifest-v60.json"
+    "gen-schema": "tsx gen-manifest-schema.ts --types-source ../../anvisio/manifest-redesign/validator/manifest_types.ts --out ../schemas/manifest-v60.json",
+    "ci:all": "node ci/check-frontmatter.mjs && node ci/check-schema.mjs && node ci/check-version-bump.mjs && node ci/check-cross-refs.mjs && node ci/check-license.mjs && node ci/check-pii.mjs && node ci/check-size.mjs",
+    "ci:replay": "node ci/replay-test-catalog.mjs",
+    "ci:index": "node ci/generate-cdn-index.mjs"
   },
   "devDependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "gray-matter": "4.0.3",
+    "semver": "7.6.3",
     "ts-json-schema-generator": "2.3.0",
-    "tsx": "4.19.2"
+    "tsx": "4.19.2",
+    "yaml": "2.6.1"
   }
 }

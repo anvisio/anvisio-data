@@ -18,6 +18,9 @@ on:
       - beta
       - release
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -28,15 +31,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.PUBLISH_PAT }}
+          # Use PUBLISH_PAT when the workflow needs to push back to a
+          # protected branch (branch protection blocks the default
+          # GITHUB_TOKEN). Falls back to GITHUB_TOKEN otherwise.
+          token: ${{ secrets.PUBLISH_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install
-        run: npm install --no-save yaml@2 gray-matter@4
+      - name: Install CI helpers (pinned via tools-build/package.json)
+        run: cd tools-build && npm install --no-audit --no-fund
 
       - name: Generate .cdn-index.json
         run: node tools-build/ci/generate-cdn-index.mjs --channel "${{ github.ref_name }}"

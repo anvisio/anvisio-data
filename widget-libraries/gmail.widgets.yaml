@@ -1,6 +1,6 @@
 _meta:
   name: widget-libraries/gmail.widgets.yaml
-  version: 0.1.0
+  version: 0.1.1
   cdn_schema_version: 60.3.0
   authored_by: cd2k + claude
   authored_at: 2026-05-07
@@ -10,8 +10,8 @@ _meta:
     of spec 60.1 lands the manifests/ subtree.
   archetypes_used: [text_input, combobox, typeahead, modal_button, menu_action]
   changelog:
-    - 0.1.0 (2026-05-07): initial seed (extracted from today's gmail v0 manifest;
-      currently the only Gmail-using manifest, so no overlay layer needed yet)
+    - "0.1.1 (2026-05-07): quoted multi-line changelog string for YAML parser compatibility"
+    - "0.1.0 (2026-05-07): initial seed (extracted from today's gmail v0 manifest; currently the only Gmail-using manifest, so no overlay layer needed yet)"
 
 # Gmail widgets. v0.1.0 = seed library extracted from manifest-redesign/manifests/gmail/widgets.yaml.
 # When Calendar/Drive land, common Google patterns may migrate into

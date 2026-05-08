@@ -1,7 +1,10 @@
-# Build artifacts (none in this repo currently; placeholder)
+# Build artifacts
 node_modules/
 dist/
 *.tsbuildinfo
+
+# CI runtime artifacts (regenerated each CI run)
+ci-summary.md
 
 # Editor / OS noise
 .DS_Store
