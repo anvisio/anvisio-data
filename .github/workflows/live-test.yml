@@ -1,0 +1,68 @@
+# CI gate 5 from spec 60.3 §13.6 — manifest test catalog replay.
+#
+# For PRs touching `manifests/<saas>/`, this workflow runs the test catalog
+# against a recorded fixture (snapshot replay; not live SaaS). Catches
+# "fixed it on my screen, broke it on yours" regressions.
+#
+# No-op until Phase 9 lands the `manifests/` subtree. Currently registered
+# as a required check so the gate is wired before the first manifest PR.
+
+name: Live test (manifest replay)
+
+on:
+  pull_request:
+    branches: [main, beta, release]
+    paths:
+      - 'manifests/**'
+      - 'widget-libraries/**'        # widget-library changes can affect manifests
+      - 'schemas/manifest-v60.json'  # schema bumps may invalidate manifests
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install replay harness
+        run: |
+          # Pinned. The replay harness runs the recipe-runner code path
+          # against a recorded DOM snapshot fixture — no live SaaS,
+          # no real user session.
+          npm install --no-save \
+            playwright@1 \
+            yaml@2
+
+      - name: Resolve affected manifests
+        id: resolve
+        run: |
+          # List manifests touched by this PR
+          changed=$(git diff --name-only origin/${{ github.base_ref }} | grep '^manifests/' || true)
+          if [ -z "$changed" ]; then
+            echo "manifests=" >> $GITHUB_OUTPUT
+            echo "No manifest changes; skipping replay."
+            exit 0
+          fi
+          # Get unique <saas> from changed paths
+          saas_list=$(echo "$changed" | awk -F/ '{print $2}' | sort -u | tr '\n' ' ')
+          echo "manifests=$saas_list" >> $GITHUB_OUTPUT
+
+      - name: Replay test catalog
+        if: steps.resolve.outputs.manifests != ''
+        run: |
+          for saas in ${{ steps.resolve.outputs.manifests }}; do
+            echo "::group::Replay manifests/$saas"
+            node tools-build/ci/replay-test-catalog.mjs --saas "$saas"
+            echo "::endgroup::"
+          done
+
+      - name: Skip note (no manifest changes)
+        if: steps.resolve.outputs.manifests == ''
+        run: echo "No manifest changes in this PR; replay skipped (expected)."

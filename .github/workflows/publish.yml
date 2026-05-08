@@ -1,0 +1,81 @@
+# Publish workflow per spec 60.3 §13.4 release channels.
+#
+# Triggers on:
+#   - merge to `main`     → no action (dev channel; jsDelivr serves directly)
+#   - merge to `beta`     → regenerate .cdn-index.json + jsDelivr purge
+#   - merge to `release`  → tag (v<YYYY>.<M>.<D>) + .cdn-index.json + jsDelivr purge
+#
+# .cdn-index.json is the discovery file plugins fetch on boot to know
+# what's available (per spec 60.3 §2.2). It's regenerated server-side
+# from the repo's frontmatter on every merge.
+
+name: Publish
+
+on:
+  push:
+    branches:
+      - main
+      - beta
+      - release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PUBLISH_PAT }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        run: npm install --no-save yaml@2 gray-matter@4
+
+      - name: Generate .cdn-index.json
+        run: node tools-build/ci/generate-cdn-index.mjs --channel "${{ github.ref_name }}"
+
+      - name: Commit .cdn-index.json
+        run: |
+          if git diff --quiet .cdn-index.json; then
+            echo "No index change; skipping commit."
+            exit 0
+          fi
+          git config user.name "anvisio-bot"
+          git config user.email "noreply@anvisio.com"
+          git add .cdn-index.json
+          git commit -m "chore: regenerate .cdn-index.json [${{ github.ref_name }}]"
+          git push origin "${{ github.ref_name }}"
+
+      - name: Cut release tag (release channel only)
+        if: github.ref_name == 'release'
+        run: |
+          tag="v$(date -u +%Y.%-m.%-d)"
+          # Skip if tag already exists (manual same-day re-publish)
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag exists; skipping."
+            exit 0
+          fi
+          git tag "$tag"
+          git push origin "$tag"
+          echo "Tagged $tag"
+
+      - name: Purge jsDelivr cache
+        run: |
+          # jsDelivr's cache TTL is 7 days for branch refs. Hitting the purge
+          # endpoint forces edge-flush so the just-merged content is live
+          # within minutes instead of within a week.
+          channel="${{ github.ref_name }}"
+          # Purge index file
+          curl -s -X POST "https://purge.jsdelivr.net/gh/anvisio/anvisio-data@${channel}/.cdn-index.json"
+          # Purge changed files (best-effort; jsDelivr handles unknown paths fine)
+          for path in $(git diff --name-only HEAD~1 HEAD | grep -E '^(prompts|widget-libraries|schemas|tools|manifests)/'); do
+            curl -s -X POST "https://purge.jsdelivr.net/gh/anvisio/anvisio-data@${channel}/${path}" >/dev/null || true
+          done
+          echo "jsDelivr purge complete for channel: $channel"

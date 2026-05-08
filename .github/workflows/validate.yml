@@ -1,0 +1,106 @@
+# Validates every PR against CI gates 1-4, 6-8 from spec 60.3 §13.6.
+# Gate 5 (manifest test catalog replay) lives in live-test.yml.
+#
+# Runs in `pull_request` mode (sandboxed) so first-time contributor PRs
+# cannot exfiltrate secrets via malicious workflow edits.
+#
+# All gates must pass for merge. Override labels (gate-override: size,
+# gate-override: license) require maintainer approval.
+
+name: Validate
+
+on:
+  pull_request:
+    branches: [main, beta, release]
+    paths:
+      - 'prompts/**'
+      - 'widget-libraries/**'
+      - 'schemas/**'
+      - 'tools/**'
+      - 'manifests/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need history for version-bump diff
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install validators
+        run: |
+          # Pinned versions; update intentionally
+          npm install --no-save \
+            ajv@8 \
+            ajv-formats@3 \
+            yaml@2 \
+            gray-matter@4 \
+            semver@7
+
+      # ───────── Gate 1 — Frontmatter ──────────
+      # Every changed data file has well-formed `_meta:` / frontmatter /
+      # $comment.data_cdn_meta with required fields per spec 60.3 §3.4.
+      - name: Gate 1 - Frontmatter
+        run: node tools-build/ci/check-frontmatter.mjs
+
+      # ───────── Gate 2 — Schema ──────────
+      # Files validate against their JSON Schema:
+      #   manifests/<saas>/**/*.yaml → schemas/manifest-v60.json
+      #   intent.yaml fixtures        → schemas/intent-v60.json
+      #   test_catalog.json           → schemas/test-catalog-v60.json
+      - name: Gate 2 - Schema
+        run: node tools-build/ci/check-schema.mjs
+
+      # ───────── Gate 3 — Version bump ──────────
+      # New `version` field in changed files is greater than prior;
+      # bump type (patch/minor/major) matches change scope per spec 60.3 §3.5.
+      - name: Gate 3 - Version bump rule
+        run: node tools-build/ci/check-version-bump.mjs
+
+      # ───────── Gate 4 — Cross-ref integrity ──────────
+      # `related_*` fields point at files that exist + are not retired.
+      - name: Gate 4 - Cross-ref integrity
+        run: node tools-build/ci/check-cross-refs.mjs
+
+      # ───────── Gate 6 — License ──────────
+      # New files carry MIT license header; no GPL / proprietary content.
+      # Override: PR carrying label `gate-override: license` (maintainer-only).
+      - name: Gate 6 - License
+        run: node tools-build/ci/check-license.mjs
+
+      # ───────── Gate 7 — PII scrub ──────────
+      # Session-log artifacts in PRs don't contain emails, phone numbers,
+      # known fixture names. Heuristic-based; not a complete privacy filter.
+      - name: Gate 7 - PII scrub
+        run: node tools-build/ci/check-pii.mjs
+
+      # ───────── Gate 8 — Size ──────────
+      # No file exceeds 200 KB without `gate-override: size` label.
+      - name: Gate 8 - Size
+        run: node tools-build/ci/check-size.mjs
+
+      # ───────── Summary ──────────
+      # Comment a digest on the PR with each gate's status.
+      - name: Comment gate digest on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.existsSync('ci-summary.md')
+              ? fs.readFileSync('ci-summary.md', 'utf8')
+              : '(no summary written)';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## CI gate summary\n\n${summary}`,
+            });
