@@ -1,0 +1,88 @@
+{
+  "cdn_schema_version": "60.3.0",
+  "generated_at": "2026-05-08T00:44:38.437Z",
+  "channel": "release",
+  "commit_sha": "51c69fe29f7afe51abfd943f2bd1860322dd5d14",
+  "files": [
+    {
+      "path": "prompts/eval.md",
+      "version": "0.1.0",
+      "size_bytes": 2879,
+      "sha256": "1052e2fe1f80f71dd954305ad3a977642c9723ef54e1b3b3349768359b9c82a3",
+      "description": "Post-onboarding eval prompt — placeholder for Phase 6 of spec 60.1.",
+      "retired": false
+    },
+    {
+      "path": "prompts/heal.md",
+      "version": "0.1.0",
+      "size_bytes": 11923,
+      "sha256": "c51b16c129a2723bff70a3dc6c3d662faffe12af9a9a0e78f07d8c950aa7970e",
+      "description": "Heal LLM system prompt — tool-use enabled per spec 60.2. Heal LLM probes",
+      "retired": false
+    },
+    {
+      "path": "prompts/intent.md",
+      "version": "1.1.0",
+      "size_bytes": 13887,
+      "sha256": "05b881494a0e93d13458e169ed698d4504371cd2fe7dd36d9b77d11fec892dcd",
+      "description": "Stage 1 onboarding prompt. Given a SaaS name, the LLM uses web search",
+      "retired": false
+    },
+    {
+      "path": "prompts/propose.md",
+      "version": "3.2.1",
+      "size_bytes": 36253,
+      "sha256": "5811078d05d3ab33c9e195f396a7a93e9b2461535147ad1e316870bfb19b470b",
+      "description": "Stage 3 onboarding prompt. Receives intent.yaml + discovery DOM bundle;",
+      "retired": false
+    },
+    {
+      "path": "schemas/intent-v60.json",
+      "version": "1.0.0",
+      "size_bytes": 6184,
+      "sha256": "99edbcb2334278de5a4a31cd2e467286f3689683566d167841a98af0332f527b",
+      "description": "JSON Schema for intent.yaml (Stage 1 onboarding output). Validates verb enumeration + landmark mapping + per-verb metadata (depends_on_view, recipe_outline, requires_state, fixture_dependencies).",
+      "retired": false
+    },
+    {
+      "path": "schemas/manifest-v60.json",
+      "version": "1.0.0-stub",
+      "size_bytes": 2581,
+      "sha256": "ec32eff5808c8f0746183add02ddfad75fa0f129f8070d6983d6ee4098f7fec2",
+      "description": "Spec 60 manifest format JSON Schema. STUB — to be replaced by generator output (see tools-build/gen-manifest-schema.ts). Run `pnpm gen-schema` from tools-build/ to regenerate from validator/manifest_types.ts in the main anvisio repo.",
+      "retired": false
+    },
+    {
+      "path": "schemas/test-catalog-v60.json",
+      "version": "1.0.0",
+      "size_bytes": 4617,
+      "sha256": "06239ed15f29b899a6826e38f0b4fb08cebd151307ab6fb095e1c4369a05818d",
+      "description": "JSON Schema for test_catalog.json (output of stage 3 propose). Enumerates the action × flavor × outcome × user-action-variant test matrix per spec 60 §K test-catalog-as-unit-tests pattern.",
+      "retired": false
+    },
+    {
+      "path": "tools/heal-tools.json",
+      "version": "0.1.0",
+      "size_bytes": 5959,
+      "sha256": "a0e8a25e3dbae3085716cc810ebac85730353ab192a00837348b523a2ec74a3a",
+      "description": "Anthropic tool definitions for tool-use heal LLM (spec 60.2). Five tools: query_dom, dispatch_event, wait_for, take_snapshot, read_attribute. Plugin's llm-healer-v60.ts passes the `tools[]` array directly to the SDK. Per-cycle budget: 30 tool calls / 60s wall / 2 MB combined result body.",
+      "retired": false
+    },
+    {
+      "path": "widget-libraries/gmail.widgets.yaml",
+      "version": "0.1.1",
+      "size_bytes": 22429,
+      "sha256": "6669dfb8a2761cea93fb9a4323370bbb8b363a6c75411b90d9e4a17359aec326",
+      "description": "Gmail widget seed library. Source-of-truth for Gmail widget definitions,",
+      "retired": false
+    },
+    {
+      "path": "widget-libraries/lightning.widgets.yaml",
+      "version": "1.0.0",
+      "size_bytes": 14362,
+      "sha256": "80481cb2c3bca078b73faecb7d58c11c64d2c365ddf38c81b53601dfe2c25287",
+      "description": "Salesforce Lightning widget seed library (9 widgets, all SF orgs reuse via `extends:`)",
+      "retired": false
+    }
+  ]
+}
