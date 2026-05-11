@@ -1,0 +1,48 @@
+_meta:
+  name: manifests/gmail/actions/search_email.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    search_email action — search the mailbox using Gmail's search
+    syntax. Read-only; URL transitions to #search/<query>. Works from
+    any view. Phase 5 healed search_input to use click-submit-button
+    instead of press Enter (typeahead popup ate the keystroke).
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: >
+  Search the mailbox using Gmail's search query syntax (from:, subject:,
+  has:attachment, etc.). The user enters a query into the top search bar and the
+  URL transitions to #search/<query>. Works from any landing view;
+  depends_on_view 'any' because the search input is in the global header.
+object: Thread
+commits_changes: false
+depends_on_view: any
+inputs:
+  query:
+    type: text
+    required: true
+result:
+  searched: boolean
+flavors:
+  dom_submit:
+    requires_auth: session_cookie
+    label: Type query and submit
+    recipe:
+      - id: run_search
+        type: use_widget
+        args:
+          widget: gmail.search_input
+          op: fill
+          inputs:
+            value: "{{inputs.query}}"
+    outcomes:
+      - action: searched
+        signal:
+          type: url_matches
+          pattern: "#search/.*"
+        extract:
+          searched:
+            literal: true

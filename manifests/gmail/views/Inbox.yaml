@@ -1,0 +1,38 @@
+_meta:
+  name: manifests/gmail/views/Inbox.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    Inbox view — primary mailbox at /mail/u/0/#inbox. Launchpad for
+    compose; operating surface for archive/delete/star/label/move on
+    selected rows. URL-deeplink entry, Phase 4 validated.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+name: Inbox
+description: Primary mailbox view at /mail/u/0/#inbox showing the conversation
+  list. Used as the launchpad for compose and as the operating surface for
+  archive/delete/star/label/move on selected rows.
+entry:
+  url: https://mail.google.com/mail/u/0/#inbox
+url_patterns:
+  - https://mail.google.com/mail/u/0/#inbox
+  - https://mail.google.com/mail/u/0/#inbox/.*
+identifying_selectors:
+  - div[role='tab'][aria-selected='true'][aria-label='Primary']
+  - table.F.cf.zt tr.zA
+  - div[role='button'].T-I-KE.L3
+widgets:
+  - gmail.compose_button
+  - gmail.search_input
+  - gmail.thread_row
+  - gmail.row_checkbox
+  - gmail.row_star_toggle
+  - gmail.toolbar_archive_button
+  - gmail.toolbar_delete_button
+  - gmail.toolbar_mark_read_button
+  - gmail.toolbar_mark_unread_button
+  - gmail.toolbar_labels_button
+  - gmail.toolbar_move_button

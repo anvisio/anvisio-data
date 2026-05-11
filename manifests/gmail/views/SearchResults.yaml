@@ -1,0 +1,31 @@
+_meta:
+  name: manifests/gmail/views/SearchResults.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    SearchResults — list view after executing a search query. Same row
+    affordances as Inbox, scoped to matched conversations. URL-deeplink
+    entry with placeholder query for validation.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+name: SearchResults
+description: List view shown after executing a search query in the top search
+  bar. Same row affordances as Inbox but scoped to the matched conversations.
+  Validation enters via a deeplink with a benign placeholder query; production
+  wizards build the URL with the user's real query.
+entry:
+  url: https://mail.google.com/mail/u/0/#search/in%3Ainbox
+url_patterns:
+  - https://mail.google.com/mail/u/0/#search/.*
+identifying_selectors:
+  - button[aria-label='Clear search']
+  - div[role='toolbar'][aria-label='search refinement']
+widgets:
+  - gmail.search_input
+  - gmail.thread_row
+  - gmail.row_checkbox
+  - gmail.toolbar_archive_button
+  - gmail.toolbar_delete_button

@@ -1,0 +1,60 @@
+_meta:
+  name: manifests/gmail/actions/move_email.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    move_email action — move a thread to a different label/folder via
+    the Move-to menu typeahead.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: >
+  Move a thread to a different label/folder (e.g., Spam, custom label). Selects
+  the row, opens the Move-to menu, types the destination, and picks it.
+object: Thread
+commits_changes: true
+depends_on_view: Inbox
+inputs:
+  thread_id:
+    type: text
+    required: true
+  destination:
+    type: text
+    required: true
+    description: Label or folder name (e.g., 'Spam', 'Trash', or a custom label)
+result:
+  moved: boolean
+flavors:
+  dom_submit:
+    requires_auth: session_cookie
+    label: Select row + Move-to menu + pick destination
+    recipe:
+      - id: select_row
+        type: use_widget
+        args:
+          widget: gmail.row_checkbox
+          op: invoke
+          inputs:
+            thread_id: "{{inputs.thread_id}}"
+      - id: open_move_menu
+        type: use_widget
+        args:
+          widget: gmail.toolbar_move_button
+          op: invoke
+      - id: pick_destination
+        type: use_widget
+        args:
+          widget: gmail.move_menu_search
+          op: fill
+          inputs:
+            value: "{{inputs.destination}}"
+    outcomes:
+      - action: moved
+        signal:
+          type: selector_disappears
+          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+        extract:
+          moved:
+            literal: true

@@ -1,0 +1,46 @@
+_meta:
+  name: manifests/gmail/schemas/Message.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    Gmail Message schema — canonical entity for compose/read/reply flows.
+    Field-to-widget mappings drive fill_fields resolution in actions like
+    send_email, forward_email, etc.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: A single Gmail message (or the most recent message in a thread) —
+  the canonical entity for compose/read/reply flows.
+fields:
+  Id:
+    type: id
+    primary: true
+    readonly: true
+  ThreadId:
+    type: id
+    readonly: true
+  Subject:
+    type: text
+    widget: gmail.compose_subject_input
+  To:
+    type: list<email>
+    widget: gmail.compose_to_input
+  Cc:
+    type: list<email>
+    widget: gmail.compose_cc_input
+  Bcc:
+    type: list<email>
+    widget: gmail.compose_bcc_input
+  From:
+    type: email
+    readonly: true
+    widget: gmail.thread_from
+  Body:
+    type: rich_text
+    widget: gmail.compose_body_editor
+natural_keys:
+  - Subject
+  - ThreadId
+  - Id

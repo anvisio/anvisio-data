@@ -1,0 +1,15 @@
+_meta:
+  name: manifests/gmail/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    Gmail server-side API endpoints. Empty for browser-DOM-only integration
+    — Gmail interactions run via the cookie-authed mail.google.com page
+    rather than REST. If APIs land later (e.g. via Google Workspace API)
+    they'd go here.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+apis: {}

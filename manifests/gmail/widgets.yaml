@@ -1,31 +1,26 @@
 _meta:
-  name: widget-libraries/gmail.widgets.yaml
-  version: 0.2.0
+  name: manifests/gmail/widgets.yaml
+  version: 0.1.0
   cdn_schema_version: 60.3.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
-    Gmail widget seed library. Canonical source-of-truth for Gmail
-    widget definitions. v0.2.0 reflects the Phase 5 widget validation
-    (live mail.google.com, 2026-05-10) — 11 widgets healed across 3
-    drift classes (entry selectors, action dispatch, completion verify).
-    Mirrors manifests/gmail/widgets.yaml at the same version; the two
-    diverge if/when a per-Gmail-instance overlay needs to extend
-    (Phase 9 of spec 60.1).
-
-    Drop-in extendable by per-org gmail manifests via `extends:` once
-    Phase 9 of spec 60.1 lands the manifests/ subtree formally
-    (manifests/gmail/widgets.yaml currently duplicates this file).
+    Gmail widget catalog — 27 widgets across compose/thread/toolbar/
+    row/menu archetypes. Healed during Phase 5 widget validation against
+    live mail.google.com. Notable heal patches:
+      - compose_close_button: ancestor selector fix
+      - search_input: click-submit-button (Enter eaten by typeahead popup)
+      - toolbar_move_button: act='8' selector + menu verify fix
+      - toolbar_labels_button: reverted to atomic (Phase 5 overreach)
+      - compose_to_input: removed [name='to'] qualifier
+      - compose_cc_input / compose_bcc_input: selector_appears verify
+      - thread_archive / thread_delete / thread_star: act-attribute selectors
+      - thread_reply_all_button: 2-step (open More menu, click menuitem)
+    Irreversible widgets marked: send, delete, archive, star, mark_unread,
+    attachment_download.
   archetypes_used: [panel_button, modal_button, text_input, typeahead, row_checkbox, menu_action, dialog_button]
   changelog:
-    - "0.2.0 (2026-05-10): MAJOR bump. Healed against live gmail in Phase 5 widget validation. Replaces propose-authored seed with the live-DOM-verified shape. Notable patches: compose_close_button ancestor fix, search_input click-submit (Enter eaten by typeahead), toolbar_move_button act='8' selector, toolbar_labels_button reverted to atomic (Phase 5 heal-overreach reverted in commit 445a8755), compose_to_input removed [name='to'] qualifier, cc/bcc verify type selector_appears, thread_archive/delete/star act-attribute selectors, thread_reply_all_button 2-step (open More menu, click menuitem). Irreversible widgets explicitly marked. Reply widgets reconstructed from compose pattern + scoped to div[role='main']."
-    - "0.1.1 (2026-05-07): quoted multi-line changelog string for YAML parser compatibility"
-    - "0.1.0 (2026-05-07): initial seed extracted from manifest-redesign/manifests/gmail/widgets.yaml (pre-validation propose-authored shape with :has-text Playwright selectors)"
-
-defaults_by_type:
-  text: gmail.compose_subject_input
-  email: gmail.compose_to_input
-  rich_text: gmail.compose_body_editor
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest. Reply widgets (reply_body_editor, reply_send_button) reconstructed from compose pattern + scoped to div[role='main']; both passed Phase 5 validation first-try without heals so the propose-authored shape was correct."
 
 widgets:
   gmail.compose_button:
@@ -615,7 +610,13 @@ widgets:
             div[role='textbox'][g_editable='true'],
             div[contenteditable='true'][aria-label*='essage' i]
           timeout_ms: 4000
-  # ─── Reply body editor + send button (reconstructed; see _meta) ─────
+  # ─── Reply body editor + send button ───────────────────────────────
+  # NOTE: these two widgets were truncated in the source dump for this
+  # seed. Both passed Phase 5 validation FIRST TRY without heals, so
+  # propose's authored shape was correct as-is. The shape below mirrors
+  # gmail.compose_body_editor / gmail.compose_send_button scoped to
+  # div[role='main'] (the inline reply panel) instead of div[role='dialog'].
+  # cd2k: please re-dump and confirm exact text before publishing.
   gmail.reply_body_editor:
     archetype: text_input
     fill:

@@ -1,0 +1,73 @@
+_meta:
+  name: manifests/gmail/actions/forward_email.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    forward_email action — forward the currently open thread. Two
+    flavors: dom_no_submit (fill form only, user clicks Send) and
+    dom_submit (fill + send). Phase 6 validated dom_no_submit.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: >
+  Forward the currently open thread to new recipients. Assumes the wizard has
+  clicked gmail.thread_forward_button to open the inline composer with To/Body
+  editable.
+object: Reply
+commits_changes: true
+depends_on_view: ReplyComposer
+inputs:
+  fields:
+    type: object
+    required: true
+    description: |
+      Subset of Reply fields. Required: To, Body.
+result:
+  sent: boolean
+flavors:
+  dom_no_submit:
+    requires_auth: session_cookie
+    label: Fill forward To+Body; you click Send
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          object: Reply
+          from: "{{inputs.fields}}"
+    outcomes:
+      - action: ready_to_forward
+        signal:
+          type: selector_appears
+          selector: div[role='main'] div[role='button'][aria-label^='Send
+            '][aria-label*='Ctrl-Enter']
+      - action: sent
+        signal:
+          type: click_observed
+          widget: gmail.reply_send_button
+        extract:
+          sent:
+            literal: true
+  dom_submit:
+    requires_auth: session_cookie
+    label: Fill forward + click Send
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          object: Reply
+          from: "{{inputs.fields}}"
+      - id: send
+        type: use_widget
+        args:
+          widget: gmail.reply_send_button
+          op: invoke
+    outcomes:
+      - action: sent
+        signal:
+          type: network_response
+          pattern: POST .*/mail/u/0/.*sendmail
+        extract:
+          sent:
+            literal: true

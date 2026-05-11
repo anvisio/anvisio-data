@@ -1,0 +1,36 @@
+_meta:
+  name: manifests/gmail/views/LabelView.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    LabelView — list view scoped to a specific label or system folder
+    (Sent, Drafts, Starred, Trash, Spam, custom labels). Behaves like
+    Inbox for selection-based actions. Validation deeplinks to #sent.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+name: LabelView
+description: List view scoped to a specific label or system folder (Sent,
+  Drafts, Starred, Trash, Spam, custom labels). Behaves like Inbox for
+  selection-based actions. Validation deeplinks to
+entry:
+  url: https://mail.google.com/mail/u/0/#sent
+url_patterns:
+  - https://mail.google.com/mail/u/0/#sent.*
+  - https://mail.google.com/mail/u/0/#drafts.*
+  - https://mail.google.com/mail/u/0/#starred.*
+  - https://mail.google.com/mail/u/0/#trash.*
+  - https://mail.google.com/mail/u/0/#spam.*
+  - https://mail.google.com/mail/u/0/#label/.*
+  - https://mail.google.com/mail/u/0/#category/.*
+identifying_selectors:
+  - div.aim.ain
+  - table.F.cf.zt
+widgets:
+  - gmail.thread_row
+  - gmail.row_checkbox
+  - gmail.row_star_toggle
+  - gmail.toolbar_archive_button
+  - gmail.toolbar_delete_button

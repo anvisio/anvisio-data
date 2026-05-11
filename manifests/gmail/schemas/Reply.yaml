@@ -1,0 +1,24 @@
+_meta:
+  name: manifests/gmail/schemas/Reply.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    Gmail Reply schema — inline reply/reply-all/forward composed from
+    within an open thread. Used by reply_email, reply_all_email,
+    forward_email actions.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: An inline reply, reply-all, or forward composed from within an open
+  thread. Body is required; To is required only for forward.
+fields:
+  To:
+    type: list<email>
+    widget: gmail.reply_to_input
+  Body:
+    type: rich_text
+    widget: gmail.reply_body_editor
+natural_keys:
+  - Body

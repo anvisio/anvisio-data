@@ -1,0 +1,20 @@
+_meta:
+  name: manifests/gmail/schemas/Label.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    Gmail Label schema (system or user-defined). Target of apply_label
+    and move_email actions.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: A Gmail label (system or user-defined) used as the target for
+  apply_label and move_email actions.
+fields:
+  Name:
+    type: text
+    primary: true
+natural_keys:
+  - Name
