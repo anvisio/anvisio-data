@@ -1,0 +1,49 @@
+_meta:
+  name: manifests/gmail/actions/star_email.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    star_email action — toggle star on a specific row. Idempotent flip;
+    caller chooses direction. Outcome signal is loose (just checks row
+    presence) — Phase 7 candidate for tightening to check star class
+    state (T-KT-Jp / aXw).
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: >
+  Toggle the star marker on a specific row in the Inbox/list view. Clicks the
+  row's star icon; Gmail flips the state. Idempotency depends on caller — use
+  this to flip whichever direction is needed.
+object: Thread
+commits_changes: true
+depends_on_view: Inbox
+inputs:
+  thread_id:
+    type: text
+    required: true
+    description: data-legacy-thread-id of the row whose star is being toggled
+result:
+  toggled: boolean
+flavors:
+  dom_submit:
+    requires_auth: session_cookie
+    label: Click star icon on row
+    recipe:
+      - id: toggle_star
+        type: use_widget
+        args:
+          widget: gmail.row_star_toggle
+          op: invoke
+          inputs:
+            thread_id: "{{inputs.thread_id}}"
+    outcomes:
+      - action: toggled
+        signal:
+          type: selector_appears
+          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+            span[role='button']
+        extract:
+          toggled:
+            literal: true

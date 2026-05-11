@@ -1,0 +1,45 @@
+_meta:
+  name: manifests/gmail/actions/list_inbox.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    list_inbox action — navigate to the Inbox. Read-only; safe to
+    end-to-end test. Phase 6 validated.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: >
+  Navigate to the Inbox. The action assumes the user is already in Gmail; it
+  issues a navigate to the inbox URL so subsequent row-scoped actions
+  (archive/delete/star/etc.) can run. Read of individual rows is out of scope
+  for the manifest layer (use read_email after opening a thread).
+object: Thread
+commits_changes: false
+depends_on_view: any
+inputs: {}
+result:
+  navigated: boolean
+flavors:
+  dom_submit:
+    requires_auth: session_cookie
+    label: Navigate to Inbox
+    recipe:
+      - id: goto_inbox
+        type: navigate
+        args:
+          url: https://mail.google.com/mail/u/0/#inbox
+      - id: wait_list
+        type: wait_for_element
+        args:
+          selector: table.F.cf.zt tr.zA
+          timeout_ms: 10000
+    outcomes:
+      - action: navigated
+        signal:
+          type: url_matches
+          pattern: "#inbox$"
+        extract:
+          navigated:
+            literal: true

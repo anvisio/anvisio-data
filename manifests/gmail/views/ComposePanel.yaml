@@ -1,0 +1,58 @@
+_meta:
+  name: manifests/gmail/views/ComposePanel.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    ComposePanel view — compose window for drafting a new email. Hosts
+    To/Cc/Bcc/Subject/Body fields + Send button. Opened by clicking
+    gmail.compose_button on Inbox; explicit close via exit recipe to
+    avoid dialog leaking onto next view. Entry chain + exit healed in
+    Phase 4 validation.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+name: ComposePanel
+description: Compose window (popup or full-screen) for drafting a new email.
+  Hosts the To/Cc/Bcc/Subject/Body fields and the Send button. Opened by
+  clicking gmail.compose_button on Inbox; must be explicitly closed via
+  gmail.compose_close_button to avoid leaking the dialog onto the next view.
+entry:
+  depends_on_view: Inbox
+  recipe:
+    - id: open_compose
+      type: use_widget
+      args:
+        widget: gmail.compose_button
+        op: invoke
+    - id: wait_compose
+      type: wait_for_element
+      args:
+        selector: input[name='subjectbox']
+        timeout_ms: 8000
+exit:
+  - id: discard_compose
+    type: click
+    args:
+      selector: div[role='button'][aria-label^='Discard draft']
+  - id: wait_compose_gone
+    type: wait_for_element
+    args:
+      selector: div[aria-label^='New Message']
+      state: absent
+      timeout_ms: 5000
+url_patterns:
+  - https://mail.google.com/mail/u/0/#.*[?&]compose=.*
+identifying_selectors:
+  - div[aria-label^='New Message']
+  - input[name='subjectbox']
+  - div[aria-label='Message Body'][role='textbox']
+widgets:
+  - gmail.compose_to_input
+  - gmail.compose_cc_input
+  - gmail.compose_bcc_input
+  - gmail.compose_subject_input
+  - gmail.compose_body_editor
+  - gmail.compose_send_button
+  - gmail.compose_close_button

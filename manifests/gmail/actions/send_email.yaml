@@ -1,0 +1,77 @@
+_meta:
+  name: manifests/gmail/actions/send_email.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    send_email action — compose and send a new email. Wizard opens
+    compose via gmail.compose_button on Inbox before invoking. Two
+    flavors: dom_no_submit (fill compose only; ready_to_send signal)
+    and dom_submit (fill + click Send; network_response signal). Phase
+    6 validated dom_no_submit.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: >
+  Compose and send a new email to one or more recipients with subject and body,
+  optionally with cc/bcc. Assumes the user is in the ComposePanel; the wizard
+  opens compose via the gmail.compose_button widget on Inbox before invoking
+  this action.
+object: Message
+commits_changes: true
+depends_on_view: ComposePanel
+inputs:
+  fields:
+    type: object
+    required: true
+    description: |
+      Subset of Message fields. Required: To, Subject, Body. Optional: Cc, Bcc.
+result:
+  sent: boolean
+  message_id: text
+flavors:
+  dom_no_submit:
+    requires_auth: session_cookie
+    label: Fill compose; you click Send
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          object: Message
+          from: "{{inputs.fields}}"
+    outcomes:
+      - action: ready_to_send
+        signal:
+          type: element_value_equals
+          selector: input[name='subjectbox']
+          value: "{{inputs.fields.Subject}}"
+      - action: sent
+        signal:
+          type: click_observed
+          widget: gmail.compose_send_button
+        extract:
+          sent:
+            literal: true
+  dom_submit:
+    requires_auth: session_cookie
+    label: Fill compose + click Send
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          object: Message
+          from: "{{inputs.fields}}"
+      - id: send
+        type: use_widget
+        args:
+          widget: gmail.compose_send_button
+          op: invoke
+    outcomes:
+      - action: sent
+        signal:
+          type: network_response
+          pattern: POST .*/mail/u/0/.*sendmail
+        extract:
+          sent:
+            literal: true

@@ -1,0 +1,54 @@
+_meta:
+  name: manifests/gmail/views/ThreadView.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    ThreadView — opened email conversation. Hosts read affordances
+    (subject, from, body), per-message actions, reply/forward triggers.
+    Entry chains via Inbox + first-row click; Phase 4 validated.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+name: ThreadView
+description: Opened email conversation showing message contents and reply
+  controls. Hosts read affordances (subject, from, body), per-message actions
+  (archive, delete, star, mark unread), and reply/forward triggers. Entry opens
+  the FIRST conversation row (no thread_id parameter at validation time);
+  production wizards may seek a specific row before invoking actions on this
+  view.
+entry:
+  depends_on_view: Inbox
+  recipe:
+    - id: open_first_row
+      type: click
+      args:
+        selector:
+          - table.F.cf.zt tr.zA span.bog
+          - tr.zA[role='row'] span.bog
+    - id: wait_thread
+      type: wait_for_element
+      args:
+        selector: h2.hP
+        timeout_ms: 8000
+url_patterns:
+  - https://mail.google.com/mail/u/0/#inbox/.+
+  - https://mail.google.com/mail/u/0/#search/.*/.+
+  - https://mail.google.com/mail/u/0/#label/.*/.+
+identifying_selectors:
+  - div[role='main'] h2.hP
+  - div[role='main'] div.a3s.aiL
+  - div[role='main'] span[role='link'][aria-label='Reply']
+widgets:
+  - gmail.thread_subject_heading
+  - gmail.thread_from
+  - gmail.thread_body
+  - gmail.thread_archive_button
+  - gmail.thread_delete_button
+  - gmail.thread_star_button
+  - gmail.thread_mark_unread_button
+  - gmail.thread_reply_button
+  - gmail.thread_reply_all_button
+  - gmail.thread_forward_button
+  - gmail.thread_attachment_download

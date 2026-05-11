@@ -1,0 +1,46 @@
+_meta:
+  name: manifests/gmail/actions/download_attachment.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    download_attachment action — download an attachment from the open
+    thread by filename match. Triggers a browser download.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: >
+  Download an attachment from the currently open thread. The user must specify
+  which attachment by filename (or partial match). Triggers a browser download
+  via the attachment's download link/button.
+object: Thread
+commits_changes: false
+depends_on_view: ThreadView
+inputs:
+  filename:
+    type: text
+    required: true
+    description: Attachment filename (or substring) shown in the thread
+result:
+  downloaded: boolean
+flavors:
+  dom_submit:
+    requires_auth: session_cookie
+    label: Click download on attachment
+    recipe:
+      - id: download
+        type: use_widget
+        args:
+          widget: gmail.thread_attachment_download
+          op: invoke
+          inputs:
+            filename: "{{inputs.filename}}"
+    outcomes:
+      - action: downloaded
+        signal:
+          type: selector_appears
+          selector: div[role='main'] div[aria-label*='{{inputs.filename}}']
+        extract:
+          downloaded:
+            literal: true

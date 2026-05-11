@@ -1,0 +1,36 @@
+_meta:
+  name: manifests/gmail/schemas/Thread.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    Gmail Thread schema — conversation entity (collection of messages
+    sharing subject + participants). Used by read/archive/delete/star/
+    label/move actions that operate at thread granularity.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+description: A Gmail conversation (thread) — a collection of messages sharing a
+  subject and participants. Used by read/archive/delete/star/label/move actions
+  that operate at thread granularity.
+fields:
+  Id:
+    type: id
+    primary: true
+    readonly: true
+  Subject:
+    type: text
+    readonly: true
+    widget: gmail.thread_subject_heading
+  From:
+    type: email
+    readonly: true
+    widget: gmail.thread_from
+  Body:
+    type: rich_text
+    readonly: true
+    widget: gmail.thread_body
+natural_keys:
+  - Subject
+  - Id

@@ -1,0 +1,57 @@
+_meta:
+  name: manifests/gmail/views/ReplyComposer.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.3.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-10
+  description: |
+    ReplyComposer — inline reply/reply-all/forward editor at bottom of
+    open thread. Entry chains via ThreadView + reply button click. Phase
+    4 validated; exit-heal patched the close affordance to Discard.
+  changelog:
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+
+name: ReplyComposer
+description: Inline reply / reply-all / forward editor at the bottom of an open
+  thread. Hosts the body editor and (for forward) a To recipients field, plus
+  its own Send button. Wizard chooses the appropriate trigger button (reply /
+  reply_all / forward) when chaining; validation chains via the plain Reply
+  button. Must be explicitly closed (Escape) to avoid leaking a draft into the
+  next view.
+entry:
+  depends_on_view: ThreadView
+  recipe:
+    - id: click_reply
+      type: click
+      args:
+        selector: "[role='main'] span[role='link'].ams.bkH"
+    - id: wait_composer
+      type: wait_for_element
+      args:
+        selector: div[role='region'][data-compose-id]
+          div[role='textbox'][aria-label='Message Body']
+        timeout_ms: 6000
+exit:
+  - id: dismiss_composer
+    type: click
+    args:
+      selector: div[role='region'][data-compose-id]
+        div[role='button'][aria-label^='Discard draft']
+url_patterns:
+  - https://mail.google.com/mail/u/0/#inbox/.+
+  - https://mail.google.com/mail/u/0/#search/.*/.+
+identifying_selectors:
+  - div[role='region'][data-compose-id] div[role='textbox'][aria-label='Message
+    Body']
+  - div[role='region'][data-compose-id] div[role='button'][aria-label^='Send']
+widgets:
+  - gmail.reply_to_input
+  - gmail.reply_body_editor
+  - gmail.reply_send_button
+verify:
+  any_of:
+    - div[role='region'][data-compose-id]
+      div[role='textbox'][aria-label='Message Body']
+    - div[role='region'][data-compose-id] div[role='button'][aria-label^='Send']
+    - div.aoI[role='region'] div[role='textbox'][aria-label='Message Body']
+    - div.aoI[role='region'] div[role='button'][aria-label^='Send']
