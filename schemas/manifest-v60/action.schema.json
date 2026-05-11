@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/manifest-v60/action.schema.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/manifest-v60/action.schema.json",
+      "version": "1.0.0",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-11",
+      "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Requires description + flavors; object / commits_changes / depends_on_view / inputs / result are optional. Per-flavor recipe shape validated permissively here; runtime validator enforces step-type vocabulary.",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+    }
+  },
+  "title": "Spec 60 — actions/<verb>.yaml body",
+  "description": "Validates the body of a per-SaaS action recipe file (e.g. manifests/gmail/actions/send_email.yaml) after _meta is stripped. description + flavors required.",
+  "type": "object",
+  "required": ["description", "flavors"],
+  "additionalProperties": true,
+  "properties": {
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "object": {
+      "type": "string",
+      "description": "Entity name this action operates on (e.g. Message, Thread)."
+    },
+    "commits_changes": {
+      "type": "boolean",
+      "description": "Whether this action mutates server-side state. Drives commit-confirmation UX."
+    },
+    "depends_on_view": {
+      "type": "string",
+      "description": "View the user must be in before this action can run (e.g. ComposePanel for send_email)."
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "flavors": {
+      "type": "object",
+      "description": "Map of flavor id (dom_no_submit, dom_submit, api, …) → flavor definition (recipe + outcomes). At least one flavor required.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["recipe"],
+        "additionalProperties": true,
+        "properties": {
+          "requires_auth": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "recipe": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      }
+    }
+  }
+}

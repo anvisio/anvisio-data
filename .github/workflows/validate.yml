@@ -19,6 +19,13 @@ on:
       - 'tools/**'
       - 'manifests/**'
 
+# The "Comment gate digest on PR" step calls github.rest.issues.createComment,
+# which requires pull-requests:write. Default GITHUB_TOKEN scope on forked PRs
+# is read-only and 403s without this block.
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest

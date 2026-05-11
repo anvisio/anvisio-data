@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/manifest-v60/view.schema.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/manifest-v60/view.schema.json",
+      "version": "1.0.0",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-11",
+      "description": "Per-role schema for manifests/<saas>/views/<View>.yaml body (post-_meta-strip). Requires name + entry; url_patterns / identifying_selectors / widgets / landmarks / exit are optional. Runtime validator enforces widget refs + entry recipe vocabulary.",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+    }
+  },
+  "title": "Spec 60 — views/<View>.yaml body",
+  "description": "Validates the body of a per-SaaS view definition file (e.g. manifests/gmail/views/Inbox.yaml) after _meta is stripped. name + entry required.",
+  "type": "object",
+  "required": ["name", "entry"],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "View name (CamelCase). Matches the file basename."
+    },
+    "description": {
+      "type": "string"
+    },
+    "entry": {
+      "type": "object",
+      "description": "How the runtime navigates to this view. Either url-based (entry.url) or recipe-based (entry.recipe).",
+      "additionalProperties": true,
+      "anyOf": [
+        { "required": ["url"] },
+        { "required": ["recipe"] }
+      ]
+    },
+    "exit": {
+      "type": "array",
+      "description": "Optional exit/teardown recipe — array of step objects used between view tests to leave compose dialogs, dismiss modals, etc.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "url_patterns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "URL patterns (substring or regex) the runtime uses to detect the view is current."
+    },
+    "identifying_selectors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "CSS selectors that must be present on the page when this view is active."
+    },
+    "widgets": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Flat list of widget ids reachable from this view (propose-authored runtime shape)."
+    },
+    "landmarks": {
+      "type": "array",
+      "description": "Per-landmark widget refs + extraction rules (seed-manifest canonical shape).",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  }
+}

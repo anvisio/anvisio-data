@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/manifest-v60/widgets.schema.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/manifest-v60/widgets.schema.json",
+      "version": "1.0.0",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-11",
+      "description": "Per-role schema for manifests/<saas>/widgets.yaml body (post-_meta-strip). Requires the widgets map; allows extends (widget-library ref) and defaults_by_type. Permissive on per-widget invoke recipe shape — runtime validator handles vocabulary checks.",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+    }
+  },
+  "title": "Spec 60 — widgets.yaml body",
+  "description": "Validates the body of a per-SaaS widgets.yaml file after the _meta block is stripped. The widgets key is required. extends and defaults_by_type are optional.",
+  "type": "object",
+  "required": ["widgets"],
+  "additionalProperties": true,
+  "properties": {
+    "extends": {
+      "type": "string",
+      "description": "Optional path to a widget-library file that this manifest inherits from (e.g. widget-libraries/gmail.widgets.yaml).",
+      "pattern": "^widget-libraries/[a-z0-9_-]+\\.widgets\\.yaml$"
+    },
+    "widgets": {
+      "type": "object",
+      "description": "Map of widget id (e.g. gmail.compose_button) → widget definition (archetype + invoke recipe).",
+      "additionalProperties": true,
+      "minProperties": 1
+    },
+    "defaults_by_type": {
+      "type": "object",
+      "description": "Map of schema field type (text, email, list<email>, …) → default widget id. Used by fill_fields when a field has no explicit widget.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

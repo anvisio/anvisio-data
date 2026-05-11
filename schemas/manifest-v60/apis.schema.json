@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/manifest-v60/apis.schema.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/manifest-v60/apis.schema.json",
+      "version": "1.0.0",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-11",
+      "description": "Per-role schema for manifests/<saas>/apis.yaml body (post-_meta-strip). Permissive on per-endpoint value shapes; runtime validator (manifest_validator.py + TS mirror) handles per-field semantics. Tightens in Phase 9 when per-file TS types feed the generator (spec 60.3 D3.5).",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+    }
+  },
+  "title": "Spec 60 — apis.yaml body",
+  "description": "Validates the body of a per-SaaS apis.yaml file after the _meta block is stripped. The apis key is required (may be an empty map for browser-DOM-only integrations).",
+  "type": "object",
+  "required": ["apis"],
+  "additionalProperties": true,
+  "properties": {
+    "apis": {
+      "type": "object",
+      "description": "Map of API endpoint name → endpoint definition. May be empty when the integration is browser-DOM only (e.g. gmail today).",
+      "additionalProperties": true
+    }
+  }
+}
