@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/manifest-v60/entity-schema.schema.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/manifest-v60/entity-schema.schema.json",
+      "version": "1.0.0",
+      "cdn_schema_version": "60.3.0",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-11",
+      "description": "Per-role schema for manifests/<saas>/schemas/<Entity>.yaml body (post-_meta-strip). Requires the fields map; description optional. Per-field shape (type, widget, readonly, …) is validated permissively here and rigorously by the runtime validator.",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+    }
+  },
+  "title": "Spec 60 — schemas/<Entity>.yaml body",
+  "description": "Validates the body of a per-SaaS entity schema file (e.g. manifests/gmail/schemas/Message.yaml) after _meta is stripped. The fields map is required.",
+  "type": "object",
+  "required": ["fields"],
+  "additionalProperties": true,
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "fields": {
+      "type": "object",
+      "description": "Map of field name (e.g. Subject, To) → field definition. Each entry must have type; widget/primary/readonly/required/picklist are optional.",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["type"],
+        "additionalProperties": true,
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Field type (text, email, list<email>, id, …)."
+          },
+          "widget": {
+            "type": "string",
+            "description": "Widget id used to read/write this field (e.g. gmail.compose_to_input)."
+          },
+          "primary": {
+            "type": "boolean"
+          },
+          "readonly": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}
