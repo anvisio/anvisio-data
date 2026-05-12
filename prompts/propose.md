@@ -1,42 +1,48 @@
 ---
 name: prompts/propose.md
-version: 4.0.0
-cdn_schema_version: 60.3.0
+version: 5.0.0
+cdn_schema_version: 60.5.0
 authored_by: cd2k + claude
-authored_at: 2026-05-11
+authored_at: 2026-05-13
 description: |
-  Phase 7 propose prompt for the v60 onboarding pipeline. Given the
+  Propose prompt for the v60 onboarding pipeline. Given the
   intent (verbs + landmarks) + discovery (compact DOM bundles per
   landmark), produces a complete spec-60 manifest tree: apis.yaml +
   widgets.yaml (atomic affordances — primary unit) + per-view YAML
   files + per-schema YAML files + per-verb action YAML files + a
   test_catalog.json.
 
-  v4.0.0 is a major-version reset marking the v60 reauthoring. Replaces
-  the v3.2.1 bootstrap-era body that was the older iterate-saas
-  pipeline's propose prompt. The two are NOT compatible — v3.2.1 emits
-  the older v3.2 manifest shape (no widgets-first design, raw selectors
-  inline in recipes); v4.0.0 emits the v60 manifest tree with widgets
-  as the primary unit (every selector lives in widgets.yaml, actions
-  are thin compositions). Lineage: this is the prompt that produced the
-  gmail manifest tree validated heal-free against live mail.google.com
-  on 2026-05-10 (project_phase4_widget_scope_boundary.md,
-  project_phase5_slice1_shipped.md, project_phase6_slice1_shipped.md).
+  v5.0.0 migrates the output mechanism from JSON-in-text + parse to
+  Anthropic `submit_manifest` tool_use. The LLM emits the manifest
+  tree as structured tool input; the plugin reads `block.input` with
+  no parse step. This eliminates the markdown-fence drift class that
+  caused the 2026-05-12 $88 google-calendar incident (the LLM wraps
+  output in ```json fences ~50% of the time despite explicit "RAW
+  JSON only" instructions). The entire "Output — STRICT FORMAT"
+  section from v4.x is deleted; one paragraph pointing at the tool
+  replaces it. See planning/tech_decisions/003-llm-structured-output-
+  via-tool-use.md for the principle.
 
-  Version history runs through v0.1.0 → v0.8.0 in the plugin's
-  v60-prompts/index.ts as drift surfaced in live runs (lock flavor
-  vocabulary, require widget-based recipes, explicit REQUIRED FIELDS
-  callouts, ban Playwright-only selectors, etc.). See the comment
-  block in chrome-plugin/src/background/onboarding/v60-prompts/index.ts
-  for the full evolution table. The major bump here normalizes the v60
-  lineage as v4.x on the CDN side.
+  v4.0.0 was a major-version reset marking the v60 reauthoring.
+  Replaces the v3.2.1 bootstrap-era body that was the older
+  iterate-saas pipeline's propose prompt. The v4.x prompt emits the
+  v60 manifest tree with widgets as the primary unit (every selector
+  lives in widgets.yaml, actions are thin compositions). v5.x keeps
+  that body and changes only the output-emission mechanism.
+
+  Lineage: this is the prompt that produced the gmail manifest tree
+  validated heal-free against live mail.google.com on 2026-05-10
+  (project_phase4_widget_scope_boundary.md,
+  project_phase5_slice1_shipped.md,
+  project_phase6_slice1_shipped.md). v5.x is the first version
+  authored to emit through tool_use rather than text+parse.
 inputs:
   - integration_id (string, lowercase slug)
   - intent (object with verbs[] + landmarks[])
   - discovery (object — compact DOM bundles per landmark, produced by step 2)
 outputs:
-  - "manifest_files (object: relpath -> file body)"
-  - "test_catalog (array of test descriptors)"
+  - "manifest_files (object: relpath -> file body) — via submit_manifest tool_use"
+  - "test_catalog (array of test descriptors) — via submit_manifest tool_use"
 related_schemas:
   - schemas/manifest-v60.json
   - schemas/test-catalog-v60.json
@@ -45,10 +51,10 @@ related_prompts:
   - prompts/heal.md
   - prompts/eval.md
 changelog:
+  - "5.0.0 (2026-05-13): output mechanism migrated from text+parse to Anthropic tool_use via the `submit_manifest` tool. Eliminates the markdown-fence drift class that caused the 2026-05-12 $88 google-calendar incident. The 'Output — STRICT FORMAT' section (40 lines of fence-prevention) is replaced with one paragraph pointing at the tool. Body content unchanged. Plugin commit: 4d8660a9. Tech decision: planning/tech_decisions/003-llm-structured-output-via-tool-use.md. Spec: planning/impl_plans/60.5-propose-via-tool-use.md."
   - "4.0.0 (2026-05-11): v60 reauthoring. Replaces v3.2.1 bootstrap body with the chrome-plugin's v60-fresh propose prompt (commit 32096c11, bundled at src/background/onboarding/v60-prompts/propose.md). The v60 prompt emits a fundamentally different manifest shape (widgets-first design, atomic state-machine actions, locked flavor vocabulary). Major-version bump — no backward compatibility with older pipeline."
   - "3.2.1 (2026-05-07): bootstrap import from manifest-redesign/prompts/propose.md (older iterate-saas pipeline). Never validated against the v60 runtime."
 ---
-
 You are the propose LLM for an Anvisio onboarding pipeline.
 
 Input: integration_id, intent (verbs + landmarks), discovery (compact DOM bundles per landmark).
@@ -98,6 +104,87 @@ Do NOT use raw `click` / `fill_text` / `press_key` / `type_sequentially` / `set_
 - Split into two actions (`mark_read` + `mark_unread`) and pick at the wizard layer
 - Use a `ux_decision` step with separate branches, each using its own static `use_widget`
 
+### `ux_decision` shape (locked) — pauses recipe to ask the user
+
+`ux_decision` is a runtime step that pauses the recipe so the wizard can prompt the user, then resumes with the user's pick. EXACT shape:
+
+```yaml
+- id: pick_strategy
+  type: ux_decision
+  args:
+    ux: pick_one                  # REQUIRED — STRING. Decision kind from the locked vocabulary below.
+    prompt: "Pick navigation method"
+    options:                      # LIST of options (when ux=pick_one). Each: { id, label, steps }
+      - id: today
+        label: "Today"
+        steps:
+          - id: click_today
+            type: use_widget
+            args: { widget: google-calendar.today_button, op: invoke }
+      - id: target_date
+        label: "Pick a specific date"
+        steps:
+          - id: click_mini_date
+            type: use_widget
+            args:
+              widget: google-calendar.mini_cal_date_cell
+              op: invoke
+              inputs: { date_yyyymmdd: "{{inputs.date}}" }
+    input_from: inputs.preferred_method  # OPTIONAL — string. If set, auto-pick the option matching this input value.
+```
+
+**Locked vocabulary for `args.ux`:** `pick_one`, `confirm`, `ask`. NOT a dict, NOT an object — always one of those three strings.
+
+**Common mistakes (these will fail at runtime — every one cost us tokens to discover):**
+
+1. `args.ux` is an object instead of a string:
+   ```yaml
+   # WRONG — args.ux MUST be a string
+   args:
+     ux:
+       prompt: "..."
+       options: {...}
+   ```
+   ```yaml
+   # RIGHT
+   args:
+     ux: pick_one
+     prompt: "..."
+     options: [...]
+   ```
+
+2. `args.options` is a dict keyed by option id instead of a list:
+   ```yaml
+   # WRONG — options MUST be a list
+   args:
+     options:
+       today: { steps: [...] }
+       next: { steps: [...] }
+   ```
+   ```yaml
+   # RIGHT
+   args:
+     options:
+       - id: today
+         label: "Today"
+         steps: [...]
+       - id: next
+         label: "Next week"
+         steps: [...]
+   ```
+
+3. Decision lives nested under `args.ux`:
+   ```yaml
+   # WRONG — prompt + options live DIRECTLY under args, not under args.ux
+   args:
+     ux:
+       kind: pick_one
+       prompt: "..."
+       options: [...]
+   ```
+
+**When NOT to emit `ux_decision`:** if the action's declared `inputs:` already disambiguate (e.g. `inputs.direction` is one of `today|previous|next`), DO NOT add a `ux_decision` step. Branch on the input with `when:` clauses on individual steps instead. `ux_decision` is for cases where the right path genuinely cannot be inferred from inputs alone — like "save vs discard an existing record" or "create new vs link to existing."
+
 ### Widget shape (widgets.yaml) — REQUIRED FIELDS
 
 EVERY widget MUST have:
@@ -129,6 +216,82 @@ gmail.compose_send_button:
       args: { selector: [...] }
       verify: { ... }
 ```
+
+### View shape (views/<View>.yaml) — REQUIRED FIELDS
+
+EVERY view file MUST have these three top-level fields. The propose validator will REJECT any view missing them.
+
+```yaml
+# views/Inbox.yaml
+entry:                          # REQUIRED — how to NAVIGATE to this view
+  url: "https://mail.google.com/mail/u/0/#inbox"
+
+landmark_probe:                 # REQUIRED — CSS selector that proves we're here
+  selector: "div[role='main'][aria-label*='Inbox']"
+  timeout_ms: 8000
+
+verify:                         # REQUIRED — list of signals confirming view load
+  - type: selector_appears
+    selector: "div[role='main']"
+    timeout_ms: 5000
+```
+
+#### `entry:` — pick ONE of these three shapes
+
+```yaml
+# Shape A — deeplink (PREFERRED when the view has a stable URL)
+entry:
+  url: "https://calendar.google.com/calendar/u/0/r/week"
+```
+
+```yaml
+# Shape B — click a widget on the current page (for views reached via in-page button)
+entry:
+  widget: google-calendar.create_button
+```
+
+```yaml
+# Shape C — chain from a prior view via inline recipe (for sub-views like a modal opened from another view)
+entry:
+  depends_on_view: CalendarGrid       # name of a view file (without the .yaml)
+  recipe:
+    - id: open_search
+      type: use_widget
+      args:
+        widget: google-calendar.search_input
+        op: invoke
+```
+
+**CRITICAL — every view MUST have `entry:`. No exceptions.** This is the #1 propose-output bug the validator catches. If you don't know how to reach a view, pick the closest shape and let the build-time validator probe it — DO NOT omit the field.
+
+**Common mistakes:**
+
+1. View file with no `entry:` at all (just `landmark_probe` + `verify`). WRONG. Every view must declare entry.
+2. `entry:` set to a string instead of an object:
+   ```yaml
+   # WRONG
+   entry: "https://..."
+   ```
+   ```yaml
+   # RIGHT
+   entry:
+     url: "https://..."
+   ```
+3. Using `depends_on_view:` at the top level of the view file instead of inside `entry:`:
+   ```yaml
+   # WRONG — depends_on_view at top level
+   depends_on_view: CalendarGrid
+   landmark_probe: ...
+   ```
+   ```yaml
+   # RIGHT — depends_on_view nested under entry, paired with recipe
+   entry:
+     depends_on_view: CalendarGrid
+     recipe: [...]
+   landmark_probe: ...
+   ```
+
+If a view can be reached multiple ways (e.g. deeplink OR click a button), pick the **most reliable** one — usually the deeplink. The Phase 4 `/validate-views` will exercise whatever you emit; if it's unreliable, heal will fix it.
 
 ### Valid signal kinds (for `verify:` and outcome `signal:` clauses)
 
@@ -518,20 +681,22 @@ Use safe non-destructive inputs (test@-style addresses, dummy subjects).
 
 ## Output
 
-Respond with a JSON object:
+Call the `submit_manifest` tool with the complete manifest tree as
+structured input. Do NOT emit the JSON in a text block — the tool's
+input field receives the data directly.
 
-```json
-{
-  "manifest_files": {
-    "manifests/<integration_id>/widgets.yaml": "<full widgets.yaml body>",
-    "manifests/<integration_id>/actions/<verb>.yaml": "<body>",
-    "manifests/<integration_id>/views/<View>.yaml": "<body>",
-    "manifests/<integration_id>/schemas/<Type>.yaml": "<body>",
-    "manifests/<integration_id>/apis.yaml": "<body>"
-  },
-  "test_catalog": [...]
-}
-```
+The tool input has two top-level fields:
+
+- `manifest_files` — a map of canonical paths to file body strings.
+  Every path starts with `manifests/<integration_id>/`. Expected
+  files: `apis.yaml`, `widgets.yaml`, one `views/<View>.yaml` per
+  view, one `schemas/<Type>.yaml` per typed entity, one
+  `actions/<verb>.yaml` per verb, and `test_catalog.json`.
+- `test_catalog` — an array of test cases per spec 60 §K. Each entry
+  has `id`, `action`, `flavor`, `inputs`, and `expected_outcome`.
+
+You may reason in a text block BEFORE calling the tool if you find
+it useful. The manifest itself goes only through the tool.
 
 ## Conciseness rules
 
@@ -539,5 +704,3 @@ Respond with a JSON object:
 - Inline `description:` to one paragraph max
 - Skip optional widget ops (read) when the verb doesn't need them
 - One file per verb (no sub-files)
-
-Respond with ONLY the JSON object (prose around it is OK; we extract).
