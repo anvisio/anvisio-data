@@ -1,3 +1,33 @@
+---
+name: prompts/heal.md
+version: 1.1.0
+cdn_schema_version: 60.3.0
+authored_by: cd2k + claude
+authored_at: 2026-05-13
+description: |
+  Phase 7 tool-use heal prompt for the v60 onboarding pipeline. Given
+  a failed recipe step + DOM snapshot, the LLM uses 5 tools (query_dom,
+  dispatch_event, wait_for, take_snapshot, read_attribute) to probe the
+  live page and emits ONE patch JSON: manifest_diff | retry_with_args |
+  retry_with_strategy | compound_patch | surrender.
+inputs:
+  - "failure_context (per spec 60.2: failed step + verify outcome + DOM snapshot + recipe path)"
+  - budget (tool-call cap + wall-clock cap)
+outputs:
+  - "patch (ONE JSON object: manifest_diff | retry_with_args | retry_with_strategy | compound_patch | surrender)"
+related_schemas:
+  - schemas/manifest-v60.json
+related_tools:
+  - tools/heal-tools.json
+related_prompts:
+  - prompts/propose.md
+  - prompts/eval.md
+changelog:
+  - "1.1.0 (2026-05-13): Adds a diagnostic-strategy section teaching the heal LLM to recognize three systemic-cause patterns before iterating per-step — (a) query_dom finds element but click/dispatch fails (pre-nav hydration race / overlay interception with size+visibility check distinguishing the SF Aura 0×0 pre-rendered case / event-handler on a different element than the click target), (b) same heal pattern fires for multiple widgets on the same page (probe common factor instead of patching each), (c) take_snapshot returns same near-empty body (default-scope picking invisible wrapper). Adds a don't-trust-tool-output rule (cross-check tool-side evidence; if the snapshot's contents look impossible, the bug may be in the snapshot tool itself). Authored from 2026-05-13 SF onboarding eval-loop session."
+  - "1.0.0 (2026-05-11): v60 reauthoring. Replaces v0.1.0 bootstrap body with the chrome-plugin's v60-fresh tool-use heal prompt (commit 32096c11, bundled at src/background/onboarding/v60-prompts/heal.md). Body specifies the 5 heal tools per spec 60.2 + the 5 patch action shapes. Major-version bump because the patch shape vocabulary is fully redesigned — no backward compatibility with older pipeline's heal-primitive endpoint."
+  - "0.1.0 (2026-05-07): bootstrap import from manifest-redesign/prompts/heal.md (older iterate-saas pipeline). Never validated against the v60 runtime."
+---
+
 You are the heal LLM for an Anvisio onboarding pipeline.
 
 A recipe step failed. You have 5 tools to investigate the live DOM:

@@ -1,3 +1,37 @@
+---
+name: prompts/eval.md
+version: 1.1.0
+cdn_schema_version: 60.3.0
+authored_by: cd2k + claude
+authored_at: 2026-05-13
+description: |
+  Phase 7 eval module prompt. Reads a session log from a build-time
+  validation run (Phase 4/5/6) or a runtime heal session, identifies
+  SYSTEMIC gaps in the meta-system (propose prompt, heal prompt,
+  validator rules, runner code), and proposes targeted fixes as a
+  structured JSON response.
+inputs:
+  - session_log (per spec 60.1 §3 — full SessionLog JSON)
+  - current_prompts (propose.md + heal.md bodies for accurate diff targeting)
+outputs:
+  - "proposal (JSON: { session_id, summary, findings[] })"
+  - per-finding: category | file_path | issue | evidence | proposed_diff | confidence | rationale
+related_schemas:
+  - schemas/manifest-v60.json
+  - schemas/intent-v60.json
+  - schemas/test-catalog-v60.json
+related_tools:
+  - tools/heal-tools.json
+related_prompts:
+  - prompts/intent.md
+  - prompts/propose.md
+  - prompts/heal.md
+changelog:
+  - "1.1.0 (2026-05-13): Adds a contract-boundary-drift section (a class of bug where the propose prompt teaches one shape, the validator passes it, and the runtime extractor reads a different shape — all three layers silently passing the bad shape through). Adds a tool-output-skepticism rule (don't trust tool-side evidence as ground truth without independent confirmation; flag the tool itself as a candidate RUNNER_FIX). Adds a discipline rule for picking PROMPT_EDIT vs VALIDATOR_RULE vs RUNNER_FIX vs MANIFEST_PATCH that distinguishes general mechanism (RUNNER_FIX) from SaaS-specific data (MANIFEST_PATCH or platform-data file). Authored from 2026-05-13 SF onboarding eval-loop session — see project_pickup_2026_05_13_sf memory."
+  - "1.0.0 (2026-05-10): first real prompt body. Replaces v0.1.0 placeholder with operational spec informed by seven real manual eval findings: extractViewVerifySelectors any_of accept, heal prompt enumerates 9 valid signal kinds, applyManifestDiff array-element append, propose-prompt irreversibility heuristic, validator rule rejects wait_for_element as verify type, heal FIXTURE_UNAVAILABLE surrender, heal PRECONDITION_REQUIRED surrender. Bundled into chrome-plugin at src/background/onboarding/v60-prompts/eval.md."
+  - "0.1.0 (2026-05-07): placeholder; v1 to land in Phase 6 (now Phase 7) after first onboarding sessions land"
+---
+
 You are the **eval module** for Anvisio's plugin runtime. Your job: read a session log from a build-time validation run (Phase 4/5/6) or a runtime heal session, identify systemic gaps in the meta-system, and propose targeted fixes as a structured JSON response.
 
 ## What you're looking at
