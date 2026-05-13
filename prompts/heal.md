@@ -1,25 +1,15 @@
 ---
 name: prompts/heal.md
-version: 1.0.0
+version: 1.1.0
 cdn_schema_version: 60.3.0
 authored_by: cd2k + claude
-authored_at: 2026-05-11
+authored_at: 2026-05-13
 description: |
   Phase 7 tool-use heal prompt for the v60 onboarding pipeline. Given
   a failed recipe step + DOM snapshot, the LLM uses 5 tools (query_dom,
   dispatch_event, wait_for, take_snapshot, read_attribute) to probe the
   live page and emits ONE patch JSON: manifest_diff | retry_with_args |
   retry_with_strategy | compound_patch | surrender.
-
-  v1.0.0 is a major-version reset marking the v60 reauthoring. Replaces
-  the v0.1.0 bootstrap-era body that was the older pipeline's heal
-  prompt. The two bodies are NOT compatible — v0.1.0 used the older
-  heal-primitive endpoint shape; v1.0.0 is the tool-use spec from
-  spec 60.2 that the chrome-plugin's runtime calls. Body is the heal
-  prompt the chrome-plugin v60 runner was developed and tested against
-  (Phase 4/5/6 build-time validators + runtime heal cycles documented
-  in project_phase5_slice1_shipped.md + feedback_complete_manifests.md
-  memories).
 inputs:
   - "failure_context (per spec 60.2: failed step + verify outcome + DOM snapshot + recipe path)"
   - budget (tool-call cap + wall-clock cap)
@@ -33,6 +23,7 @@ related_prompts:
   - prompts/propose.md
   - prompts/eval.md
 changelog:
+  - "1.1.0 (2026-05-13): Adds a diagnostic-strategy section teaching the heal LLM to recognize three systemic-cause patterns before iterating per-step — (a) query_dom finds element but click/dispatch fails (pre-nav hydration race / overlay interception with size+visibility check distinguishing the SF Aura 0×0 pre-rendered case / event-handler on a different element than the click target), (b) same heal pattern fires for multiple widgets on the same page (probe common factor instead of patching each), (c) take_snapshot returns same near-empty body (default-scope picking invisible wrapper). Adds a don't-trust-tool-output rule (cross-check tool-side evidence; if the snapshot's contents look impossible, the bug may be in the snapshot tool itself). Authored from 2026-05-13 SF onboarding eval-loop session."
   - "1.0.0 (2026-05-11): v60 reauthoring. Replaces v0.1.0 bootstrap body with the chrome-plugin's v60-fresh tool-use heal prompt (commit 32096c11, bundled at src/background/onboarding/v60-prompts/heal.md). Body specifies the 5 heal tools per spec 60.2 + the 5 patch action shapes. Major-version bump because the patch shape vocabulary is fully redesigned — no backward compatibility with older pipeline's heal-primitive endpoint."
   - "0.1.0 (2026-05-07): bootstrap import from manifest-redesign/prompts/heal.md (older iterate-saas pipeline). Never validated against the v60 runtime."
 ---
@@ -54,6 +45,25 @@ Soft costs (NOT enforced; guidance only):
 - take_snapshot: 2 calls
 
 Budget: see initial user message for tool-call cap + wall-clock cap. Stay under both.
+
+## Diagnostic strategy — recognize systemic causes before iterating
+
+Per-step fixes (selector rotation, retry_with_args, etc.) are the right move when ONE step in ONE recipe fails for a localized reason — a renamed class, an updated attribute, a SaaS UI tweak. But when MULTIPLE steps fail in similar ways on the same page, **stop iterating per-step and probe for systemic causes**. Common systemic patterns and how to recognize them:
+
+**Pattern: query_dom finds the element but click/dispatch fails.**
+The runtime's selector resolved (heal probes confirm); but the click returns "no selector matched" or shows no DOM mutation. Possible causes:
+- **Pre-nav skipped the readiness wait.** Page hasn't finished hydrating; the element you see now via query_dom didn't exist at click time. Tell: heal's probes pass even though click logged a moment earlier. Fix is usually in the VIEW yaml (verify selectors authored in the wrong shape — see propose v6.1+ for the canonical shape) or in the runtime's pre-nav code, not in the per-step selector. Surface as `surrender PRECONDITION_REQUIRED: page not hydrated when step ran; verify shape may be unreadable to the extractor` and let propose / validator catch it.
+- **Overlay interception.** An occluder above the click target captures the event. Tell: `document.elementFromPoint(centerX, centerY)` returns something OTHER than the target. Probe known overlay patterns: `#auraError`, `[role='alertdialog']`, `div[aria-modal='true']:not(.slds-modal__container)`. If found AND it has non-zero size + visible computed style, the page genuinely has an overlay. If found but it's 0×0 (the SF Aura pre-rendered case), it's invisible — NOT the cause; look elsewhere.
+- **Event handler on a different element than the click target.** Lightning components often handle click on the host but you clicked the shadow inner. Probe via dispatch_event on the HOST uid (from a take_snapshot or query_dom on the host's tag).
+
+**Pattern: same heal pattern fires for multiple distinct widgets on the same page.**
+The shared cause is upstream — either in the propose authoring (one wrong widget pattern) or in the page state. Don't apply individual manifest_diff patches per widget; that's churn. Probe for the COMMON factor and patch at the source (the widget definition, the view's entry recipe, or surface with a surrender + a clear systemic-cause reason).
+
+**Pattern: take_snapshot keeps returning the same near-empty body.**
+The snapshot's default-scope rule may be matching a hidden element. Probe via `query_dom` on the suspected scope-grabber (e.g. `[role='dialog']:not([aria-hidden='true'])`) and check size: a 0×0 match means the scope picked an invisible pre-rendered wrapper. Re-run take_snapshot with explicit `scope: 'body'` to bypass the default-scope.
+
+**Don't trust tool output as ground truth.**
+If you have only tool-side evidence (snapshot contents, failure reasons, default scopes), cross-check it. Tool-output artifacts can mislead — the SF onboarding 2026-05-13 wasted heal cycles iterating selectors because the snapshot kept scoping to an invisible pre-rendered error dialog. The eval-loop fixed both the snapshot's default-scope rule AND added contract-boundary-drift detection to prompts/eval.md to catch this class of bug going forward.
 
 When you've identified the fix, emit ONE patch JSON object as your final response:
 
