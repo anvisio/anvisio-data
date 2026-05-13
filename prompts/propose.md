@@ -1,7 +1,7 @@
 ---
 name: prompts/propose.md
-version: 6.0.0
-cdn_schema_version: 60.6.0
+version: 6.2.0
+cdn_schema_version: 60.6.2
 authored_by: cd2k + claude
 authored_at: 2026-05-13
 description: |
@@ -68,6 +68,8 @@ related_prompts:
   - prompts/heal.md
   - prompts/eval.md
 changelog:
+  - "6.2.0 (2026-05-13 PM): adds 'Descendant combinators do NOT cross shadow boundaries' caveat to the shadow-DOM section. Surfaced 2026-05-13 eval: propose authored selectors like `lightning-button-menu button` which look reasonable but match nothing because the host is outside its own shadow and the descendant combinator doesn't cross the boundary even with the runtime's piercing helper (each tree-context is queried separately). Adds explicit WRONG/RIGHT examples + guidance to test selectors via query_dom before encoding in widgets.yaml. Also same edit lands a contract-boundary-drift detection section to prompts/eval.md."
+  - "6.1.0 (2026-05-13 PM): exploration tools (query_dom, take_snapshot, wait_for) + the v60 runtime executor (chrome-step-driver, chrome-signal-driver) now PIERCE OPEN SHADOW DOM. Surfaced 2026-05-13 from the SF Lightning /onboard-saas run: SF Lightning puts virtually all interactive content (list views, record views, modals, form fields) inside open shadow roots (~210 per page). The v6.0 tools used document.querySelector / document.body traversal which doesn't pierce — so every exploration call returned 0 matches on SF, even though the page WAS fully rendered. Plugin commits in chrome-tool-bridge.ts, chrome-step-driver.ts, chrome-signal-driver.ts: shadow-piercing helpers inlined into each in-page func. take_snapshot now wraps shadow content in <shadow-root> marker tags so the LLM can tell light vs shadow when authoring selectors. Closed shadow roots remain invisible (no API access). Implication for authoring: write selectors that work via plain querySelector — the runtime walks shadow boundaries transparently, no need for >>> or other shadow-piercing CSS syntax."
   - "6.0.0 (2026-05-13 PM): pivot to multi-turn tool-using agent. The LLM now gathers DOM evidence at each landmark via the heal toolset (query_dom, dispatch_event, wait_for, take_snapshot, read_attribute) plus a new navigate tool. Replaces the pre-bundled-DOM-per-landmark pattern that produced training-prior selectors when the bundled DOM was thin (one shared snapshot for all landmarks). submit_manifest stays as the terminal output. Plugin spec 60.6: chrome-plugin/src/background/onboarding/propose-command.ts refactored to multi-turn dispatch loop. Motivated by the 2026-05-12 SF /onboard-saas run where every landmark's DOM bundle was identical (an Aura CSS Error overlay), producing an inaccurate Lead-only manifest authored from training priors."
   - "5.1.0 (2026-05-13 PM): added `widgets:` as a REQUIRED 4th field on every view YAML. Phase 5 validate-widgets needs the view→widgets mapping to know which view to land on per widget. propose v5.0 emitted only entry/landmark_probe/verify, leaving widgets unvalidatable. Plugin commit: 406e53aa; manifest-validator now flags missing widgets list as HARD violation."
   - "5.0.0 (2026-05-13): output mechanism migrated from text+parse to Anthropic tool_use via the `submit_manifest` tool. Eliminates the markdown-fence drift class that caused the 2026-05-12 $88 google-calendar incident."
@@ -132,6 +134,81 @@ return empty/error results, surface that in the manifest's `## Known
 gaps` section. Do NOT author selectors you have not verified against
 live DOM — "I'll guess from training priors" is what motivated this v6
 pivot.
+
+### Shadow DOM is pierced automatically (v6.1+)
+
+The exploration tools pierce **open** shadow DOM transparently. You do
+NOT need to use `>>>` or other shadow-piercing CSS syntax in your
+queries — plain `querySelector`-style selectors will find elements
+inside any reachable open shadow root.
+
+- `take_snapshot` captures shadow content wrapped in
+  `<shadow-root>...</shadow-root>` marker tags so you can tell light
+  DOM from shadow context. Reference uids from inside the markers
+  exactly like any other element.
+- `query_dom` and `wait_for` walk open shadow roots when scanning for
+  selectors. A selector that matches inside a shadow root counts as a
+  match.
+- `dispatch_event` and `read_attribute` use uids and don't care which
+  context an element lives in.
+- **Closed shadow roots** (`attachShadow({mode: 'closed'})`) remain
+  invisible — no API exposes them. SF Lightning, Gmail, Google
+  Calendar, Outlook all use open mode, so this rarely matters.
+
+**Why this matters for authoring:** the runtime recipe executor
+(chrome-step-driver, chrome-signal-driver) ALSO pierces open shadow.
+Selectors that work for you via these tools will work at recipe runtime
+without modification. Don't try to outsmart it with shadow-piercing
+hacks — plain selectors are correct.
+
+**SaaS that use shadow DOM heavily:** Salesforce Lightning (LWC
+components everywhere — list views, record views, modals, form fields,
+buttons), Google Workspace surfaces (Gmail/GCal partially), Atlassian
+products. Plain HTML SaaS (older Workday, custom in-house apps) won't
+need shadow handling.
+
+#### Descendant combinators do NOT cross shadow boundaries
+
+Piercing is automatic but operates one shadow-root-context at a time.
+A selector like `lightning-button-menu button` is evaluated within ONE
+tree (light DOM, OR one shadow root, OR another shadow root —
+separately). When the button you want is inside `lightning-button-menu`'s
+shadow root, the host (`lightning-button-menu`) is OUTSIDE that shadow,
+so `<host> <descendant>` matches nothing:
+
+- At the document level, `lightning-button-menu button` looks for the
+  host (✓ found in light DOM) THEN a button DESCENDANT in the SAME light
+  DOM tree — but the button is in shadow, so the descendant combinator
+  doesn't reach it. No match.
+- Inside the shadow root, the same selector tries to find
+  `lightning-button-menu` first — but the host element isn't inside its
+  own shadow. No match.
+
+**Rule:** for an element inside a custom-element's shadow root, target
+the element directly via its own attributes — do NOT anchor on the host.
+
+WRONG:
+```yaml
+selector:
+  - "lightning-button-menu.menu-button-item button[part*='button-icon']"
+  - "force-record-page-action-bar lightning-button[name='Edit']"
+```
+
+RIGHT:
+```yaml
+selector:
+  - "button.fix-slds-button_icon-border-filled[part*='button-icon']"  # unique class set + part
+  - "[data-target-selection-name$='.Edit']"                            # data-attribute anchor
+```
+
+When you NEED structural context (e.g. "the New button on a Lead list,
+not the global-actions New menu"), prefer an `[attribute*=value]` anchor
+that's distinct enough — or use a `:has(...)` parent check confined to
+light DOM, where descendant traversal IS valid.
+
+Test your selectors via `query_dom` BEFORE encoding them in widgets.yaml.
+If `query_dom('<your-selector>')` returns 0 matches for an element that
+visibly exists, suspect this shadow-boundary issue.
 
 ### Calling `submit_manifest`
 
