@@ -1,7 +1,7 @@
 ---
 name: prompts/propose.md
-version: 5.0.0
-cdn_schema_version: 60.5.0
+version: 5.1.0
+cdn_schema_version: 60.5.1
 authored_by: cd2k + claude
 authored_at: 2026-05-13
 description: |
@@ -11,6 +11,17 @@ description: |
   widgets.yaml (atomic affordances — primary unit) + per-view YAML
   files + per-schema YAML files + per-verb action YAML files + a
   test_catalog.json.
+
+  v5.1.0 adds `widgets:` as a REQUIRED field on every view YAML.
+  Phase 5 validate-widgets reads this list to know which view to land
+  on before lite-invoking each widget. Filed 2026-05-13 after the
+  google-calendar /validate-widgets run reported 0/43 validated;
+  22 widgets skipped with "no landmark in any view" because the
+  propose-authored views had only entry/landmark_probe/verify (no
+  widgets-list mapping). Plugin commit: 406e53aa. The plugin's
+  manifest-validator now flags views missing the widgets list as a
+  HARD violation during propose, so the LLM gets validator-retry
+  feedback teaching the right shape.
 
   v5.0.0 migrates the output mechanism from JSON-in-text + parse to
   Anthropic `submit_manifest` tool_use. The LLM emits the manifest
@@ -51,6 +62,7 @@ related_prompts:
   - prompts/heal.md
   - prompts/eval.md
 changelog:
+  - "5.1.0 (2026-05-13 PM): added `widgets:` as a REQUIRED 4th field on every view YAML. Phase 5 validate-widgets needs the view→widgets mapping to know which view to land on per widget. propose v5.0 emitted only entry/landmark_probe/verify, leaving widgets unvalidatable. Plugin commit: 406e53aa; manifest-validator now flags missing widgets list as HARD violation."
   - "5.0.0 (2026-05-13): output mechanism migrated from text+parse to Anthropic tool_use via the `submit_manifest` tool. Eliminates the markdown-fence drift class that caused the 2026-05-12 $88 google-calendar incident. The 'Output — STRICT FORMAT' section (40 lines of fence-prevention) is replaced with one paragraph pointing at the tool. Body content unchanged. Plugin commit: 4d8660a9. Tech decision: planning/tech_decisions/003-llm-structured-output-via-tool-use.md. Spec: planning/impl_plans/60.5-propose-via-tool-use.md."
   - "4.0.0 (2026-05-11): v60 reauthoring. Replaces v3.2.1 bootstrap body with the chrome-plugin's v60-fresh propose prompt (commit 32096c11, bundled at src/background/onboarding/v60-prompts/propose.md). The v60 prompt emits a fundamentally different manifest shape (widgets-first design, atomic state-machine actions, locked flavor vocabulary). Major-version bump — no backward compatibility with older pipeline."
   - "3.2.1 (2026-05-07): bootstrap import from manifest-redesign/prompts/propose.md (older iterate-saas pipeline). Never validated against the v60 runtime."
@@ -219,7 +231,7 @@ gmail.compose_send_button:
 
 ### View shape (views/<View>.yaml) — REQUIRED FIELDS
 
-EVERY view file MUST have these three top-level fields. The propose validator will REJECT any view missing them.
+EVERY view file MUST have these FOUR top-level fields. The propose validator will REJECT any view missing them.
 
 ```yaml
 # views/Inbox.yaml
@@ -234,7 +246,21 @@ verify:                         # REQUIRED — list of signals confirming view l
   - type: selector_appears
     selector: "div[role='main']"
     timeout_ms: 5000
+
+widgets:                        # REQUIRED — widgets that live on this view
+  - gmail.compose_button
+  - gmail.search_input
+  - gmail.thread_row
 ```
+
+**About `widgets:`** — this is the view→widget landmark mapping. Phase 5 `/validate-widgets` reads this list to know "which view should I navigate to before lite-invoking this widget?" If a widget isn't listed in ANY view's `widgets:` array, it's UNVALIDATABLE and gets skipped.
+
+Rules for `widgets:`:
+1. List EVERY widget that physically renders on the view's landing state, BEFORE any action runs.
+2. Do NOT list widgets that require a parent widget to be invoked first (menu items go on the menu's view, e.g. `view_picker_day` belongs on whichever view shows the picker open — usually none, because it's transient; skip it).
+3. Do NOT list `irreversible: true` widgets unnecessarily — they'll be skipped anyway, but it's cleaner.
+4. A widget MAY appear on multiple views' `widgets:` lists (e.g. `search_input` on both Inbox and ThreadView).
+5. Use the FULL widget id (`<integration>.<name>`), not just the short name.
 
 #### `entry:` — pick ONE of these three shapes
 
