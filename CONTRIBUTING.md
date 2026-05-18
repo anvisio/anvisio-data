@@ -52,6 +52,26 @@ All gates must pass before merge. CI runs in `pull_request` mode (sandboxed; no 
 
 Gate 5 is the strongest one: a PR that breaks an existing recipe can't merge.
 
+## Validate locally before pushing
+
+One-time setup after `git clone`:
+
+```bash
+pnpm install-hooks   # installs git pre-push hook + tools-build deps
+```
+
+The pre-push hook runs gates 1-4, 6-8 against the diff between your branch and `origin/main` — same set CI runs, same flags. A failing gate aborts `git push`. If you genuinely need to push past it (e.g. WIP draft branch), use `git push --no-verify`; CI will still gate when you open a PR.
+
+Useful scripts:
+
+| Command | What it does |
+|---|---|
+| `pnpm validate` | Run all gates against current branch's diff vs `origin/main` (same as pre-push) |
+| `pnpm validate:all` | Run gates against every file in the repo (use for large refactors that touch shared shape) |
+| `pnpm validate:fix` | Scaffold missing `_meta:` blocks + top-level `name:` on views. Inserts a `TODO: replace with...` description placeholder you MUST edit before commit. |
+
+`pnpm validate:fix` is the right tool when you have new manifest files (or files migrated from a `.tmp-*-manifest-*/` work directory) that haven't picked up `_meta:` yet. Run it, review the changes, fill in real descriptions, then commit.
+
 ## DCO sign-off (deferred)
 
 The bootstrap phase has no license set, so there's no DCO requirement yet. Once a license is chosen (after Phase 8 of spec 60.1 — see [README](./README.md#license)), all contributions will require `Signed-off-by:` per [Developer Certificate of Origin](https://developercertificate.org/) and CI will enforce.

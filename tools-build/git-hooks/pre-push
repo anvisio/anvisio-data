@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# pre-push: run the same CI gates the PR validator runs.
+#
+# Install via: pnpm install-hooks  (or  bash tools-build/install-hooks.sh)
+#
+# Skip via:    git push --no-verify  (use sparingly — CI will still gate)
+#
+# The hook reads stdin from git in the form:
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+# We don't currently use that — we just diff against origin/main, which is
+# what CI does. If you push to a branch already at HEAD, gates skip cleanly.
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Make sure origin/main is up to date so the diff is meaningful.
+git fetch origin main --quiet 2>/dev/null || true
+
+# Run all CI gates with GITHUB_BASE_REF=main so the diff matches what CI sees.
+echo "[pre-push] Running anvisio-data CI gates against origin/main..."
+echo ""
+
+if ! GITHUB_BASE_REF=main npm --prefix tools-build run ci:all; then
+  echo ""
+  echo "✗ pre-push: one or more CI gates failed. Push aborted."
+  echo "  Fix the issues, or re-run with: git push --no-verify"
+  echo "  Many _meta/name issues are auto-fixable: pnpm validate:fix"
+  exit 1
+fi
+
+echo ""
+echo "✓ pre-push: all CI gates passed."
+exit 0
