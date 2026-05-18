@@ -1,26 +1,49 @@
 _meta:
   name: widget-libraries/gmail.widgets.yaml
-  version: 0.2.0
-  cdn_schema_version: 60.3.0
+  version: 3.0.0
+  cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-16
   description: |
-    Gmail widget seed library. Canonical source-of-truth for Gmail
-    widget definitions. v0.2.0 reflects the Phase 5 widget validation
-    (live mail.google.com, 2026-05-10) — 11 widgets healed across 3
-    drift classes (entry selectors, action dispatch, completion verify).
-    Mirrors manifests/gmail/widgets.yaml at the same version; the two
-    diverge if/when a per-Gmail-instance overlay needs to extend
-    (Phase 9 of spec 60.1).
+    Gmail widget library, archetype-driven shape (v60.4).
 
-    Drop-in extendable by per-org gmail manifests via `extends:` once
-    Phase 9 of spec 60.1 lands the manifests/ subtree formally
-    (manifests/gmail/widgets.yaml currently duplicates this file).
-  archetypes_used: [panel_button, modal_button, text_input, typeahead, row_checkbox, menu_action, dialog_button]
+    Every widget declares only:
+      - archetype (one of the catalog names in
+        widget-libraries/archetype-templates.yaml)
+      - selectors (named per the archetype's required_selectors)
+      - overrides (optional knobs the archetype's recipe consumes)
+      - irreversible (optional safety flag)
+
+    The runtime widget-archetype-resolver expands these into executable
+    recipes at manifest-load time. Authoring 30 archetype-mapped widgets
+    at this layer requires far fewer lines than v0.2.0's per-widget
+    recipes — and a fix to a recipe template propagates to every widget
+    that uses that archetype.
+
+    Per-Gmail-instance `manifests/gmail/widgets.yaml` declares
+    `extends: widget-libraries/gmail.widgets.yaml` and inherits all
+    definitions below. Custom overlays (e.g. Workspace customer with a
+    non-standard add-on) add per-instance overrides there.
+
+    Source selectors are the v0.2.0 live-tested set (gmail Phase 5
+    widget validation, 2026-05-10).
+
+    4 widgets remain in LEGACY shape pending additional archetypes:
+      - gmail.search_input: typeahead_search_click variant (click
+        submit button vs. press Enter; 1 user; not worth a new
+        archetype yet)
+      - gmail.label_menu_search: typeahead_menu variant (no focus,
+        verify by menu disappearance; 2 users)
+      - gmail.move_menu_search: same as above
+      - gmail.thread_reply_all_button: 2-step composite (open menu +
+        click menuitem); doesn't fit a single archetype
+
+  archetypes_used: [text_input, contenteditable_input, typeahead_chip, click_reveals, click_dismisses, click_navigates, click_toggles, read_text, read_attribute]
+
   changelog:
-    - "0.2.0 (2026-05-10): MAJOR bump. Healed against live gmail in Phase 5 widget validation. Replaces propose-authored seed with the live-DOM-verified shape. Notable patches: compose_close_button ancestor fix, search_input click-submit (Enter eaten by typeahead), toolbar_move_button act='8' selector, toolbar_labels_button reverted to atomic (Phase 5 heal-overreach reverted in commit 445a8755), compose_to_input removed [name='to'] qualifier, cc/bcc verify type selector_appears, thread_archive/delete/star act-attribute selectors, thread_reply_all_button 2-step (open More menu, click menuitem). Irreversible widgets explicitly marked. Reply widgets reconstructed from compose pattern + scoped to div[role='main']."
-    - "0.1.1 (2026-05-07): quoted multi-line changelog string for YAML parser compatibility"
-    - "0.1.0 (2026-05-07): initial seed extracted from manifest-redesign/manifests/gmail/widgets.yaml (pre-validation propose-authored shape with :has-text Playwright selectors)"
+    - "3.0.0 (2026-05-16): MAJOR rewrite to archetype-driven shape. 30 widgets converted from v0.2.0's per-widget recipes (~655 lines) to { archetype, selectors, overrides }. The recipe bodies were structurally identical modulo selectors — duplication eliminated. 4 outlier widgets (search_input, label_menu_search, move_menu_search, thread_reply_all_button) remain in legacy shape; promoting them needs typeahead_search_click + typeahead_menu archetypes or a 2-step composite primitive (deferred — single-user patterns)."
+    - "0.2.0 (2026-05-10): MAJOR bump. Healed against live gmail in Phase 5 widget validation. Replaces propose-authored seed with the live-DOM-verified shape. 11 widgets healed across 3 drift classes."
+    - "0.1.0 (2026-05-07): initial seed extracted from manifest-redesign/manifests/gmail/widgets.yaml."
 
 defaults_by_type:
   text: gmail.compose_subject_input
@@ -28,33 +51,33 @@ defaults_by_type:
   rich_text: gmail.compose_body_editor
 
 widgets:
+
+  # ─── Compose toolbar / dialog open + close ────────────────────────
+
   gmail.compose_button:
-    archetype: panel_button
-    invoke:
-      - id: click_compose
-        type: click
-        args:
-          selector:
-            - div[role='button'].T-I-KE.L3
-            - div.z0 div[role='button'][tabindex='0']
-        verify:
-          type: selector_appears
-          selector: div[role='dialog'], input[name='subjectbox']
-          timeout_ms: 8000
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - div[role='button'].T-I-KE.L3
+        - div.z0 div[role='button'][tabindex='0']
+      verify_target: div[role='dialog'], input[name='subjectbox']
+
   gmail.compose_close_button:
-    archetype: modal_button
-    invoke:
-      - id: click_close
-        type: click
-        args:
-          selector:
-            - div[role='dialog'] img[aria-label='Save & close']
-            - img[aria-label='Save & close'][data-tooltip='Save & close']
-            - div[role='dialog'] img[alt='Close'][data-tooltip='Save & close']
-        verify:
-          type: selector_disappears
-          selector: div[role='dialog'] input[name='subjectbox']
-          timeout_ms: 6000
+    archetype: click_dismisses
+    selectors:
+      trigger:
+        - div[role='dialog'] img[aria-label='Save & close']
+        - img[aria-label='Save & close'][data-tooltip='Save & close']
+        - div[role='dialog'] img[alt='Close'][data-tooltip='Save & close']
+      verify_target: div[role='dialog'] input[name='subjectbox']
+    overrides:
+      verify_timeout_ms: 6000
+
+  # ─── Search (LEGACY: typeahead_search_click variant) ──────────────
+  # TODO Phase 1b: add `typeahead_search_click` archetype (focus + type
+  # + click submit + verify URL) — sole user today; not worth its own
+  # archetype until a second SaaS surfaces the pattern.
+
   gmail.search_input:
     archetype: text_input
     fill:
@@ -81,142 +104,107 @@ widgets:
           type: url_matches
           pattern: "#search/.*"
           timeout_ms: 8000
+
+  # ─── Thread list row interactions ─────────────────────────────────
+
   gmail.thread_row:
-    archetype: menu_action
-    invoke:
-      - id: open_thread
-        type: click
-        args:
-          selector:
-            - tr.zA span.bog span[data-legacy-thread-id='{{thread_id}}']
-            - tr.zA[id] span.bqe[data-legacy-thread-id='{{thread_id}}']
-        verify:
-          type: selector_appears
-          selector: h2.hP, div[role='main'] div[data-legacy-thread-id]
-          timeout_ms: 8000
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - tr.zA span.bog span[data-legacy-thread-id='{{thread_id}}']
+        - tr.zA[id] span.bqe[data-legacy-thread-id='{{thread_id}}']
+      verify_target: h2.hP, div[role='main'] div[data-legacy-thread-id]
+
   gmail.row_checkbox:
-    archetype: row_checkbox
-    invoke:
-      - id: toggle_select
-        type: click
-        args:
-          selector:
-            - tr.zA:has(span.bqe[data-legacy-thread-id='{{thread_id}}'])
-              div[role='checkbox']
-            - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
-              div[role='checkbox']
-        verify:
-          type: selector_attribute_equals
-          selector: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
-            div[role='checkbox']
-          attribute: aria-checked
-          value: "true"
-          timeout_ms: 4000
+    archetype: click_toggles
+    selectors:
+      trigger:
+        - tr.zA:has(span.bqe[data-legacy-thread-id='{{thread_id}}']) div[role='checkbox']
+        - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) div[role='checkbox']
+      verify_target: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) div[role='checkbox']
+    overrides:
+      verify_attribute: aria-checked
+      verify_value: "true"
+
   gmail.row_star_toggle:
-    archetype: row_checkbox
-    invoke:
-      - id: click_star
-        type: click
-        args:
-          selector:
-            - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
-              span[role='button'].T-KT
-            - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span.aXw
-        verify:
-          type: selector_appears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
-            span.T-KT.T-KT-Jp,
-            tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
-            span[aria-label='Not starred']
-          timeout_ms: 4000
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span[role='button'].T-KT
+        - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span.aXw
+      verify_target: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span.T-KT.T-KT-Jp,
+        tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span[aria-label='Not starred']
+
+  # ─── Inbox toolbar buttons (operate on selected/open thread) ──────
+
   gmail.toolbar_archive_button:
+    archetype: click_dismisses
     irreversible: true
-    archetype: panel_button
-    invoke:
-      - id: click_archive
-        type: click
-        args:
-          selector:
-            - div[role='button'][aria-label='Archive'][data-tooltip='Archive']
-            - div.G-Ni div[role='button'][aria-label='Archive']
-        verify:
-          type: selector_disappears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
-          timeout_ms: 8000
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Archive'][data-tooltip='Archive']
+        - div.G-Ni div[role='button'][aria-label='Archive']
+      verify_target: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
+
   gmail.toolbar_delete_button:
+    archetype: click_dismisses
     irreversible: true
-    archetype: panel_button
-    invoke:
-      - id: click_delete
-        type: click
-        args:
-          selector:
-            - div[role='button'][aria-label='Delete'][data-tooltip*='Delete']
-            - div.G-Ni div[role='button'][aria-label='Delete']
-        verify:
-          type: selector_disappears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
-          timeout_ms: 8000
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Delete'][data-tooltip*='Delete']
+        - div.G-Ni div[role='button'][aria-label='Delete']
+      verify_target: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}'])
+
   gmail.toolbar_mark_read_button:
+    archetype: click_reveals
     irreversible: true
-    archetype: panel_button
-    invoke:
-      - id: click_mark_read
-        type: click
-        args:
-          selector:
-            - div[role='button'][aria-label='Mark as read'][data-tooltip*='Mark
-              as read']
-            - div.G-Ni div[role='button'][aria-label='Mark as read']
-        verify:
-          type: selector_appears
-          selector: tr.zA.zE:has(span[data-legacy-thread-id='{{thread_id}}'])
-          timeout_ms: 6000
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Mark as read'][data-tooltip*='Mark as read']
+        - div.G-Ni div[role='button'][aria-label='Mark as read']
+      verify_target: tr.zA.zE:has(span[data-legacy-thread-id='{{thread_id}}'])
+    overrides:
+      verify_timeout_ms: 6000
+
   gmail.toolbar_mark_unread_button:
+    archetype: click_reveals
     irreversible: true
-    archetype: panel_button
-    invoke:
-      - id: click_mark_unread
-        type: click
-        args:
-          selector:
-            - div[role='button'][aria-label='Mark as
-              unread'][data-tooltip*='Mark as unread']
-            - div.G-Ni div[role='button'][aria-label='Mark as unread']
-        verify:
-          type: selector_appears
-          selector: tr.zA.zE:has(span[data-legacy-thread-id='{{thread_id}}'])
-          timeout_ms: 6000
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Mark as unread'][data-tooltip*='Mark as unread']
+        - div.G-Ni div[role='button'][aria-label='Mark as unread']
+      verify_target: tr.zA.zE:has(span[data-legacy-thread-id='{{thread_id}}'])
+    overrides:
+      verify_timeout_ms: 6000
+
   gmail.toolbar_labels_button:
-    archetype: panel_button
-    invoke:
-      - id: open_labels_menu
-        type: click
-        args:
-          selector:
-            - div[role='button'][aria-label='Labels'][data-tooltip='Labels']
-            - div.G-Ni div[role='button'][aria-label='Labels']
-        verify:
-          type: selector_appears
-          selector: div[role='menu'] input[placeholder='Label as:']
-          timeout_ms: 6000
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Labels'][data-tooltip='Labels']
+        - div.G-Ni div[role='button'][aria-label='Labels']
+      verify_target: div[role='menu'] input[placeholder='Label as:']
+    overrides:
+      verify_timeout_ms: 6000
+
   gmail.toolbar_move_button:
-    archetype: panel_button
-    invoke:
-      - id: open_move_menu
-        type: click
-        args:
-          selector:
-            - div[role='button'][act='8']
-            - div[role='button'][aria-label^='Move to'][act='8']
-            - div[role='button'][data-tooltip^='Move to'][act='8']
-            - div.G-Ni div[role='button'][act='8']
-        verify:
-          type: selector_appears
-          selector:
-            - div[role='menu'].J-M div[role='menuitem']
-            - div[role='menu'] div[role='menuitem']
-          timeout_ms: 6000
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - div[role='button'][act='8']
+        - div[role='button'][aria-label^='Move to'][act='8']
+        - div[role='button'][data-tooltip^='Move to'][act='8']
+        - div.G-Ni div[role='button'][act='8']
+      verify_target: div[role='menu'].J-M div[role='menuitem'],
+        div[role='menu'] div[role='menuitem']
+    overrides:
+      verify_timeout_ms: 6000
+
+  # ─── Menu typeaheads (LEGACY: typeahead_menu variant) ─────────────
+  # TODO Phase 1b: add `typeahead_menu` archetype (type-into-menu +
+  # click match + verify menu disappears). 2 users; worth adding when
+  # a 3rd SaaS surfaces the same pattern.
+
   gmail.label_menu_search:
     archetype: typeahead
     fill:
@@ -231,13 +219,13 @@ widgets:
         type: click
         args:
           selector:
-            - div[role='menu']
-              div[role='menuitemcheckbox'][aria-label*='{{value}}']
+            - div[role='menu'] div[role='menuitemcheckbox'][aria-label*='{{value}}']
             - div[role='menu'] div[role='menuitem']:nth-of-type(1)
         verify:
           type: selector_disappears
           selector: div[role='menu'] input[placeholder='Label as:']
           timeout_ms: 6000
+
   gmail.move_menu_search:
     archetype: typeahead
     fill:
@@ -258,263 +246,173 @@ widgets:
           type: selector_disappears
           selector: div[role='menu'] input[placeholder='Move to:']
           timeout_ms: 6000
+
+  # ─── Compose form fields ──────────────────────────────────────────
+
   gmail.compose_to_input:
-    archetype: typeahead
-    fill:
-      - id: focus_to
-        type: click
-        args:
-          selector:
-            - div[role='dialog'] input[aria-label='To recipients']
-            - div[role='dialog'] input[role='combobox'][aria-label='To
-              recipients']
-            - div[role='dialog'] div[name='to'] input[aria-label='To recipients']
-            - div[role='dialog'] input[peoplekit-id='BbVjBd']
-      - id: type_to
-        type: type_sequentially
-        args:
-          selector:
-            - div[role='dialog'] input[aria-label='To recipients']
-            - div[role='dialog'] input[role='combobox'][aria-label='To
-              recipients']
-            - div[role='dialog'] div[name='to'] input[aria-label='To recipients']
-          value: "{{value}}"
-          delay_ms: 25
-      - id: commit_to
-        type: press_key
-        args:
-          key: Tab
-        verify:
-          type: selector_appears
-          selector: div[role='dialog'] div[role='option'][data-name], div[role='dialog']
-            input[name='subjectbox']
-          timeout_ms: 4000
+    archetype: typeahead_chip
+    selectors:
+      trigger:
+        - div[role='dialog'] input[aria-label='To recipients']
+        - div[role='dialog'] input[role='combobox'][aria-label='To recipients']
+        - div[role='dialog'] div[name='to'] input[aria-label='To recipients']
+        - div[role='dialog'] input[peoplekit-id='BbVjBd']
+      input:
+        - div[role='dialog'] input[aria-label='To recipients']
+        - div[role='dialog'] input[role='combobox'][aria-label='To recipients']
+        - div[role='dialog'] div[name='to'] input[aria-label='To recipients']
+      verify_target: div[role='dialog'] div[role='option'][data-name], div[role='dialog']
+        input[name='subjectbox']
+
   gmail.compose_cc_input:
-    archetype: typeahead
-    fill:
-      - id: open_cc
-        type: click
-        args:
-          selector:
-            - span[role='link'][aria-label*='Add Cc']
-            - span[aria-label='Add Cc recipients']
-      - id: type_cc
-        type: type_sequentially
-        args:
-          selector:
-            - input[aria-label='CC recipients'][role='combobox']
-            - div[name='cc'] input[role='combobox']
-            - input[aria-label='Cc recipients'][role='combobox']
-          value: "{{value}}"
-          delay_ms: 25
-      - id: commit_cc
-        type: press_key
-        args:
-          key: Tab
-        verify:
-          type: selector_appears
-          selector: div[name='cc'] input[role='combobox']
-          timeout_ms: 3000
+    archetype: typeahead_chip
+    selectors:
+      trigger:
+        - span[role='link'][aria-label*='Add Cc']
+        - span[aria-label='Add Cc recipients']
+      input:
+        - input[aria-label='CC recipients'][role='combobox']
+        - div[name='cc'] input[role='combobox']
+        - input[aria-label='Cc recipients'][role='combobox']
+      verify_target: div[name='cc'] input[role='combobox']
+    overrides:
+      verify_timeout_ms: 3000
+
   gmail.compose_bcc_input:
-    archetype: typeahead
-    fill:
-      - id: open_bcc
-        type: click
-        args:
-          selector:
-            - span[role='link'][aria-label*='Add Bcc']
-            - span[aria-label='Add Bcc recipients']
-      - id: type_bcc
-        type: type_sequentially
-        args:
-          selector:
-            - input[aria-label='BCC recipients']
-            - div[name='bcc'] input[role='combobox']
-            - input[aria-label='Bcc recipients']
-          value: "{{value}}"
-          delay_ms: 25
-      - id: commit_bcc
-        type: press_key
-        args:
-          key: Tab
-        verify:
-          type: selector_appears
-          selector:
-            - input[aria-label='BCC recipients']
-            - div[name='bcc'] input[role='combobox']
-          timeout_ms: 3000
+    archetype: typeahead_chip
+    selectors:
+      trigger:
+        - span[role='link'][aria-label*='Add Bcc']
+        - span[aria-label='Add Bcc recipients']
+      input:
+        - input[aria-label='BCC recipients']
+        - div[name='bcc'] input[role='combobox']
+        - input[aria-label='Bcc recipients']
+      verify_target: input[aria-label='BCC recipients'],
+        div[name='bcc'] input[role='combobox']
+    overrides:
+      verify_timeout_ms: 3000
+
   gmail.compose_subject_input:
     archetype: text_input
-    fill:
-      - id: fill_subject
-        type: fill_text
-        args:
-          selector:
-            - input[name='subjectbox'][aria-label='Subject']
-            - input[name='subjectbox']
-          value: "{{value}}"
-        verify:
-          type: element_value_equals
-          selector: input[name='subjectbox']
-          value: "{{value}}"
-          timeout_ms: 3000
+    selectors:
+      fill_target:
+        - input[name='subjectbox'][aria-label='Subject']
+        - input[name='subjectbox']
+      read_target:
+        - input[name='subjectbox']
+
   gmail.compose_body_editor:
-    archetype: text_input
-    fill:
-      - id: focus_body
-        type: click
-        args:
-          selector:
-            - div[aria-label='Message
-              Body'][role='textbox'][contenteditable='true']
-            - div[role='textbox'][aria-label*='Message']
-      - id: type_body
-        type: fill_text
-        args:
-          selector:
-            - div[aria-label='Message
-              Body'][role='textbox'][contenteditable='true']
-          value: "{{value}}"
-        verify:
-          type: selector_appears
-          selector: div[aria-label='Message Body'][role='textbox']
-          timeout_ms: 3000
+    archetype: contenteditable_input
+    selectors:
+      fill_target:
+        - div[aria-label='Message Body'][role='textbox'][contenteditable='true']
+        - div[role='textbox'][aria-label*='Message']
+      read_target:
+        - div[aria-label='Message Body'][role='textbox']
+
   gmail.compose_send_button:
+    archetype: click_dismisses
     irreversible: true
-    archetype: modal_button
-    invoke:
-      - id: click_send
-        type: click
-        args:
-          selector:
-            - div[role='region'][aria-label='New Message']
-              div[role='button'][aria-label^='Send']
-            - div[role='region'][aria-label='New Message']
-              div[role='button'][data-tooltip^='Send']
-            - div[role='button'][aria-label^='Send '][aria-label*='Ctrl-Enter']
-            - div[role='button'][data-tooltip^='Send
-              '][data-tooltip*='Ctrl-Enter']
-        verify:
-          type: selector_disappears
-          selector: div[role='region'][aria-label='New Message']
-          timeout_ms: 10000
+    selectors:
+      trigger:
+        - div[role='region'][aria-label='New Message']
+          div[role='button'][aria-label^='Send']
+        - div[role='region'][aria-label='New Message']
+          div[role='button'][data-tooltip^='Send']
+        - div[role='button'][aria-label^='Send '][aria-label*='Ctrl-Enter']
+        - div[role='button'][data-tooltip^='Send '][data-tooltip*='Ctrl-Enter']
+      verify_target: div[role='region'][aria-label='New Message']
+
+  # ─── Thread view reads ────────────────────────────────────────────
+
   gmail.thread_subject_heading:
-    archetype: text_input
-    read:
-      - id: read_subject
-        type: read_text
-        args:
-          selector:
-            - h2.hP
-            - div[role='main'] h2[data-thread-perm-id]
-        verify:
-          type: selector_appears
-          selector: h2.hP
-          timeout_ms: 6000
+    archetype: read_text
+    selectors:
+      read_target:
+        - h2.hP
+        - div[role='main'] h2[data-thread-perm-id]
+
   gmail.thread_from:
-    archetype: text_input
-    read:
-      - id: read_from
-        type: read_attribute
-        args:
-          selector:
-            - div[role='main'] span.gD[email]
-            - div[role='main'] span[data-hovercard-id]
-          attribute: email
-        verify:
-          type: selector_appears
-          selector: div[role='main'] span.gD
-          timeout_ms: 6000
+    archetype: read_attribute
+    selectors:
+      read_target:
+        - div[role='main'] span.gD[email]
+        - div[role='main'] span[data-hovercard-id]
+    overrides:
+      attribute: email
+
   gmail.thread_body:
-    archetype: text_input
-    read:
-      - id: read_body
-        type: read_text
-        args:
-          selector:
-            - div[role='main'] div.a3s.aiL
-            - div[role='main'] div.ii.gt div.a3s
-        verify:
-          type: selector_appears
-          selector: div[role='main'] div.a3s
-          timeout_ms: 6000
+    archetype: read_text
+    selectors:
+      read_target:
+        - div[role='main'] div.a3s.aiL
+        - div[role='main'] div.ii.gt div.a3s
+
+  # ─── Thread action buttons (open thread state) ────────────────────
+
   gmail.thread_archive_button:
+    archetype: click_reveals
     irreversible: true
-    archetype: panel_button
-    invoke:
-      - id: click_archive
-        type: click
-        args:
-          selector:
-            - div[role='button'][act='7'][title='Archive'][tabindex='0']
-            - div[role='button'][title='Archive'][act='7']
-            - div[role='button'][aria-label='Archive'][data-tooltip='Archive']:not([aria-disabled='true'])
-        verify:
-          type: selector_appears
-          selector: div.b8.UC div.vh
-          timeout_ms: 8000
+    selectors:
+      trigger:
+        - div[role='button'][act='7'][title='Archive'][tabindex='0']
+        - div[role='button'][title='Archive'][act='7']
+        - div[role='button'][aria-label='Archive'][data-tooltip='Archive']:not([aria-disabled='true'])
+      verify_target: div.b8.UC div.vh
+
   gmail.thread_delete_button:
+    archetype: click_reveals
     irreversible: true
-    archetype: panel_button
-    invoke:
-      - id: click_delete
-        type: click
-        args:
-          selector:
-            - div[role='button'][aria-label='Delete'][data-tooltip='Delete']
-            - div[role='button'][aria-label='Delete'][act='10']
-            - div[role='button'][aria-label='Delete']
-        verify:
-          type: selector_appears
-          selector: div.b8.UC div.vh
-          timeout_ms: 8000
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Delete'][data-tooltip='Delete']
+        - div[role='button'][aria-label='Delete'][act='10']
+        - div[role='button'][aria-label='Delete']
+      verify_target: div.b8.UC div.vh
+
   gmail.thread_star_button:
+    archetype: click_reveals
     irreversible: true
-    archetype: modal_button
-    invoke:
-      - id: click_star
-        type: click
-        args:
-          selector:
-            - div[role='main'] div[role='checkbox'][aria-label='Not starred']
-            - div[role='main'] div[role='checkbox'][aria-label='Starred']
-            - div[role='main'] div[role='checkbox'][data-tooltip='Not starred']
-            - div[role='main'] div[role='checkbox'][data-tooltip='Starred']
-        verify:
-          type: selector_appears
-          selector: div[role='main'] div[role='checkbox'][aria-label='Starred'],
-            div[role='main'] div[role='checkbox'][aria-label='Not starred']
-          timeout_ms: 4000
+    selectors:
+      trigger:
+        - div[role='main'] div[role='checkbox'][aria-label='Not starred']
+        - div[role='main'] div[role='checkbox'][aria-label='Starred']
+        - div[role='main'] div[role='checkbox'][data-tooltip='Not starred']
+        - div[role='main'] div[role='checkbox'][data-tooltip='Starred']
+      verify_target: div[role='main'] div[role='checkbox'][aria-label='Starred'],
+        div[role='main'] div[role='checkbox'][aria-label='Not starred']
+    overrides:
+      verify_timeout_ms: 4000
+
   gmail.thread_mark_unread_button:
+    archetype: click_navigates
     irreversible: true
-    archetype: panel_button
-    invoke:
-      - id: click_mark_unread
-        type: click
-        args:
-          selector:
-            - div[role='button'][aria-label='Mark as unread'][data-tooltip='Mark
-              as unread']
-            - div[role='button'][aria-label='Mark as unread']
-            - "[aria-label='Mark as unread'][role='button']"
-        verify:
-          type: url_matches
-          pattern: "#inbox$|#search"
-          timeout_ms: 6000
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Mark as unread'][data-tooltip='Mark as unread']
+        - div[role='button'][aria-label='Mark as unread']
+        - "[aria-label='Mark as unread'][role='button']"
+    overrides:
+      url_pattern: "#inbox$|#search"
+      verify_timeout_ms: 6000
+
   gmail.thread_reply_button:
-    archetype: panel_button
-    invoke:
-      - id: click_reply
-        type: click
-        args:
-          selector:
-            - div[role='main'] button[aria-label='Reply']
-            - div[role='main'] [role='button'][aria-label='Reply']
-            - div[role='main'] [aria-label='Reply']
-        verify:
-          type: selector_appears
-          selector: div[role='main'] div[role='textbox'][aria-label*='Message Body']
-          timeout_ms: 6000
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - div[role='main'] button[aria-label='Reply']
+        - div[role='main'] [role='button'][aria-label='Reply']
+        - div[role='main'] [aria-label='Reply']
+      verify_target: div[role='main'] div[role='textbox'][aria-label*='Message Body']
+    overrides:
+      verify_timeout_ms: 6000
+
+  # ─── Reply-all (LEGACY: 2-step composite) ─────────────────────────
+  # TODO Phase 1b: needs a "menu_item_pick" archetype OR a multi-step
+  # composite primitive. Open the More-options menu, click the
+  # Reply-all menuitem. 1 user today.
+
   gmail.thread_reply_all_button:
     archetype: panel_button
     invoke:
@@ -544,112 +442,78 @@ widgets:
           type: selector_appears
           selector: div[role='main'] div[role='textbox'][aria-label*='Message Body']
           timeout_ms: 6000
+
   gmail.thread_forward_button:
-    archetype: panel_button
-    invoke:
-      - id: click_forward
-        type: click
-        args:
-          selector:
-            - div[role='main'] span[role='link'].ams.bkG
-            - div[role='main'] span[role='link'][aria-label='Forward']
-            - div[role='main'] div[role='button'][aria-label='Forward']
-        verify:
-          type: selector_appears
-          selector: div[role='main'] input[aria-label='To recipients'], div[role='main']
-            div[role='textbox'][aria-label*='Message Body']
-          timeout_ms: 6000
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - div[role='main'] span[role='link'].ams.bkG
+        - div[role='main'] span[role='link'][aria-label='Forward']
+        - div[role='main'] div[role='button'][aria-label='Forward']
+      verify_target: div[role='main'] input[aria-label='To recipients'], div[role='main']
+        div[role='textbox'][aria-label*='Message Body']
+    overrides:
+      verify_timeout_ms: 6000
+
   gmail.thread_attachment_download:
+    archetype: click_reveals
     irreversible: true
-    archetype: dialog_button
-    invoke:
-      - id: click_download
-        type: click
-        args:
-          selector:
-            - div[role='main'] div.aZi[aria-label*='{{filename}}'] a[download]
-            - div[role='main'] div.aQw a[download][aria-label*='{{filename}}']
-            - div[role='main'] div[aria-label*='Download
-              attachment'][role='button']
-        verify:
-          type: selector_appears
-          selector: div[role='main']
-          timeout_ms: 15000
+    # NOTE: verify_target is intentionally weak (div[role='main'] is
+    # present on every thread view) because the actual download is a
+    # browser dialog that no DOM selector can probe. Marked irreversible
+    # so build-time validation skips it. Better verify pending Chrome's
+    # downloads API exposure or a per-attachment status indicator.
+    selectors:
+      trigger:
+        - div[role='main'] div.aZi[aria-label*='{{filename}}'] a[download]
+        - div[role='main'] div.aQw a[download][aria-label*='{{filename}}']
+        - div[role='main'] div[aria-label*='Download attachment'][role='button']
+      verify_target: div[role='main']
+    overrides:
+      verify_timeout_ms: 15000
+
+  # ─── Inline reply (reply panel inside the open thread) ────────────
+
   gmail.reply_to_input:
-    archetype: typeahead
-    fill:
-      - id: focus_to
-        type: click
-        args:
-          selector:
-            - div[role='dialog'] textarea[name='to']
-            - div[role='dialog'] input[name='to']
-            - div[role='main'] textarea[name='to']
-            - div[role='main'] input[name='to']
-            - textarea[aria-label='To recipients']
-            - input[aria-label='To recipients']
-            - div[role='dialog'] [aria-label*='To recipients' i]
-            - div[role='main'] [aria-label*='To recipients' i]
-            - "[peoplekit-id] input[aria-label*='To' i]"
-      - id: type_to
-        type: type_sequentially
-        args:
-          selector:
-            - div[role='dialog'] textarea[name='to']
-            - div[role='dialog'] input[name='to']
-            - div[role='main'] textarea[name='to']
-            - div[role='main'] input[name='to']
-            - textarea[aria-label='To recipients']
-            - input[aria-label='To recipients']
-            - div[role='dialog'] [aria-label*='To recipients' i]
-            - div[role='main'] [aria-label*='To recipients' i]
-          value: "{{value}}"
-          delay_ms: 25
-      - id: commit_to
-        type: press_key
-        args:
-          key: Tab
-        verify:
-          type: selector_appears
-          selector: div[role='textbox'][aria-label*='essage' i],
-            div[role='textbox'][g_editable='true'],
-            div[contenteditable='true'][aria-label*='essage' i]
-          timeout_ms: 4000
-  # ─── Reply body editor + send button (reconstructed; see _meta) ─────
+    archetype: typeahead_chip
+    selectors:
+      trigger:
+        - div[role='dialog'] textarea[name='to']
+        - div[role='dialog'] input[name='to']
+        - div[role='main'] textarea[name='to']
+        - div[role='main'] input[name='to']
+        - textarea[aria-label='To recipients']
+        - input[aria-label='To recipients']
+        - div[role='dialog'] [aria-label*='To recipients' i]
+        - div[role='main'] [aria-label*='To recipients' i]
+        - "[peoplekit-id] input[aria-label*='To' i]"
+      input:
+        - div[role='dialog'] textarea[name='to']
+        - div[role='dialog'] input[name='to']
+        - div[role='main'] textarea[name='to']
+        - div[role='main'] input[name='to']
+        - textarea[aria-label='To recipients']
+        - input[aria-label='To recipients']
+        - div[role='dialog'] [aria-label*='To recipients' i]
+        - div[role='main'] [aria-label*='To recipients' i]
+      verify_target: div[role='textbox'][aria-label*='essage' i],
+        div[role='textbox'][g_editable='true'],
+        div[contenteditable='true'][aria-label*='essage' i]
+
   gmail.reply_body_editor:
-    archetype: text_input
-    fill:
-      - id: focus_body
-        type: click
-        args:
-          selector:
-            - div[role='main'] div[role='textbox'][aria-label*='Message
-              Body'][contenteditable='true']
-            - div[role='main'] div[role='textbox'][aria-label*='Message']
-      - id: type_body
-        type: fill_text
-        args:
-          selector:
-            - div[role='main'] div[role='textbox'][aria-label*='Message
-              Body'][contenteditable='true']
-          value: "{{value}}"
-        verify:
-          type: selector_appears
-          selector: div[role='main'] div[role='textbox'][aria-label*='Message Body']
-          timeout_ms: 3000
+    archetype: contenteditable_input
+    selectors:
+      fill_target:
+        - div[role='main'] div[role='textbox'][aria-label*='Message Body'][contenteditable='true']
+        - div[role='main'] div[role='textbox'][aria-label*='Message']
+      read_target:
+        - div[role='main'] div[role='textbox'][aria-label*='Message Body']
+
   gmail.reply_send_button:
+    archetype: click_dismisses
     irreversible: true
-    archetype: modal_button
-    invoke:
-      - id: click_send
-        type: click
-        args:
-          selector:
-            - div[role='main'] div[role='button'][aria-label^='Send
-              '][aria-label*='Ctrl-Enter']
-            - div[role='main'] div[role='button'][data-tooltip^='Send
-              '][data-tooltip*='Ctrl-Enter']
-        verify:
-          type: selector_disappears
-          selector: div[role='main'] div[role='textbox'][aria-label*='Message Body']
-          timeout_ms: 10000
+    selectors:
+      trigger:
+        - div[role='main'] div[role='button'][aria-label^='Send '][aria-label*='Ctrl-Enter']
+        - div[role='main'] div[role='button'][data-tooltip^='Send '][data-tooltip*='Ctrl-Enter']
+      verify_target: div[role='main'] div[role='textbox'][aria-label*='Message Body']

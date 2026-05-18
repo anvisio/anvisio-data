@@ -1,0 +1,29 @@
+_meta:
+  name: manifests/salesforce/apis.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    Salesforce APIs catalog — Aura describe endpoints + SOSL/SOQL via session cookie. Used by call_platform_api at runtime to verify backend assumptions.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+apis:
+  aura_get_object_info:
+    transport: aura
+    auth: session_cookie
+    domain_condition: "*.lightning.force.com"
+    endpoint_pattern: "{instance.origin}/aura?r=1"
+    method: POST
+    descriptor: aura://RecordUiController/ACTION$getObjectInfo
+    extract_path: actions[0].returnValue
+    inputs:
+      objectApiName:
+        type: text
+        required: true
+    captures: object schema (apiName, fields with
+      label/type/picklistValues/referenceToInfos, defaultRecordTypeId,
+      childRelationships)
+    confidence: high
+    verified_at_propose: 2026-05-14

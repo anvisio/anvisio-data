@@ -4,19 +4,35 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/widgets.schema.json",
-      "version": "1.0.0",
-      "cdn_schema_version": "60.3.0",
+      "version": "1.1.0",
+      "cdn_schema_version": "60.4.2",
       "authored_by": "cd2k + claude",
-      "authored_at": "2026-05-11",
-      "description": "Per-role schema for manifests/<saas>/widgets.yaml body (post-_meta-strip). Requires the widgets map; allows extends (widget-library ref) and defaults_by_type. Permissive on per-widget invoke recipe shape — runtime validator handles vocabulary checks.",
-      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+      "authored_at": "2026-05-18",
+      "description": "Per-role schema for manifests/<saas>/widgets.yaml body (post-_meta-strip). Accepts EITHER inline widgets (a non-empty widgets map) OR an extends-stub (extends: <widget-library>). Permissive on per-widget invoke recipe shape — runtime validator handles vocabulary checks.",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0",
+      "changelog": [
+        "1.1.0 (2026-05-18): drop minProperties:1 + required:widgets to accommodate the extends-stub pattern from the 2026-05-16 four-cleanup refactor (per-app widgets.yaml is a 2-line extends: stub with no inline widgets). Adds anyOf gate so authors still get a real-shape error when both extends and widgets are missing/empty.",
+        "1.0.0 (2026-05-11): initial schema; widgets required, minProperties:1."
+      ]
     }
   },
   "title": "Spec 60 — widgets.yaml body",
-  "description": "Validates the body of a per-SaaS widgets.yaml file after the _meta block is stripped. The widgets key is required. extends and defaults_by_type are optional.",
+  "description": "Validates the body of a per-SaaS widgets.yaml file after the _meta block is stripped. Accepts either an inline widgets map (>=1 widget) OR an extends-stub (extends: <widget-library>). extends and defaults_by_type are optional. The widgets map is optional but if present must be an object.",
   "type": "object",
-  "required": ["widgets"],
   "additionalProperties": true,
+  "anyOf": [
+    {
+      "title": "extends-stub",
+      "required": ["extends"]
+    },
+    {
+      "title": "inline-widgets",
+      "required": ["widgets"],
+      "properties": {
+        "widgets": { "minProperties": 1 }
+      }
+    }
+  ],
   "properties": {
     "extends": {
       "type": "string",
@@ -25,9 +41,8 @@
     },
     "widgets": {
       "type": "object",
-      "description": "Map of widget id (e.g. gmail.compose_button) → widget definition (archetype + invoke recipe).",
-      "additionalProperties": true,
-      "minProperties": 1
+      "description": "Map of widget id (e.g. gmail.compose_button) → widget definition (archetype + invoke recipe). May be empty when extends is present.",
+      "additionalProperties": true
     },
     "defaults_by_type": {
       "type": "object",

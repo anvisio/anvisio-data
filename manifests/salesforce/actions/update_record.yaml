@@ -1,0 +1,65 @@
+_meta:
+  name: manifests/salesforce/actions/update_record.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    update_record action — generic record update parameterized by object_type + record_id + field map. Opens record view, clicks Edit, fills fields, clicks Save.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: Edit an existing record via /lightning/r/{object_type}/{record_id}/edit modal.
+object: "{{inputs.object_type}}"
+commits_changes: true
+depends_on_view: RecordEditModal
+inputs:
+  object_type:
+    type: text
+    required: true
+    sample: Opportunity
+  record_id:
+    type: id
+    required: true
+  fields:
+    type: object
+    required: true
+    sample:
+      NextStep: Follow up after pilot
+result:
+  record_id: text
+  updated: boolean
+flavors:
+  dom:
+    requires_auth: session_cookie
+    label: Fill the edit modal; click Save when commit:true
+    recipe:
+      - id: fill_fields
+        type: fill_fields
+        args:
+          object: "{{inputs.object_type}}"
+          from: "{{inputs.fields}}"
+      - id: click_save
+        type: use_widget
+        commit: true
+        args:
+          widget: salesforce.save_button
+          op: invoke
+    outcomes:
+      - action: ready_to_save
+        emits_when: pre_commit
+        signal:
+          type: selector_appears
+          selector: button[name='SaveEdit']
+          timeout_ms: 8000
+      - action: updated
+        emits_when: post_commit
+        signal:
+          type: selector_disappears
+          selector: button[name='SaveEdit']
+          timeout_ms: 10000
+        extract:
+          record_id:
+            from_input: record_id
+          updated:
+            literal: true

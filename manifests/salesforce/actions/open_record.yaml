@@ -1,0 +1,43 @@
+_meta:
+  name: manifests/salesforce/actions/open_record.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    open_record action — deeplink-navigate to /lightning/r/{object_type}/{record_id}/view. Read-only single dom flavor.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: Navigate to a record's detail page by object_type + record_id.
+object: "{{inputs.object_type}}"
+commits_changes: false
+depends_on_view: any
+inputs:
+  object_type:
+    type: text
+    required: true
+    sample: Opportunity
+  record_id:
+    type: id
+    required: true
+    sample: 006dM00000fJSAMPLE
+result:
+  opened: boolean
+flavors:
+  dom:
+    requires_auth: session_cookie
+    label: Open the record detail page
+    recipe:
+      - id: nav_record
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/r/{{inputs.object_type}}/{{inputs.record_id}}/view"
+    outcomes:
+      - action: opened
+        signal:
+          type: url_matches
+          pattern: /lightning/r/.+/view
+        extract:
+          opened:
+            literal: true

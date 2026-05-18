@@ -1,0 +1,214 @@
+_meta:
+  name: widget-libraries/salesforce.widgets.yaml
+  version: 4.0.0
+  cdn_schema_version: 60.4.1
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    Salesforce widget library, archetype-driven shape (v60.4). Targets
+    SF Lightning Experience (the only UI mode SF customers run today);
+    a future SF Classic harness, if it ever ships, would live in its
+    own widget-libraries/salesforce-classic.widgets.yaml.
+
+    Every widget declares only:
+      - archetype (one of the catalog names in
+        widget-libraries/archetype-templates.yaml)
+      - selectors (named per the archetype's required_selectors)
+      - overrides (optional knobs the archetype's recipe consumes)
+      - irreversible (optional safety flag)
+
+    The runtime widget-archetype-resolver expands these into executable
+    recipes at manifest-load time. Authoring 13 widgets at this layer
+    requires ~150 lines of YAML vs ~440 in the v2.x shape — and a fix
+    to a recipe template propagates to every widget that uses that
+    archetype.
+
+    Per-org `manifests/<sf-org>/widgets.yaml` files declare
+    `extends: widget-libraries/salesforce.widgets.yaml` and inherit all
+    definitions below. Per-org files may add custom widgets or override
+    entries (rare; custom page-layout selectors).
+
+    Source selectors are the live-tested set from the 2026-05-15 SF
+    CRUD 8/8 run (.tmp-sf-manifest-8of8-2026-05-15/widgets.yaml,
+    $0.09/run) — see project_sf_crud_8of8_landed_2026_05_15.md.
+
+  archetypes_used: [text_input, picklist_select, typeahead_lookup, click_reveals, click_dismisses, click_navigates, click_toggles, typeahead_search]
+
+  changelog:
+    - "4.0.0 (2026-05-16): rename `lightning.<widget>` → `salesforce.<widget>` throughout + file rename `widget-libraries/lightning.widgets.yaml` → `widget-libraries/salesforce.widgets.yaml`. The harness/SaaS axis was overhead for a single-harness SaaS (every Lightning org uses the same library — no SF Classic library exists). The harness pattern can be re-introduced via a sibling library file if SF ever splits its runtime."
+    - "3.0.0 (2026-05-16): MAJOR rewrite to archetype-driven shape. 13 widgets converted from v2.0.0's per-widget recipes (~440 lines) to { archetype, selectors, overrides } (~150 lines). The recipe bodies were structurally identical modulo selectors — duplication eliminated. Phase 1 follow-up of the four-cleanup refactor."
+    - "2.0.0 (2026-05-16): wholesale replacement of theoretical v1.0.0 seed with live-tested widgets from the 2026-05-15 SF CRUD 8/8 run. 13 widgets, selectors anchored on records-record-layout-item[field-label=…]."
+    - "1.0.0 (2026-05-04): initial 9-widget theoretical seed (`lightning.*` names). Never referenced at runtime."
+
+defaults_by_type:
+  id: salesforce.text
+  text: salesforce.text
+  textarea: salesforce.text
+  number: salesforce.text
+  picklist: salesforce.picklist
+  date: salesforce.date_input
+  boolean: salesforce.toggle
+
+widgets:
+
+  # ─── Field inputs ──────────────────────────────────────────────────
+
+  salesforce.text:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - records-record-layout-item[field-label='{{field_label}}'] input
+        - records-record-layout-item[field-label='{{field_label}}'] textarea
+        - input[name='{{field_name}}']
+        - textarea[name='{{field_name}}']
+      read_target:
+        - records-record-layout-item[field-label='{{field_label}}'] input
+        - records-record-layout-item[field-label='{{field_label}}'] textarea
+        - input[name='{{field_name}}']
+
+  salesforce.picklist:
+    archetype: picklist_select
+    selectors:
+      trigger:
+        - records-record-layout-item[field-label='{{field_label}}'] button[role='combobox']
+        - records-record-layout-item[field-label='{{field_label}}'] button
+        - button[aria-label='{{field_label}}']
+        - button[name='{{field_name}}']
+      option:
+        - lightning-base-combobox-item[data-value='{{value}}']
+        - "[role='option'][data-value='{{value}}']"
+        - lightning-base-combobox-item[title='{{value}}']
+      verify_target: records-record-layout-item[field-label='{{field_label}}'] button[role='combobox']
+
+  salesforce.lookup:
+    archetype: typeahead_lookup
+    selectors:
+      input:
+        - records-record-layout-item[field-label='{{field_label}}'] input
+        - input[aria-label='{{field_label}}']
+        - input[name='{{field_name}}']
+      result:
+        - lightning-base-combobox-item[data-value]
+        - "[role='option']"
+      verify_target: records-record-layout-item[field-label='{{field_label}}'] input
+    overrides:
+      type_delay_ms: 40
+
+  salesforce.date_input:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - records-record-layout-item[field-label='{{field_label}}'] input
+        - input[name='{{field_name}}']
+      read_target:
+        - records-record-layout-item[field-label='{{field_label}}'] input
+        - input[name='{{field_name}}']
+
+  salesforce.toggle:
+    archetype: click_toggles
+    selectors:
+      trigger:
+        - records-record-layout-item[field-label='{{field_label}}'] input[type='checkbox']
+        - input[name='{{field_name}}']
+      verify_target: records-record-layout-item[field-label='{{field_label}}'] input[type='checkbox']
+    overrides:
+      verify_attribute: checked
+      verify_value: "{{value}}"
+
+  # ─── Modal action buttons ──────────────────────────────────────────
+
+  # Verify via selector_disappears (NOT url_matches): SF often routes
+  # deeplinked edit modals to the org welcome app after save, not to
+  # /lightning/r/<id>/view — modal-close is the only signal guaranteed
+  # across deeplink loads + welcome-redirect fallbacks.
+  # See feedback_sf_welcome_redirect_after_save.md.
+  salesforce.save_button:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - button[name='SaveEdit']
+        - "[data-target-selection-name$='.SaveEdit']"
+      verify_target: button[name='SaveEdit']
+    overrides:
+      verify_timeout_ms: 60000
+
+  salesforce.cancel_button:
+    archetype: click_dismisses
+    selectors:
+      trigger:
+        - button[name='CancelEdit']
+        - "[data-target-selection-name$='.CancelEdit']"
+        - button[title='Cancel and close']
+      verify_target: button[name='SaveEdit']
+    overrides:
+      verify_timeout_ms: 12000
+
+  # ─── List / record-view triggers ───────────────────────────────────
+
+  salesforce.new_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - a[title='New']
+        - button[name='New']
+        - div.slds-page-header a[title='New']
+      verify_target: button[name='SaveEdit']
+    overrides:
+      verify_timeout_ms: 10000
+
+  salesforce.record_overflow_caret:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - records-highlights2 button.slds-button_icon-border-filled
+        - button.fix-slds-button_icon-border-filled.slds-button_icon-border-filled
+      verify_target: div.slds-dropdown__item
+    overrides:
+      verify_timeout_ms: 5000
+
+  salesforce.edit_menu_item:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[data-target-selection-name$='.Edit']"
+        - div.slds-dropdown__item
+      verify_target: button[name='SaveEdit']
+    overrides:
+      verify_timeout_ms: 8000
+
+  salesforce.delete_menu_item:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[data-target-selection-name$='.Delete']"
+        - div.slds-dropdown__item
+      verify_target: div[role='dialog'] button[title='Delete']
+    overrides:
+      verify_timeout_ms: 8000
+
+  # ─── Delete confirmation ───────────────────────────────────────────
+
+  salesforce.delete_confirm_button:
+    archetype: click_navigates
+    irreversible: true
+    selectors:
+      trigger:
+        - div[role='dialog'] button[title='Delete']
+        - div[role='dialog'] button.slds-button_brand
+    overrides:
+      url_pattern: /lightning/o/.+/(list|home)
+
+  # ─── Global search ─────────────────────────────────────────────────
+
+  salesforce.global_search_input:
+    archetype: typeahead_search
+    selectors:
+      trigger:
+        - button[aria-label='Search']
+        - button.slds-button_neutral.search-button
+      input:
+        - input[placeholder*='Search']
+        - input[name='globalSearch']
+    overrides:
+      url_pattern: lightning/search

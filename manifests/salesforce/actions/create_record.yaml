@@ -1,0 +1,73 @@
+_meta:
+  name: manifests/salesforce/actions/create_record.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    create_record action — generic record creation parameterized by object_type. Navigates to /lightning/o/{object_type}/new, fills the form via schema-driven widget bindings, clicks Save.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: Create a new Opportunity / Account / Lead record via
+  /lightning/o/{object_type}/new.
+object: "{{inputs.object_type}}"
+commits_changes: true
+depends_on_view: RecordNewModal
+inputs:
+  object_type:
+    type: text
+    required: true
+    sample: Opportunity
+  fields:
+    type: object
+    required: true
+    sample:
+      Name: Anvisio Onboarding Test Opp
+      StageName: Prospecting
+      CloseDate: 12/31/2026
+result:
+  record_id: text
+  record_name: text
+  created: boolean
+flavors:
+  # Phase 3 (2026-05-16): single `dom` flavor with commit-marked
+  # last-step. commit:false fires `ready_to_save` (form is filled,
+  # SaveEdit button is visible); commit:true runs the full recipe and
+  # fires `created` (URL settles on /lightning/r/<id>/view).
+  dom:
+    requires_auth: session_cookie
+    label: Fill the new-record modal; click Save when commit:true
+    recipe:
+      - id: fill_fields
+        type: fill_fields
+        args:
+          object: "{{inputs.object_type}}"
+          from: "{{inputs.fields}}"
+      - id: click_save
+        type: use_widget
+        commit: true
+        args:
+          widget: salesforce.save_button
+          op: invoke
+    outcomes:
+      - action: ready_to_save
+        emits_when: pre_commit
+        signal:
+          type: selector_appears
+          selector: button[name='SaveEdit']
+          timeout_ms: 8000
+      - action: created
+        emits_when: post_commit
+        signal:
+          type: url_matches
+          pattern: /lightning/r/(?:[A-Za-z]+/)?(?<record_id>[A-Za-z0-9]{15,18})/view
+        extract:
+          record_id:
+            from_url_match: record_id
+          object_type:
+            from_input: object_type
+          record_name:
+            from_input: fields.Name
+          created:
+            literal: true
