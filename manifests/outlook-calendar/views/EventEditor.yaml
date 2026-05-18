@@ -1,0 +1,28 @@
+_meta:
+  name: manifests/outlook-calendar/views/EventEditor.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    New / edit event pane. Button-triggered from Calendar (no dedicated URL), so entry uses widget instead of url. Exit dismisses via Escape key.
+
+name: EventEditor
+description: New / edit event pane (button-triggered, no dedicated URL).
+depends_on_view: Calendar
+entry:
+  widget: outlook-calendar.new_event_button
+exit:
+  - id: dismiss
+    type: press_key
+    args:
+      key: Escape
+identifying_selectors:
+  - input[placeholder='Add title']
+  - "div[contenteditable='true'][aria-label='Invite required attendees']"
+widgets:
+  - outlook-calendar.event_title
+  - outlook-calendar.event_body
+  - outlook-calendar.event_attendees
+  - outlook-calendar.save_event
+  - outlook-calendar.close_event

@@ -1,0 +1,21 @@
+_meta:
+  name: manifests/outlook/workflows/search_smoke.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    End-to-end smoke workflow: searches for 'invoice' via the global search input, verifies the 'Exit search' button appears. Single-step; validates the search_email action runs against live Outlook.
+
+name: search_smoke
+description: |
+  End-to-end verification that the trusted-CDP press_key fix (d9ef6c3f
+  runtime + heal-side mirror) lets the workflow runner execute Outlook
+  search_email successfully. Single-step workflow.
+steps:
+  - id: search_for_invoice
+    action: search_email
+    flavor: dom
+    inputs:
+      query: invoice
+    expected_outcome: searched
