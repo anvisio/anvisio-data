@@ -1,0 +1,45 @@
+_meta:
+  name: manifests/salesforce/actions/search_record.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    search_record action — global search via SF Lightning's omnibar; results land on the GlobalSearchResults view.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: Run global search for a query string; lands on /lightning/search/.
+object: "{{inputs.object_type}}"
+commits_changes: false
+depends_on_view: any
+inputs:
+  query:
+    type: text
+    required: true
+    sample: Anvisio
+  object_type:
+    type: text
+    required: false
+result:
+  searched: boolean
+flavors:
+  dom:
+    requires_auth: session_cookie
+    label: Navigate to global search results
+    recipe:
+      - id: nav_to_search
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/search/?q={{inputs.query}}"
+    outcomes:
+      - action: searched
+        signal:
+          type: url_matches
+          pattern: /lightning/search/
+          timeout_ms: 15000
+        extract:
+          searched:
+            literal: true
+          query:
+            from_input: query

@@ -1,0 +1,42 @@
+_meta:
+  name: manifests/salesforce/actions/list_records.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    list_records action — navigate to the object's tab list view (/lightning/o/{object_type}/list). Read-only single dom flavor, no commit.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: Open an object's list view.
+object: "{{inputs.object_type}}"
+commits_changes: false
+depends_on_view: any
+inputs:
+  object_type:
+    type: text
+    required: true
+    sample: Opportunity
+result:
+  listed: boolean
+flavors:
+  # Read-only action — single `dom` flavor, no commit marker (no
+  # destructive last-step). Outcome `emits_when` defaults to `always`.
+  dom:
+    requires_auth: session_cookie
+    label: Navigate to the object list view
+    recipe:
+      - id: nav_list
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/o/{{inputs.object_type}}/list"
+    outcomes:
+      - action: listed
+        signal:
+          type: selector_appears
+          selector: lst-list-view-manager
+          timeout_ms: 10000
+        extract:
+          listed:
+            literal: true

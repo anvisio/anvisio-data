@@ -1,0 +1,27 @@
+_meta:
+  name: manifests/salesforce/workflows/lead_crud.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    Minimal Lead workflow — just confirms list_records works against
+    the Lead object. Lead support is intentionally narrow at this stage;
+    the full Lead CRUD chain (create/update/delete) gets added when
+    propose generates per-object workflows from the Lead schema.
+
+    Promoted from the legacy `list_leads` entry in test_catalog.json on
+    2026-05-16 (Phase 4 Slice 7 of the four-cleanup refactor).
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote of the list_leads step from test_catalog.json. Phase 4 Slice 7. Expand to full CRUD when Lead is exercised end-to-end."
+
+name: lead_crud
+description: Smoke-test list_records against the Lead object.
+steps:
+  - id: list_leads
+    action: list_records
+    flavor: dom
+    commit: true
+    inputs:
+      object_type: Lead
+    expected_outcome: listed

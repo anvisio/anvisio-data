@@ -1,0 +1,341 @@
+_meta:
+  name: widget-libraries/archetype-templates.yaml
+  version: 1.2.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    Canonical archetype templates for the v60 widget runtime.
+
+    Each archetype declares the recipe shape for its ops. Per-widget
+    YAML files (in widget-libraries/*.widgets.yaml + per-SaaS
+    manifests/<saas>/widgets.yaml overrides) declare only:
+
+      - archetype: <one of the names below>
+      - selectors: { <selector_role>: <string | string[]> }
+      - overrides: optional knobs (timeouts, attribute names, url
+        patterns, …) consumed by the archetype's recipe template
+      - irreversible: bool (out-of-band flag; doesn't affect the recipe
+        body but flips the run-mode safety check)
+
+    The runtime widget-archetype-resolver expands { archetype, selectors,
+    overrides } into the executable recipe at manifest-load time.
+
+    Template placeholders:
+      $selectors.<role>           — substituted with the widget's
+                                    selectors.<role> array.
+      $inputs.<name>              — passed through from use_widget args
+                                    at run time (typically `value` for
+                                    fill ops; `field_name`/`field_label`
+                                    are already in scope per the
+                                    schema-driven fill_fields template).
+      $overrides.<key>            — substituted with the widget's
+                                    overrides.<key>; the `?? <default>`
+                                    syntax provides a fallback when the
+                                    widget didn't set the override.
+
+    Archetype catalog rules:
+      - One recipe per (archetype, op) pair. Variants of the same UI
+        form with materially different verify shapes (e.g. archive
+        button verified by source-row disappearing vs. mark-unread
+        verified by inbox URL) MUST be separate archetypes named after
+        the verify contract, NOT one archetype with a fork flag.
+      - All `required_selectors` MUST appear in the widget's
+        `selectors:` map; missing ones are a HARD validator violation.
+      - All `required_overrides` MUST appear in the widget's
+        `overrides:` map; missing ones are a HARD validator violation.
+
+    Phase 1 follow-up of the four-cleanup refactor (planning/
+    refactor-2026-05-16-four-cleanups.md). Locks the widget shape
+    before Phase 2 extracts the v60 runtime — so the runner is fixed +
+    tested against the final shape once.
+
+  changelog:
+    - "1.2.0 (2026-05-16): adds typeahead_chip archetype — focus + type + press_key + verify selector_appears. Covers email composer recipient pickers (gmail compose To/Cc/Bcc, reply To) where the commit is Tab/Enter and the verify is a chip / next-field appearing instead of value reflection. Identified during gmail.widgets.yaml v3.0.0 conversion (4 widgets share this shape). 12 archetypes total."
+    - "1.1.0 (2026-05-16): rename underscore-prefixed file to drop the convention drift (`_archetype-templates.yaml` → `archetype-templates.yaml`). No content change; only file rename + self-name fix in _meta. The underscore signaled `meta vs data` but no other file in widget-libraries/ used the prefix — purely cosmetic inconsistency."
+    - "1.0.0 (2026-05-16): initial 10-archetype catalog covering every widget pattern observed in the live-tested salesforce + gmail libraries. text_input, contenteditable_input, picklist_select, typeahead_lookup, click_reveals, click_dismisses, click_navigates, click_toggles, read_text, read_attribute."
+
+archetypes:
+
+  text_input:
+    description: |
+      Single-line text, textarea, url, phone, email, number input
+      whose value is reflected on the element's value attribute. Fill
+      writes the value via native_set + verifies element_value_equals;
+      read pulls the value attribute.
+    ops:
+      fill:
+        required_selectors: [fill_target]
+        recipe:
+          - id: type_value
+            type: fill_text
+            args:
+              selector: $selectors.fill_target
+              value: "{{value}}"
+            verify:
+              type: element_value_equals
+              selector: $selectors.fill_target
+              contains: "{{value}}"
+              timeout_ms: $overrides.verify_timeout_ms ?? 3000
+      read:
+        required_selectors: [read_target]
+        recipe:
+          - id: read_value
+            type: read_attribute
+            args:
+              selector: $selectors.read_target
+              attribute: value
+
+  contenteditable_input:
+    description: |
+      Rich-text / contenteditable field (gmail compose body, etc.).
+      Needs a focus click before fill because the value attribute is
+      not reflected; verify is selector_appears (presence) rather than
+      element_value_equals.
+    ops:
+      fill:
+        required_selectors: [fill_target]
+        recipe:
+          - id: focus_body
+            type: click
+            args:
+              selector: $selectors.fill_target
+          - id: type_body
+            type: fill_text
+            args:
+              selector: $selectors.fill_target
+              value: "{{value}}"
+            verify:
+              type: selector_appears
+              selector: $selectors.fill_target
+              timeout_ms: $overrides.verify_timeout_ms ?? 3000
+      read:
+        required_selectors: [read_target]
+        recipe:
+          - id: read_body_text
+            type: read_text
+            args:
+              selector: $selectors.read_target
+
+  picklist_select:
+    description: |
+      Closed-set selection — click trigger to open, click option,
+      verify trigger label matches the picked option. SF Lightning
+      lightning-combobox, native <select> + custom dropdowns, etc.
+    ops:
+      fill:
+        required_selectors: [trigger, option, verify_target]
+        recipe:
+          - id: open_picklist
+            type: click
+            args:
+              selector: $selectors.trigger
+          - id: pick_option
+            type: click
+            args:
+              selector: $selectors.option
+            verify:
+              type: selector_text_equals
+              selector: $selectors.verify_target
+              contains: "{{value}}"
+              timeout_ms: $overrides.verify_timeout_ms ?? 4000
+
+  typeahead_lookup:
+    description: |
+      Open-set lookup — click input to focus, type query, pick the
+      matching result from the dropdown. SF Lightning input-field
+      lookups, gmail compose-to typeahead, etc.
+    ops:
+      fill:
+        required_selectors: [input, result, verify_target]
+        recipe:
+          - id: focus_input
+            type: click
+            args:
+              selector: $selectors.input
+          - id: type_query
+            type: type_sequentially
+            args:
+              selector: $selectors.input
+              value: "{{value}}"
+              delay_ms: $overrides.type_delay_ms ?? 30
+          - id: pick_result
+            type: click
+            args:
+              selector: $selectors.result
+            verify:
+              type: element_value_equals
+              selector: $selectors.verify_target
+              contains: "{{value}}"
+              timeout_ms: $overrides.verify_timeout_ms ?? 6000
+
+  typeahead_chip:
+    description: |
+      Recipient picker — click trigger to focus or reveal the input,
+      type query, press a commit key (default Tab), verify a result
+      chip / next-field appears. Common in email composers (To / Cc /
+      Bcc inputs in gmail compose + reply; "Add attendee" pickers in
+      calendar event editors).
+
+      Distinct from typeahead_lookup: this commits via keystroke
+      (Tab/Enter) AND verifies by selector_appears (a chip or the
+      next focused field) instead of click-result + value reflection.
+    ops:
+      fill:
+        required_selectors: [trigger, input, verify_target]
+        recipe:
+          - id: focus_input
+            type: click
+            args:
+              selector: $selectors.trigger
+          - id: type_query
+            type: type_sequentially
+            args:
+              selector: $selectors.input
+              value: "{{value}}"
+              delay_ms: $overrides.type_delay_ms ?? 25
+          - id: commit
+            type: press_key
+            args:
+              key: $overrides.submit_key ?? "Tab"
+            verify:
+              type: selector_appears
+              selector: $selectors.verify_target
+              timeout_ms: $overrides.verify_timeout_ms ?? 4000
+
+  typeahead_search:
+    description: |
+      Search input — click trigger to open / focus, type query, press
+      Enter (or override key), verify URL matches a pattern. Distinct
+      from typeahead_lookup: search submits via keystroke not a result
+      click and verifies via URL change instead of value reflection.
+      Covers SF global search, gmail search, jira search, etc.
+    ops:
+      fill:
+        required_selectors: [trigger, input]
+        required_overrides: [url_pattern]
+        recipe:
+          - id: open_search
+            type: click
+            args:
+              selector: $selectors.trigger
+          - id: type_query
+            type: type_sequentially
+            args:
+              selector: $selectors.input
+              value: "{{value}}"
+              delay_ms: $overrides.type_delay_ms ?? 30
+          - id: submit_search
+            type: press_key
+            args:
+              key: $overrides.submit_key ?? "Enter"
+            verify:
+              type: url_matches
+              pattern: $overrides.url_pattern
+              timeout_ms: $overrides.verify_timeout_ms ?? 8000
+
+  click_reveals:
+    description: |
+      Click the trigger; verify a target element APPEARS. Modal opens,
+      menu reveals, dialog appears, edit-page loads (SaveEdit button
+      appears), Compose dialog appears. The most common interactive
+      affordance.
+    ops:
+      invoke:
+        required_selectors: [trigger, verify_target]
+        recipe:
+          - id: click_trigger
+            type: click
+            args:
+              selector: $selectors.trigger
+            verify:
+              type: selector_appears
+              selector: $selectors.verify_target
+              timeout_ms: $overrides.verify_timeout_ms ?? 8000
+
+  click_dismisses:
+    description: |
+      Click the trigger; verify a target element DISAPPEARS. Modal
+      closes, dialog dismisses, message-send region collapses,
+      typeahead dropdown closes. The save button verifies SaveEdit's
+      own disappearance (cleaner than url_matches on a router-
+      dependent post-save URL).
+    ops:
+      invoke:
+        required_selectors: [trigger, verify_target]
+        recipe:
+          - id: click_trigger
+            type: click
+            args:
+              selector: $selectors.trigger
+            verify:
+              type: selector_disappears
+              selector: $selectors.verify_target
+              timeout_ms: $overrides.verify_timeout_ms ?? 10000
+
+  click_navigates:
+    description: |
+      Click the trigger; verify the URL matches a pattern. Search
+      submit, delete confirm → list, link followed.
+    ops:
+      invoke:
+        required_selectors: [trigger]
+        required_overrides: [url_pattern]
+        recipe:
+          - id: click_trigger
+            type: click
+            args:
+              selector: $selectors.trigger
+            verify:
+              type: url_matches
+              pattern: $overrides.url_pattern
+              timeout_ms: $overrides.verify_timeout_ms ?? 10000
+
+  click_toggles:
+    description: |
+      Click the trigger; verify an attribute on the target equals a
+      value. Checkbox check, switch toggle, star starred, row select.
+    ops:
+      invoke:
+        required_selectors: [trigger, verify_target]
+        required_overrides: [verify_attribute, verify_value]
+        recipe:
+          - id: click_trigger
+            type: click
+            args:
+              selector: $selectors.trigger
+            verify:
+              type: selector_attribute_equals
+              selector: $selectors.verify_target
+              attribute: $overrides.verify_attribute
+              value: $overrides.verify_value
+              timeout_ms: $overrides.verify_timeout_ms ?? 4000
+
+  read_text:
+    description: |
+      Read the visible text content of an element. Subject heading,
+      body content, displayed value where the value isn't on an
+      attribute.
+    ops:
+      read:
+        required_selectors: [read_target]
+        recipe:
+          - id: read_text_content
+            type: read_text
+            args:
+              selector: $selectors.read_target
+
+  read_attribute:
+    description: |
+      Read a named attribute from an element. Common: email attribute
+      on sender chip, href on link, data-* attribute on row.
+    ops:
+      read:
+        required_selectors: [read_target]
+        required_overrides: [attribute]
+        recipe:
+          - id: read_named_attribute
+            type: read_attribute
+            args:
+              selector: $selectors.read_target
+              attribute: $overrides.attribute

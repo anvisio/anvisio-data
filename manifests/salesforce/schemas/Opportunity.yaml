@@ -1,0 +1,67 @@
+_meta:
+  name: manifests/salesforce/schemas/Opportunity.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    Opportunity schema — standard SF Opportunity object fields (Name, AccountId, Amount, CloseDate, StageName, NextStep). Used by create_record / update_record when object_type=Opportunity.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: |
+  A Salesforce Opportunity. Key prefix 006.
+  Required: Name, StageName, CloseDate.
+  Sales deal in the pipeline. References Account. Live-probed.
+fields:
+  Id:
+    type: id
+    label: Opportunity ID
+    primary: true
+    readonly: true
+  Name:
+    type: text
+    label: Name
+    required: true
+  StageName:
+    type: picklist
+    label: Stage
+    required: true
+  CloseDate:
+    type: date
+    label: Close Date
+    required: true
+  Amount:
+    type: number
+    label: Amount
+    optional: true
+  Probability:
+    type: number
+    label: Probability (%)
+    optional: true
+  Type:
+    type: picklist
+    label: Opportunity Type
+    optional: true
+  LeadSource:
+    type: picklist
+    label: Lead Source
+    optional: true
+  AccountId:
+    type: id
+    label: Account ID
+    optional: true
+    ref: Account.Id
+  OwnerId:
+    type: id
+    label: Owner ID
+    optional: true
+    ref: User.Id
+  Description:
+    type: textarea
+    label: Description
+    optional: true
+  NextStep:
+    type: text
+    label: Next Step
+    optional: true

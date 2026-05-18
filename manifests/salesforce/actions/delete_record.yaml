@@ -1,0 +1,62 @@
+_meta:
+  name: manifests/salesforce/actions/delete_record.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    delete_record action — generic record deletion parameterized by object_type + record_id. Opens the record view's overflow menu, clicks Delete, confirms.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: Delete a record from its detail page via the overflow menu.
+object: "{{inputs.object_type}}"
+commits_changes: true
+depends_on_view: RecordView
+inputs:
+  object_type:
+    type: text
+    required: true
+    sample: Opportunity
+  record_id:
+    type: id
+    required: true
+result:
+  deleted: boolean
+flavors:
+  dom:
+    requires_auth: session_cookie
+    label: Open the delete dialog; confirm when commit:true
+    recipe:
+      - id: open_overflow
+        type: use_widget
+        args:
+          widget: salesforce.record_overflow_caret
+          op: invoke
+      - id: click_delete
+        type: use_widget
+        args:
+          widget: salesforce.delete_menu_item
+          op: invoke
+      - id: confirm
+        type: use_widget
+        commit: true
+        args:
+          widget: salesforce.delete_confirm_button
+          op: invoke
+    outcomes:
+      - action: ready_to_confirm
+        emits_when: pre_commit
+        signal:
+          type: selector_appears
+          selector: div[role='dialog'] button[title='Delete']
+          timeout_ms: 8000
+      - action: deleted
+        emits_when: post_commit
+        signal:
+          type: url_matches
+          pattern: /lightning/o/.+/(list|home)
+          timeout_ms: 12000
+        extract:
+          deleted:
+            literal: true
