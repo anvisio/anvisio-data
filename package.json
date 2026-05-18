@@ -1,0 +1,15 @@
+{
+  "name": "anvisio-data",
+  "private": true,
+  "type": "module",
+  "description": "Anvisio CDN-served prompts, manifests, widget libraries, and schemas. Root scripts mirror CI gates so authors can validate before pushing.",
+  "scripts": {
+    "validate": "GITHUB_BASE_REF=${GITHUB_BASE_REF:-main} npm --prefix tools-build run ci:all",
+    "validate:all": "node tools-build/ci/check-frontmatter.mjs --all && node tools-build/ci/check-schema.mjs --all && node tools-build/ci/check-cross-refs.mjs && node tools-build/ci/check-license.mjs && node tools-build/ci/check-pii.mjs && node tools-build/ci/check-size.mjs",
+    "validate:fix": "node tools-build/autofix/autofix.mjs",
+    "install-hooks": "bash tools-build/install-hooks.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
