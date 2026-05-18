@@ -1,0 +1,38 @@
+_meta:
+  name: manifests/outlook-calendar/actions/list_events.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Navigate to the Outlook Calendar view (week grid). Read-only — no
+    state mutation, just confirms the grid landmark loads so downstream
+    actions have a stable anchor.
+
+description: View the calendar grid (week view).
+object: Event
+commits_changes: false
+depends_on_view: Calendar
+inputs: {}
+result:
+  listed: boolean
+flavors:
+  dom:
+    requires_auth: session_cookie
+    label: Confirm calendar grid renders.
+    recipe:
+      - id: noop
+        type: wait_for_element
+        args:
+          selector:
+            - button[aria-label='New event']
+          timeout_ms: 5000
+    outcomes:
+      - action: listed
+        signal:
+          type: selector_appears
+          selector: "button[aria-label='New event']"
+          timeout_ms: 5000
+        extract:
+          listed:
+            literal: true

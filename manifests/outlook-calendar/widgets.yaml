@@ -1,0 +1,66 @@
+_meta:
+  name: manifests/outlook-calendar/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Outlook Calendar (outlook.live.com/calendar). Authored from live DOM
+    during /onboard-saas.
+
+defaults_by_type:
+  text: outlook-calendar.event_title
+  rich_text: outlook-calendar.event_body
+  email: outlook-calendar.event_attendees
+
+widgets:
+
+  outlook-calendar.new_event_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - button[aria-label='New event']
+      verify_target: input[placeholder='Add title']
+    overrides:
+      verify_timeout_ms: 6000
+
+  outlook-calendar.event_title:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - input[placeholder='Add title']
+      read_target:
+        - input[placeholder='Add title']
+
+  outlook-calendar.event_body:
+    archetype: contenteditable_input
+    selectors:
+      fill_target:
+        - "div[role='textbox'][aria-multiline='true'][contenteditable='true']"
+      read_target:
+        - "div[role='textbox'][aria-multiline='true'][contenteditable='true']"
+
+  outlook-calendar.event_attendees:
+    archetype: typeahead_chip
+    selectors:
+      trigger:
+        - "div[contenteditable='true'][aria-label='Invite required attendees']"
+      input:
+        - "div[contenteditable='true'][aria-label='Invite required attendees']"
+      verify_target: "div[contenteditable='true'][aria-label='Invite required attendees']"
+
+  outlook-calendar.save_event:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - "button[aria-label*='Save']"
+        - "button[aria-label*='Send']"
+      verify_target: input[placeholder='Add title']
+
+  outlook-calendar.close_event:
+    archetype: click_dismisses
+    selectors:
+      trigger:
+        - button[aria-label='Close']
+      verify_target: input[placeholder='Add title']

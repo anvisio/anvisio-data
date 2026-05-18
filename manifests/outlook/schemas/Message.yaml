@@ -1,0 +1,14 @@
+_meta:
+  name: manifests/outlook/schemas/Message.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Outlook Message schema (mail item). Read-only today; verbs operate on mail-folder list views via DOM. Fields: subject, from, to, body.
+
+object: Message
+fields:
+  id: { type: text, readonly: true }
+  subject: { type: text }
+  from: { type: email, readonly: true }

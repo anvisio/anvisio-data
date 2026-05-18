@@ -19,10 +19,15 @@ cd "$REPO_ROOT"
 git fetch origin main --quiet 2>/dev/null || true
 
 # Run all CI gates with GITHUB_BASE_REF=main so the diff matches what CI sees.
+# Invoke scripts directly (not via `npm --prefix tools-build`) so cwd stays at
+# REPO_ROOT — the gates read paths from `git diff` as repo-relative and try to
+# open them as relative paths. Caught 2026-05-19 on the outlook-promotion PR
+# (first PR with actual data changes that the hook ran against; PR #12 itself
+# skipped all data gates because it touched only infra files).
 echo "[pre-push] Running anvisio-data CI gates against origin/main..."
 echo ""
 
-if ! GITHUB_BASE_REF=main npm --prefix tools-build run ci:all; then
+if ! GITHUB_BASE_REF=main pnpm validate; then
   echo ""
   echo "✗ pre-push: one or more CI gates failed. Push aborted."
   echo "  Fix the issues, or re-run with: git push --no-verify"

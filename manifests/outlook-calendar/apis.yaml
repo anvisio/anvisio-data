@@ -1,0 +1,10 @@
+_meta:
+  name: manifests/outlook-calendar/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Outlook Calendar API surface placeholder. outlook.live.com/calendar is gapi-style but credentials don't flow through; verbs are DOM-driven today.
+
+apis: {}

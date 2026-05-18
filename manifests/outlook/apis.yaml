@@ -1,0 +1,10 @@
+_meta:
+  name: manifests/outlook/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Outlook on the Web API surface. owa.live.com session-cookie endpoints (no public REST). Used by call_platform_api at runtime to verify backend assumptions; mostly DOM-driven today.
+
+apis: {}
