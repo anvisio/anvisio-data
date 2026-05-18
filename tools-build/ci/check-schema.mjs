@@ -72,6 +72,9 @@ function pickSchema(repoPath) {
     if (repoPath.match(/^manifests\/[^/]+\/actions\/[^/]+\.ya?ml$/)) {
       return 'schemas/manifest-v60/action.schema.json';
     }
+    if (repoPath.match(/^manifests\/[^/]+\/workflows\/[^/]+\.ya?ml$/)) {
+      return 'schemas/manifest-v60/workflow.schema.json';
+    }
     // Any other yaml under manifests/<saas>/ is unrecognised — let it
     // through (gate 4 cross-refs + gate 1 frontmatter still apply).
     return null;
