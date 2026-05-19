@@ -1,3 +1,16 @@
+_meta:
+  name: manifests/salesforce/compositions/pipeline_prep.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Weekly pipeline prep — for each closing-this-week opportunity:
+    query details, judge whether stage matches recent activity, ask
+    user to confirm a stage update when stale, then synthesize a
+    one-paragraph portfolio summary. Killer demo target from the
+    2026-05-18 spec 70 brainstorm.
+
 document:
   dsl: '1.0.0'
   namespace: salesforce

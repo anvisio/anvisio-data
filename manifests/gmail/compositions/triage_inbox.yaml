@@ -1,3 +1,14 @@
+_meta:
+  name: manifests/gmail/compositions/triage_inbox.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Triage recent inbox — search the last 24h of mail, read each
+    message, judge importance (needs_reply / fyi / skip), then
+    synthesize a 3-bullet overview pairing well with morning standup.
+
 document:
   dsl: '1.0.0'
   namespace: gmail

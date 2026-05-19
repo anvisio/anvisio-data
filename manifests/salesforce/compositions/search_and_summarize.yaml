@@ -1,3 +1,16 @@
+_meta:
+  name: manifests/salesforce/compositions/search_and_summarize.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Smallest end-to-end demo of spec 70's session_api transport. Runs
+    a SF global SOSL search via the Aura controller (no DOM drive),
+    then synthesizes a 3-sentence summary of the matches. Pairs with
+    salesforce/actions/search_record.yaml's session_api flavor +
+    call_platform_api recipe step.
+
 document:
   dsl: '1.0.0'
   namespace: salesforce

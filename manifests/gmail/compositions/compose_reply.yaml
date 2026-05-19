@@ -1,3 +1,15 @@
+_meta:
+  name: manifests/gmail/compositions/compose_reply.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Compose reply to the currently open Gmail thread — read the
+    thread, ask the LLM to draft a reply in the user's voice, show
+    the draft for confirmation, then send (or save as draft). The
+    preview-mode send keeps the user in control of the actual click.
+
 document:
   dsl: '1.0.0'
   namespace: gmail
