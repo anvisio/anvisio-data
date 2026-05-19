@@ -61,17 +61,30 @@ flavors:
             literal: []
   session_api:
     requires_auth: session_cookie
-    label: Aura controller SOSL search
-    api: salesforce.aura_controller
+    label: SF Aura SOSL search via MAIN-world (session cookie + CSRF)
+    recipe:
+      - id: aura_search
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "aura://RecordGlobalActionListController/ACTION$globalSearch"
+            extract_path: "actions[0].returnValue.searchResultGroups"
+          args:
+            term: "{{inputs.query}}"
+            scopeOrder: "[]"
+            additionalFields: "[]"
+            groupId: ""
+            sourceContext: "GLOBAL"
+            maxResults: 25
     outcomes:
       - action: searched
         signal:
           type: network_response
-          url_pattern: "/aura?aura.token=.*"
-          status: 200
+          pattern: "/aura\\?.*aura\\.token="
         extract:
           matches:
-            from_api_response: ".actions[0].returnValue"
+            from_step: aura_search
   mcp:
     requires_auth: mcp_server
     label: SOSL search via SF MCP server
