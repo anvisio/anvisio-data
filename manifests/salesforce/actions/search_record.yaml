@@ -1,18 +1,27 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-19
   description: |
-    search_record action — global search via SF Lightning's omnibar; results land on the GlobalSearchResults view.
+    search_record atom — global SF search (SOSL across multiple
+    sObjects). Spec 70: three flavors. `browser` navigates to
+    /lightning/search/?q= (live-verified, fastest browser path).
+    `session_api` dispatches an Aura SOSL call from MAIN-world via
+    call_platform_api (session cookie + CSRF auto-extracted; no DOM
+    drive). `mcp` calls gmail.search_all. Reads prefer
+    session_api > mcp > browser per spec 70 §7. The session_api
+    flavor is the search_and_summarize demo's transport.
   changelog:
+    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api (Aura) + mcp flavors. Live-verified browser nav carries over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-description: Run global search for a query string; lands on /lightning/search/.
-object: "{{inputs.object_type}}"
+description: Run global SF search for a query string. Spans multiple sObject types.
+object: SearchResult
 commits_changes: false
 depends_on_view: any
+mcp_tool: salesforce.search_all
 inputs:
   query:
     type: text
@@ -23,8 +32,9 @@ inputs:
     required: false
 result:
   searched: boolean
+  matches: list<object>
 flavors:
-  dom:
+  browser:
     requires_auth: session_cookie
     label: Navigate to global search results
     recipe:
@@ -43,3 +53,47 @@ flavors:
             literal: true
           query:
             from_input: query
+  session_api:
+    requires_auth: session_cookie
+    label: SF Aura SOSL search via MAIN-world (session cookie + CSRF)
+    recipe:
+      - id: aura_search
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "aura://RecordGlobalActionListController/ACTION$globalSearch"
+            extract_path: "actions[0].returnValue.searchResultGroups"
+          args:
+            term: "{{inputs.query}}"
+            scopeOrder: "[]"
+            additionalFields: "[]"
+            groupId: ""
+            sourceContext: "GLOBAL"
+            maxResults: 25
+    outcomes:
+      - action: searched
+        signal:
+          type: network_response
+          pattern: "/aura\\?.*aura\\.token="
+        extract:
+          matches:
+            from_step: aura_search
+          searched:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: SOSL search via SF MCP server
+    server: salesforce
+    tool: search_all
+    outcomes:
+      - action: searched
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          matches:
+            from_api_response: ".matches"
+          searched:
+            literal: true

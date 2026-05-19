@@ -1,16 +1,22 @@
 _meta:
   name: manifests/salesforce/actions/list_records.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-19
   description: |
-    list_records action — navigate to the object's tab list view (/lightning/o/{object_type}/list). Read-only single dom flavor, no commit.
+    list_records atom — navigate to an object's tab list view
+    (/lightning/o/{object_type}/list). Read-only browser navigation
+    primitive. Spec 70: `browser`-only flavor — listing-by-navigation
+    has no canonical MCP equivalent (use query_records when you want
+    a structured result set without driving the UI).
   changelog:
+    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when. Live-verified recipe + sample carry over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Open an object's list view.
 object: "{{inputs.object_type}}"
+object_types: [Opportunity, Lead, Contact, Account, Task, Note]
 commits_changes: false
 depends_on_view: any
 inputs:
@@ -21,9 +27,7 @@ inputs:
 result:
   listed: boolean
 flavors:
-  # Read-only action — single `dom` flavor, no commit marker (no
-  # destructive last-step). Outcome `emits_when` defaults to `always`.
-  dom:
+  browser:
     requires_auth: session_cookie
     label: Navigate to the object list view
     recipe:

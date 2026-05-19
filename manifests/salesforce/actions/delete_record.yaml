@@ -1,18 +1,27 @@
 _meta:
   name: manifests/salesforce/actions/delete_record.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-19
   description: |
-    delete_record action — generic record deletion parameterized by object_type + record_id. Opens the record view's overflow menu, clicks Delete, confirms.
+    delete_record atom — destructive removal of a single SF record.
+    Spec 70: `browser` flavor walks the RecordView overflow menu →
+    Delete → confirm-modal (confirm click is the commit step);
+    `session_api` fires DELETE /sobjects/<obj>/<id>; `mcp` calls
+    dml_records with operation: delete. Writes prefer
+    browser > session_api > mcp per spec 70 §7 — user sees the
+    delete confirmation before committing.
   changelog:
+    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified browser recipe + selectors carry over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Delete a record from its detail page via the overflow menu.
 object: "{{inputs.object_type}}"
+object_types: [Opportunity, Lead, Contact, Account, Task, Note]
 commits_changes: true
 depends_on_view: RecordView
+mcp_tool: salesforce.dml_records
 inputs:
   object_type:
     type: text
@@ -22,9 +31,10 @@ inputs:
     type: id
     required: true
 result:
+  record_id: id
   deleted: boolean
 flavors:
-  dom:
+  browser:
     requires_auth: session_cookie
     label: Open the delete dialog; confirm when commit:true
     recipe:
@@ -46,17 +56,53 @@ flavors:
           op: invoke
     outcomes:
       - action: ready_to_confirm
-        emits_when: pre_commit
         signal:
           type: selector_appears
           selector: div[role='dialog'] button[title='Delete']
           timeout_ms: 8000
       - action: deleted
-        emits_when: post_commit
         signal:
           type: url_matches
           pattern: /lightning/o/.+/(list|home)
           timeout_ms: 12000
         extract:
+          record_id:
+            from_input: record_id
           deleted:
             literal: true
+  session_api:
+    requires_auth: session_cookie
+    label: DELETE /services/data/v62.0/sobjects/{object_type}/{record_id}
+    api: salesforce.delete_record_session
+    outcomes:
+      - action: deleted
+        signal:
+          type: network_response
+          url_pattern: "/services/data/v62.0/sobjects/.*/.*"
+          status: 204
+        extract:
+          record_id:
+            from_input: record_id
+          deleted:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Delete via SF MCP server (dml_records delete)
+    server: salesforce
+    tool: dml_records
+    inputs_map:
+      operation: delete
+      objectName: "{{inputs.object_type}}"
+      records:
+        - Id: "{{inputs.record_id}}"
+    outcomes:
+      - action: deleted
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          record_id:
+            from_input: record_id
+          deleted:
+            from_api_response: ".results[0].success"

@@ -1,15 +1,22 @@
 _meta:
   name: manifests/salesforce/apis.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-19
   description: |
-    Salesforce APIs catalog — Aura describe endpoints + SOSL/SOQL via session cookie. Used by call_platform_api at runtime to verify backend assumptions.
+    Salesforce APIs catalog — Aura describe + REST SOQL/SOSL/DML
+    endpoints. Used by atom action `session_api` flavors and
+    propose-time backend verification. Spec 70 expands the catalog
+    from the propose-time `aura_get_object_info` probe to include
+    the REST endpoints the session_api flavors actually fire at
+    runtime.
   changelog:
+    - "2.0.0 (2026-05-19): add REST endpoints (create/update/delete/query) referenced by session_api flavors per spec 70 §7. Aura controller stub added for non-describe Aura calls."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 apis:
+  # ── Aura controller (live-verified at propose 2026-05-14) ─────────
   aura_get_object_info:
     transport: aura
     auth: session_cookie
@@ -27,3 +34,77 @@ apis:
       childRelationships)
     confidence: high
     verified_at_propose: 2026-05-14
+
+  # ── REST SOQL / DML (session_cookie auth) ──────────────────────────
+  query_records_session:
+    transport: rest
+    auth: session_cookie
+    method: GET
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/query/?q={soql}"
+    inputs:
+      soql: { type: text, required: true }
+    response_shape:
+      type: object
+      properties:
+        records:   { type: array }
+        totalSize: { type: integer }
+        done:      { type: boolean }
+
+  create_record_session:
+    transport: rest
+    auth: session_cookie
+    method: POST
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/sobjects/{object_type}"
+    inputs:
+      object_type: { type: text, required: true }
+      fields:      { type: object, required: true }
+    response_shape:
+      type: object
+      properties:
+        id:      { type: text }
+        success: { type: boolean }
+
+  update_record_session:
+    transport: rest
+    auth: session_cookie
+    method: PATCH
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/sobjects/{object_type}/{record_id}"
+    inputs:
+      object_type: { type: text, required: true }
+      record_id:   { type: text, required: true }
+      fields:      { type: object, required: true }
+    response_shape:
+      type: "null"
+
+  delete_record_session:
+    transport: rest
+    auth: session_cookie
+    method: DELETE
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/sobjects/{object_type}/{record_id}"
+    inputs:
+      object_type: { type: text, required: true }
+      record_id:   { type: text, required: true }
+    response_shape:
+      type: "null"
+
+  # ── Aura SOSL search (used by search_record.session_api) ───────────
+  aura_search_global:
+    transport: aura
+    auth: session_cookie
+    domain_condition: "*.lightning.force.com"
+    endpoint_pattern: "{instance.origin}/aura?r=1"
+    method: POST
+    descriptor: aura://RecordGlobalActionListController/ACTION$globalSearch
+    extract_path: actions[0].returnValue.searchResultGroups
+    inputs:
+      term: { type: text, required: true }
+      scopeOrder: { type: text }
+      additionalFields: { type: text }
+      groupId: { type: text }
+      sourceContext: { type: text }
+      maxResults: { type: integer }
+    captures: list of search-result groups across sObject types
+    confidence: medium
+    notes: |
+      Aura descriptors are packaged per SF org build; this one is a
+      best-guess. Heal patches on first failure against live SF.
