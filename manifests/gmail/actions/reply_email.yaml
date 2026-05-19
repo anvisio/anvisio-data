@@ -1,24 +1,28 @@
 _meta:
   name: manifests/gmail/actions/reply_email.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    reply_email action — reply to the currently open thread with a body
-    message. Wizard chains gmail.thread_reply_button before this
-    action. To field auto-fills on reply.
+    reply_email atom — reply to the currently open thread. Spec 70:
+    `browser` flavor fills the inline reply composer + clicks Send;
+    `mcp` flavor calls gmail.send_email with threadId + inReplyTo so
+    the reply lands in the right thread.
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.2.0 (2026-05-16): collapse dom_no_submit + dom_submit into single `dom` flavor."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Reply to the currently open thread with a body message. Assumes the user has
-  already opened the thread (ThreadView) and clicked the Reply control so the
-  inline ReplyComposer is visible. The wizard chains gmail.thread_reply_button
-  before this action.
+  Reply to the currently open thread. Browser flavor fills the inline
+  ReplyComposer + clicks Send. MCP flavor calls gmail.send_email with
+  threadId + inReplyTo (caller supplies them — typically from a prior
+  read_email call).
 object: Reply
 commits_changes: true
 depends_on_view: ReplyComposer
+mcp_tool: gmail.send_email
 inputs:
   fields:
     type: object
@@ -29,31 +33,9 @@ inputs:
 result:
   sent: boolean
 flavors:
-  dom_no_submit:
+  browser:
     requires_auth: session_cookie
-    label: Fill reply body; you click Send
-    recipe:
-      - id: fill
-        type: fill_fields
-        args:
-          object: Reply
-          from: "{{inputs.fields}}"
-    outcomes:
-      - action: ready_to_reply
-        signal:
-          type: selector_appears
-          selector: div[role='main'] div[role='button'][aria-label^='Send
-            '][aria-label*='Ctrl-Enter']
-      - action: sent
-        signal:
-          type: click_observed
-          widget: gmail.reply_send_button
-        extract:
-          sent:
-            literal: true
-  dom_submit:
-    requires_auth: session_cookie
-    label: Fill reply body + click Send
+    label: Fill reply body; click Send when commit:true
     recipe:
       - id: fill
         type: fill_fields
@@ -62,14 +44,34 @@ flavors:
           from: "{{inputs.fields}}"
       - id: send
         type: use_widget
+        commit: true
         args:
           widget: gmail.reply_send_button
           op: invoke
     outcomes:
+      - action: ready_to_reply
+        signal:
+          type: selector_appears
+          selector: div[role='main'] div[role='button'][aria-label^='Send
+            '][aria-label*='Ctrl-Enter']
       - action: sent
         signal:
           type: network_response
           pattern: POST .*/mail/u/0/.*sendmail
+        extract:
+          sent:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Reply via gmail.send_email with threadId + inReplyTo
+    server: gmail
+    tool: send_email
+    outcomes:
+      - action: sent
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
         extract:
           sent:
             literal: true
