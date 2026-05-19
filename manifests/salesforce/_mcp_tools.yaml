@@ -56,7 +56,10 @@ tools:
       required: [objectName, aggregations]
       properties:
         objectName:   { type: string }
-        aggregations: { type: array, items: { type: string }, description: e.g. ["COUNT(Id)", "SUM(Amount)"] }
+        aggregations:
+          type: array
+          items: { type: string }
+          description: 'e.g. COUNT(Id), SUM(Amount), AVG(Amount)'
         groupBy:      { type: array, items: { type: string } }
         where:        { type: string }
         limit:        { type: integer }
