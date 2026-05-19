@@ -1,17 +1,22 @@
 _meta:
   name: manifests/salesforce/apis.yaml
-  version: 2.0.0
+  version: 2.1.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    Salesforce APIs catalog — Aura describe + REST SOQL/SOSL/DML
-    endpoints. Used by atom action `session_api` flavors and
-    propose-time backend verification. Spec 70 expands the catalog
-    from the propose-time `aura_get_object_info` probe to include
-    the REST endpoints the session_api flavors actually fire at
-    runtime.
+    Salesforce APIs catalog — Aura describe + Aura list + REST
+    SOQL/SOSL/DML endpoints. Used by atom action `session_api`
+    flavors and propose-time backend verification.
+
+    CAVEAT (verified live 2026-05-19): the REST entries below
+    (query/create/update/delete `_session`) 401 INVALID_SESSION_ID on
+    the Lightning session cookie — SF REST requires an OAuth bearer
+    token. They are kept for the future OAuth/BYOK transport, NOT the
+    session_cookie path. The Aura entries (`aura_*`) are the working
+    cookie-auth path on Lightning.
   changelog:
+    - "2.1.0 (2026-05-19): replace `aura_search_global` (RecordGlobalActionListController.globalSearch — unverified, returns aura non-success live; see search_record.yaml v2.2.0) with `aura_list_records` (ListUiController.postListRecordsByName — proven working since 2026-04-16, used by platform-extractors.ts salesforceLiveSearch). Add the REST-rejects-session-cookie caveat to the description."
     - "2.0.0 (2026-05-19): add REST endpoints (create/update/delete/query) referenced by session_api flavors per spec 70 §7. Aura controller stub added for non-describe Aura calls."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
@@ -87,24 +92,29 @@ apis:
     response_shape:
       type: "null"
 
-  # ── Aura SOSL search (used by search_record.session_api) ───────────
-  aura_search_global:
+  # ── Aura list records (used by search_record.session_api) ─────────
+  aura_list_records:
     transport: aura
     auth: session_cookie
     domain_condition: "*.lightning.force.com"
     endpoint_pattern: "{instance.origin}/aura?r=1"
     method: POST
-    descriptor: aura://RecordGlobalActionListController/ACTION$globalSearch
-    extract_path: actions[0].returnValue.searchResultGroups
+    descriptor: aura://ListUiController/ACTION$postListRecordsByName
+    extract_path: actions[0].returnValue.records
     inputs:
-      term: { type: text, required: true }
-      scopeOrder: { type: text }
-      additionalFields: { type: text }
-      groupId: { type: text }
-      sourceContext: { type: text }
-      maxResults: { type: integer }
-    captures: list of search-result groups across sObject types
-    confidence: medium
+      objectApiName: { type: text, required: true }
+      listViewApiName: { type: text, required: true }
+      listRecordsQuery: { type: object, required: true }
+    captures: |
+      records[] for one listview of one sObject. Each record is
+      { id, fields: { <ApiName>: { value, displayValue } } }.
+    confidence: high
     notes: |
-      Aura descriptors are packaged per SF org build; this one is a
-      best-guess. Heal patches on first failure against live SF.
+      Proven working since 2026-04-16 (reference_sf_browser_session_paths.md);
+      used live by platform-extractors.ts salesforceLiveSearch. Stateless —
+      `callingDescriptor: 'UNKNOWN'` is accepted. The list controller does
+      NOT filter by a search term; callers list a listview (AllAccounts,
+      AllOpportunities, ...) then filter / summarize client-side. The Aura
+      *search* descriptors (SearchController.execute, globalSearch,
+      RecordUiController.executeSearch) all return non-success statelessly —
+      do not use them.

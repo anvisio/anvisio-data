@@ -1,25 +1,31 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 2.1.0
+  version: 2.2.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    search_record atom — global SF search (SOSL across multiple
-    sObjects). Spec 70: three flavors. `browser` navigates to
-    /lightning/search/?q= (live-verified, fastest browser path).
-    `session_api` dispatches REST parameterizedSearch from MAIN-world
-    via call_platform_api kind: rest_session (session cookie auths the
-    fetch; no Aura CSRF dance, no descriptor lottery). `mcp` calls
-    salesforce.search_all. Reads prefer session_api > mcp > browser
-    per spec 70 §7. The session_api flavor is the search_and_summarize
+    search_record atom — list-backed record search. Spec 70: three
+    flavors. `browser` navigates to /lightning/search/?q= (live-verified,
+    real cross-sObject SOSL, fastest browser path). `session_api`
+    dispatches Aura `ListUiController.postListRecordsByName` from
+    MAIN-world via call_platform_api kind: aura (session cookie + CSRF
+    auto-extracted). This is the ONLY SF read path proven to work
+    statelessly: SF REST (/services/data/...) 401s on the Lightning
+    cookie, and every Aura *search* descriptor (SearchController,
+    RecordGlobalActionListController.globalSearch, ...) returns
+    non-success. postListRecordsByName lists a listview's records;
+    callers filter / summarize client-side. `mcp` calls
+    salesforce.search_all. Reads prefer session_api > mcp > browser per
+    spec 70 §7. The session_api flavor is the search_and_summarize
     demo's transport.
   changelog:
-    - "2.1.0 (2026-05-19): swap session_api flavor from Aura `RecordGlobalActionListController/ACTION$globalSearch` (descriptor lottery — every search descriptor returned `aura: non-success` 2026-05-19 evening) to REST `parameterizedSearch` via the new `kind: rest_session` ApiDef transport. Standard REST endpoint, no per-build descriptor churn, cross-sObject SOSL in user's default scope. Unblocks the search_and_summarize demo. Requires plugin with platform-api.ts rest_session branch."
+    - "2.2.0 (2026-05-19): session_api reverts to Aura — `ListUiController.postListRecordsByName` (the descriptor proven working since 2026-04-16, used live in platform-extractors.ts salesforceLiveSearch). v2.1.0's `rest_session` parameterizedSearch failed live: heal proved SF REST API 401s INVALID_SESSION_ID on the Lightning session cookie (it needs an OAuth bearer token). postListRecordsByName lists the AllAccounts listview; the query is not server-side (SF list controllers ignore it) — the composition's synthesize step focuses the summary on the picked query. Outcome signal: url_matches on the SF domain (the Aura call runs inside the recipe step, so there is no post-recipe network event for network_response to catch)."
+    - "2.1.0 (2026-05-19): swap session_api flavor to REST `parameterizedSearch` via `kind: rest_session` — REVERTED in 2.2.0 (SF REST rejects the session cookie)."
     - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api (Aura) + mcp flavors. Live-verified browser nav carries over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-description: Run global SF search for a query string. Spans multiple sObject types.
+description: Search SF records. browser flavor runs real cross-sObject SOSL; session_api lists the AllAccounts listview (callers filter client-side).
 object: SearchResult
 commits_changes: false
 depends_on_view: any
@@ -57,26 +63,42 @@ flavors:
             from_input: query
   session_api:
     requires_auth: session_cookie
-    label: SF SOSL search via REST parameterizedSearch (session cookie)
+    label: SF list records via Aura postListRecordsByName (session cookie + CSRF)
     recipe:
-      - id: rest_search
+      - id: aura_list
         type: call_platform_api
         args:
           api_def:
-            kind: rest_session
-            method: GET
-            url_pattern: "{instance.origin}/services/data/v62.0/parameterizedSearch?q={q}"
-            extract_path: "searchRecords"
+            kind: aura
+            descriptor: "aura://ListUiController/ACTION$postListRecordsByName"
+            extract_path: "actions[0].returnValue.records"
           args:
-            q: "{{inputs.query}}"
+            objectApiName: "Account"
+            listViewApiName: "AllAccounts"
+            listRecordsQuery:
+              fields:
+                - "Account.Id"
+                - "Account.Name"
+                - "Account.Industry"
+                - "Account.Type"
+                - "Account.Phone"
+              pageSize: 50
+              sortBy:
+                - "Account.Name"
     outcomes:
       - action: searched
+        # The Aura call runs entirely inside the recipe's call_platform_api
+        # step — there is no post-recipe DOM/URL transition, so a
+        # network_response signal would start watching AFTER the fetch
+        # already completed and time out. url_matches on the SF domain
+        # resolves on the first poll; `extract` then reads the step result.
         signal:
-          type: network_response
-          pattern: "/services/data/v[0-9]+\\.[0-9]+/parameterizedSearch"
+          type: url_matches
+          pattern: "lightning\\.force\\.com"
+          timeout_ms: 10000
         extract:
           matches:
-            from_step: rest_search
+            from_step: aura_list
           searched:
             literal: true
   mcp:
