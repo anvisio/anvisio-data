@@ -1,0 +1,55 @@
+_meta:
+  name: manifests/salesforce/actions/open_record.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    open_record atom — navigation primitive that lands the tab on
+    /lightning/r/<object_type>/<record_id>/view so subsequent atoms
+    (read fields, update_record, delete_record) have the right
+    landmark. Browser-only — no MCP equivalent (MCP servers don't
+    drive navigation). Read-only; no commit step.
+  changelog:
+    - "0.1.0 (2026-05-19): initial v70 seed."
+
+description: >
+  Navigate to the detail view of a SF record. Pure browser navigation
+  primitive — wraps a URL-deeplink to /lightning/r/<object_type>/<record_id>/view.
+  Used by compositions that need to land on RecordView before calling
+  update_record or delete_record.
+object: "{{inputs.object_type}}"
+object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+commits_changes: false
+depends_on_view: any
+inputs:
+  object_type:
+    type: text
+    required: true
+  record_id:
+    type: id
+    required: true
+result:
+  opened: boolean
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Navigate to record detail view
+    recipe:
+      - id: goto_record
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/r/{{inputs.object_type}}/{{inputs.record_id}}/view"
+      - id: wait_view
+        type: wait_for_element
+        args:
+          selector: records-highlights2
+          timeout_ms: 10000
+    outcomes:
+      - action: opened
+        signal:
+          type: url_matches
+          pattern: "/lightning/r/.*/{{inputs.record_id}}/view"
+        extract:
+          opened:
+            literal: true

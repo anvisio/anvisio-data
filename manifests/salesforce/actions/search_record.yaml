@@ -1,0 +1,88 @@
+_meta:
+  name: manifests/salesforce/actions/search_record.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    search_record atom — global SF search (SOSL), spanning multiple
+    objects. Read-only; spec 70 transport priority: reads prefer
+    session_api > mcp > browser. The browser flavor types into the
+    Lightning header search; mcp goes through search_all; session_api
+    fires an Aura controller call.
+  changelog:
+    - "0.1.0 (2026-05-19): initial v70 seed."
+
+description: >
+  Global SF search — phrase or fuzzy match across multiple sObject types
+  (the SOSL surface). Returns matching records grouped by object type.
+  Distinct from query_records (which is SOQL-style, single object,
+  field-filtered).
+object: SearchResult
+commits_changes: false
+depends_on_view: any
+mcp_tool: salesforce.search_all
+inputs:
+  query:
+    type: text
+    required: true
+    description: phrase or word(s) to search for
+  object_types:
+    type: list<text>
+    required: false
+    description: |
+      Optional allowlist of sObject names to search. When omitted, SF
+      searches the user's default set (the orgs's "Find" menu list).
+result:
+  matches: list<object>
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Type into Lightning header search; submit; land on search-results page
+    recipe:
+      - id: focus_search
+        type: use_widget
+        args:
+          widget: salesforce.list_search_input
+          op: fill
+          inputs:
+            value: "{{inputs.query}}"
+      - id: submit_search
+        type: submit_form_widget
+        args:
+          widget: salesforce.list_search_input
+    outcomes:
+      - action: searched
+        signal:
+          type: url_matches
+          pattern: "/lightning/r/Global_Search.*"
+        extract:
+          matches:
+            literal: []
+  session_api:
+    requires_auth: session_cookie
+    label: Aura controller SOSL search
+    api: salesforce.aura_controller
+    outcomes:
+      - action: searched
+        signal:
+          type: network_response
+          url_pattern: "/aura?aura.token=.*"
+          status: 200
+        extract:
+          matches:
+            from_api_response: ".actions[0].returnValue"
+  mcp:
+    requires_auth: mcp_server
+    label: SOSL search via SF MCP server
+    server: salesforce
+    tool: search_all
+    outcomes:
+      - action: searched
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          matches:
+            from_api_response: ".matches"
