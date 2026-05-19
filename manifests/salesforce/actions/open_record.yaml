@@ -1,16 +1,21 @@
 _meta:
   name: manifests/salesforce/actions/open_record.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-19
   description: |
-    open_record action — deeplink-navigate to /lightning/r/{object_type}/{record_id}/view. Read-only single dom flavor.
+    open_record atom — deeplink-navigate to a record's detail page.
+    Spec 70: browser-only flavor (no MCP equivalent — MCP servers
+    don't drive navigation). Used by compositions that need to land on
+    RecordView before calling update_record / delete_record.
   changelog:
+    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when. Live-verified recipe + sample carry over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Navigate to a record's detail page by object_type + record_id.
 object: "{{inputs.object_type}}"
+object_types: [Opportunity, Lead, Contact, Account, Task, Note]
 commits_changes: false
 depends_on_view: any
 inputs:
@@ -25,7 +30,7 @@ inputs:
 result:
   opened: boolean
 flavors:
-  dom:
+  browser:
     requires_auth: session_cookie
     label: Open the record detail page
     recipe:

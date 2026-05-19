@@ -1,20 +1,25 @@
 _meta:
   name: manifests/gmail/actions/list_inbox.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    list_inbox action — navigate to the Inbox. Read-only; safe to
-    end-to-end test. Phase 6 validated.
+    list_inbox atom — navigate to the Inbox. Read-only; browser-only
+    (no Gmail MCP tool maps directly — MCP would use search_emails
+    with label:inbox to surface inbox messages, but list_inbox here
+    is specifically the wizard navigation primitive that lands the
+    tab on #inbox before per-row actions).
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, no mcp_tool (no direct equivalent)."
+    - "0.2.0 (2026-05-16): rename dom_submit → dom."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
   Navigate to the Inbox. The action assumes the user is already in Gmail; it
   issues a navigate to the inbox URL so subsequent row-scoped actions
   (archive/delete/star/etc.) can run. Read of individual rows is out of scope
-  for the manifest layer (use read_email after opening a thread).
+  for the manifest layer (use search_email + read_email for content).
 object: Thread
 commits_changes: false
 depends_on_view: any
@@ -22,7 +27,7 @@ inputs: {}
 result:
   navigated: boolean
 flavors:
-  dom_submit:
+  browser:
     requires_auth: session_cookie
     label: Navigate to Inbox
     recipe:

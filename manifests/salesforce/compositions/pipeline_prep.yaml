@@ -1,0 +1,116 @@
+_meta:
+  name: manifests/salesforce/compositions/pipeline_prep.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Weekly pipeline prep — for each closing-this-week opportunity:
+    query details, judge whether stage matches recent activity, ask
+    user to confirm a stage update when stale, then synthesize a
+    one-paragraph portfolio summary. Killer demo target from the
+    2026-05-18 spec 70 brainstorm.
+
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: pipeline-prep
+  version: '1.0.0'
+  title: Weekly pipeline prep
+  summary: |
+    For each closing-this-week opportunity: pull details, judge whether
+    the stage matches recent activity, ask the user to confirm a stage
+    update when stale, then synthesize a one-paragraph portfolio summary.
+    Killer demo target from the 2026-05-18 brainstorm — anchors what
+    "deterministic automation with judgment delegated to the LLM" feels
+    like in practice.
+
+do:
+  - opps:
+      call: salesforce.atom.query_records
+      with:
+        object_type: Opportunity
+        fields: [Id, Name, StageName, Amount, CloseDate, OwnerId, LastModifiedDate]
+        where: "CloseDate = THIS_WEEK AND IsClosed = false AND Owner.Id = '${ $user.salesforce_id }'"
+        orderBy: Amount DESC
+        limit: 25
+
+  - perOpp:
+      for:
+        each: opp
+        in: '${ .opps.records }'
+      do:
+        - staleness:
+            judge: |
+              Given the opportunity's current StageName + how recently
+              LastModifiedDate fired, classify as:
+                - "stale": stage hasn't moved in 14+ days and is still
+                  in early-funnel (Prospecting / Qualification / Needs
+                  Analysis) — likely needs an update.
+                - "current": stage and activity align (late-funnel
+                  stages, or recent modification).
+              Output the classification only.
+            options: [stale, current]
+            with:
+              stage:              '${ $opp.StageName }'
+              amount:             '${ $opp.Amount }'
+              last_modified:      '${ $opp.LastModifiedDate }'
+              close_date:         '${ $opp.CloseDate }'
+
+        - decide:
+            switch:
+              - when: '${ .staleness == "stale" }'
+                then:
+                  - userChoice:
+                      ask:
+                        prompt: |
+                          ${ $opp.Name } (${ $opp.StageName }, $${ $opp.Amount }, closes ${ $opp.CloseDate }):
+                          Stage looks stale. Update it?
+                        options:
+                          - Move to Negotiation/Review
+                          - Mark Closed Won
+                          - Mark Closed Lost
+                          - Skip
+                  - maybeApply:
+                      switch:
+                        - when: '${ .userChoice.choice == "Move to Negotiation/Review" }'
+                          then:
+                            - update:
+                                call: salesforce.atom.update_record
+                                with:
+                                  object_type: Opportunity
+                                  record_id: '${ $opp.Id }'
+                                  fields:
+                                    StageName: Negotiation/Review
+                        - when: '${ .userChoice.choice == "Mark Closed Won" }'
+                          then:
+                            - update:
+                                call: salesforce.atom.update_record
+                                with:
+                                  object_type: Opportunity
+                                  record_id: '${ $opp.Id }'
+                                  fields:
+                                    StageName: Closed Won
+                        - when: '${ .userChoice.choice == "Mark Closed Lost" }'
+                          then:
+                            - update:
+                                call: salesforce.atom.update_record
+                                with:
+                                  object_type: Opportunity
+                                  record_id: '${ $opp.Id }'
+                                  fields:
+                                    StageName: Closed Lost
+
+  - summary:
+      synthesize: |
+        Compose a one-paragraph weekly pipeline summary across the
+        opportunities listed. Highlight:
+        - Total pipeline value closing this week ($).
+        - Count of stale-flagged opportunities and how many were
+          updated vs. skipped.
+        - Top 3 deals by Amount with their current stage.
+        Keep it under 80 words; first-person voice as if briefing
+        oneself before Monday standup.
+      with:
+        opps:     '${ .opps.records }'
+        triaged:  '${ .perOpp }'

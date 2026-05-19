@@ -1,33 +1,40 @@
 _meta:
   name: manifests/gmail/actions/delete_email.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    delete_email action — move a specific thread to Trash from a list
-    view. Recipe: select row → click toolbar Delete. Irreversible side
-    effect (recoverable from Trash within 30 days).
+    delete_email atom — permanently delete a thread / message. Spec 70
+    shape (`browser` flavor with commit-marked Delete click + `mcp`
+    flavor for invisible delete via gmail.delete_email). Writes
+    prefer `browser > mcp` per spec 70 §7 — the user sees the row
+    disappear from the inbox before the destructive call commits.
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Move a specific thread to Trash from a list view. Selects the row by thread_id
-  and clicks the toolbar Delete button.
+  Permanently delete a specific thread (NOT trash — bypasses Trash like the
+  Gmail MCP delete_email tool). The browser flavor selects the row by
+  thread_id from Inbox and clicks the toolbar Delete button. The mcp flavor
+  takes a message_id and calls gmail.delete_email directly.
 object: Thread
 commits_changes: true
 depends_on_view: Inbox
+mcp_tool: gmail.delete_email
 inputs:
   thread_id:
     type: text
     required: true
-    description: data-legacy-thread-id of the row to delete
+    description: data-legacy-thread-id of the row (browser flavor) OR message id (mcp flavor)
 result:
   deleted: boolean
 flavors:
-  dom_submit:
+  browser:
     requires_auth: session_cookie
-    label: Select row + click Delete
+    label: Select row; click Delete when commit:true
     recipe:
       - id: select_row
         type: use_widget
@@ -38,16 +45,35 @@ flavors:
             thread_id: "{{inputs.thread_id}}"
       - id: click_delete
         type: use_widget
+        commit: true
         args:
           widget: gmail.toolbar_delete_button
           op: invoke
           inputs:
             thread_id: "{{inputs.thread_id}}"
     outcomes:
+      - action: ready_to_delete
+        signal:
+          type: selector_appears
+          selector: div[role='button'][aria-label='Delete'][data-tooltip*='Delete']
       - action: deleted
         signal:
           type: selector_disappears
           selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+        extract:
+          deleted:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Delete via Gmail MCP server
+    server: gmail
+    tool: delete_email
+    outcomes:
+      - action: deleted
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
         extract:
           deleted:
             literal: true

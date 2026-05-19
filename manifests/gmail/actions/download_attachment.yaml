@@ -1,23 +1,39 @@
 _meta:
   name: manifests/gmail/actions/download_attachment.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    download_attachment action — download an attachment from the open
-    thread by filename match. Triggers a browser download.
+    download_attachment atom — fetch an attachment from a thread. Spec
+    70: `browser` flavor clicks the attachment's download link in the
+    open thread; `mcp` flavor calls gmail.download_attachment with
+    messageId + attachmentId. commits_changes:false at the SaaS level
+    (no server-side state change) — the local filesystem effect is
+    handled by the caller's download manager.
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, add mcp_tool + mcp flavor."
+    - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker on download click."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Download an attachment from the currently open thread. The user must specify
-  which attachment by filename (or partial match). Triggers a browser download
-  via the attachment's download link/button.
+  Download an attachment from the currently open thread. Browser flavor matches
+  by visible filename in ThreadView + clicks the download link. MCP flavor
+  takes messageId + attachmentId (caller obtains them from a prior
+  read_email call).
 object: Thread
 commits_changes: false
 depends_on_view: ThreadView
+mcp_tool: gmail.download_attachment
 inputs:
+  message_id:
+    type: text
+    required: false
+    description: Only consulted by the mcp flavor.
+  attachment_id:
+    type: text
+    required: false
+    description: Only consulted by the mcp flavor.
   filename:
     type: text
     required: true
@@ -25,7 +41,7 @@ inputs:
 result:
   downloaded: boolean
 flavors:
-  dom_submit:
+  browser:
     requires_auth: session_cookie
     label: Click download on attachment
     recipe:
@@ -41,6 +57,24 @@ flavors:
         signal:
           type: selector_appears
           selector: div[role='main'] div[aria-label*='{{inputs.filename}}']
+        extract:
+          downloaded:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Download via gmail.download_attachment MCP tool
+    server: gmail
+    tool: download_attachment
+    inputs_map:
+      messageId: "{{inputs.message_id}}"
+      attachmentId: "{{inputs.attachment_id}}"
+      filename: "{{inputs.filename}}"
+    outcomes:
+      - action: downloaded
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
         extract:
           downloaded:
             literal: true

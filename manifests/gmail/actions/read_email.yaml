@@ -1,63 +1,41 @@
 _meta:
   name: manifests/gmail/actions/read_email.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    read_email action — return Subject/From/Body of the open thread.
-    Read-only; both dom_no_submit and dom_submit flavors are
-    end-to-end-safe to validate. Phase 6 validated dom_no_submit.
+    read_email atom — return Subject/From/Body of the open thread.
+    Read-only; spec 70 shape (`browser` flavor + `mcp` flavor pointing
+    at gmail.read_email). Reads prefer `mcp > browser` per spec 70 §7
+    transport priority (faster + invisible via API).
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.2.0 (2026-05-16): collapse legacy two-flavor read into single `dom` flavor."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
   Read the currently open thread, returning subject, from, and body of the
-  latest message. Assumes the wizard has already opened the thread (clicked the
-  row from Inbox/SearchResults/LabelView). Read is non-committing — there's no
-  submit step — so dom_submit is the only meaningful flavor; dom_no_submit emits
-  ready_to_read once the thread renders, then read once content is captured.
+  latest message. The browser flavor scrapes the open ThreadView. The mcp
+  flavor takes a message_id and fetches via the Gmail MCP read_email tool —
+  no thread navigation required.
 object: Thread
 commits_changes: false
 depends_on_view: ThreadView
-inputs: {}
+mcp_tool: gmail.read_email
+inputs:
+  message_id:
+    type: text
+    required: false
+    description: |
+      Only required for the mcp flavor. The browser flavor reads
+      whatever thread is currently open and ignores this field.
 result:
   Subject: text
   From: email
   Body: rich_text
 flavors:
-  dom_no_submit:
-    requires_auth: session_cookie
-    label: Read open thread (review then confirm)
-    recipe:
-      - id: read_thread
-        type: read_fields
-        args:
-          object: Thread
-          only:
-            - Subject
-            - From
-            - Body
-    outcomes:
-      - action: ready_to_read
-        signal:
-          type: selector_appears
-          selector: h2.hP
-      - action: read
-        signal:
-          type: selector_appears
-          selector: div[role='main'] div.a3s
-        extract:
-          Subject:
-            from_step: read_thread
-            path: fields.Subject
-          From:
-            from_step: read_thread
-            path: fields.From
-          Body:
-            from_step: read_thread
-            path: fields.Body
-  dom_submit:
+  browser:
     requires_auth: session_cookie
     label: Read open thread
     recipe:
@@ -84,3 +62,21 @@ flavors:
           Body:
             from_step: read_thread
             path: fields.Body
+  mcp:
+    requires_auth: mcp_server
+    label: Fetch via Gmail MCP server
+    server: gmail
+    tool: read_email
+    outcomes:
+      - action: read
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          Subject:
+            from_api_response: ".subject"
+          From:
+            from_api_response: ".from"
+          Body:
+            from_api_response: ".body"

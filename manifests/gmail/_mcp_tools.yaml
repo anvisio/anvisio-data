@@ -1,0 +1,333 @@
+_meta:
+  name: manifests/gmail/_mcp_tools.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Gmail MCP tool catalog. Per spec 70 §3 this file holds the canonical
+    atom-action input/output schemas for the integration. Future propose
+    runs read this file (or the chrome.storage copy keyed
+    "manifest:gmail:_mcp_tools.yaml" written by research) and emit
+    actions/<verb>.yaml with matching `inputs:` + `result:` shapes and a
+    `mcp_tool:` pointer back into this catalog.
+
+    Sourced from the GongRzhe/Gmail-MCP-Server reference implementation
+    (the most-widely-cited community MCP server for Gmail; not yet an
+    official Anthropic one). The official Workspace MCP servers may
+    publish an alternative shape later; until they do, this is the
+    reference catalog the anvisio gmail manifest is authored against.
+  changelog:
+    - "0.1.0 (2026-05-19): initial seed from GongRzhe/Gmail-MCP-Server README (https://github.com/GongRzhe/Gmail-MCP-Server)."
+
+server:
+  name: gmail-mcp
+  source_url: https://github.com/GongRzhe/Gmail-MCP-Server
+  transport: stdio
+  fetched_at: 2026-05-19T00:00:00Z
+
+tools:
+  # ── Messages — compose / read / search / modify ────────────────────
+  - name: send_email
+    description: Send a new email (with optional cc/bcc, HTML body, attachments, or as a reply within a thread).
+    input_schema:
+      type: object
+      required: [to, subject, body]
+      properties:
+        to:        { type: array, items: { type: string, format: email } }
+        subject:   { type: string }
+        body:      { type: string }
+        htmlBody:  { type: string, description: HTML version of body when mimeType is multipart/alternative }
+        mimeType:  { type: string, enum: ["text/plain", "text/html", "multipart/alternative"], default: "text/plain" }
+        cc:        { type: array, items: { type: string, format: email } }
+        bcc:       { type: array, items: { type: string, format: email } }
+        threadId:  { type: string, description: thread id to reply within }
+        inReplyTo: { type: string, description: message-id being replied to }
+        attachments: { type: array, items: { type: string, description: file path } }
+    output_schema:
+      type: object
+      properties:
+        message_id: { type: string }
+        thread_id:  { type: string }
+
+  - name: draft_email
+    description: Create an unsent draft. Same input shape as send_email.
+    input_schema:
+      type: object
+      required: [to, subject, body]
+      properties:
+        to:        { type: array, items: { type: string, format: email } }
+        subject:   { type: string }
+        body:      { type: string }
+        htmlBody:  { type: string }
+        mimeType:  { type: string, enum: ["text/plain", "text/html", "multipart/alternative"] }
+        cc:        { type: array, items: { type: string, format: email } }
+        bcc:       { type: array, items: { type: string, format: email } }
+        threadId:  { type: string }
+        inReplyTo: { type: string }
+        attachments: { type: array, items: { type: string } }
+    output_schema:
+      type: object
+      properties:
+        draft_id: { type: string }
+
+  - name: read_email
+    description: Retrieve full content (subject, from, body, attachment metadata) for a single message.
+    input_schema:
+      type: object
+      required: [messageId]
+      properties:
+        messageId: { type: string }
+    output_schema:
+      type: object
+      properties:
+        subject: { type: string }
+        from:    { type: string, format: email }
+        to:      { type: array, items: { type: string, format: email } }
+        body:    { type: string }
+        attachments: { type: array, items: { type: object } }
+
+  - name: search_emails
+    description: Find messages via Gmail's search-query syntax (from:, subject:, has:attachment, label:...).
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query:      { type: string }
+        maxResults: { type: integer, minimum: 1, maximum: 500 }
+    output_schema:
+      type: object
+      properties:
+        messages: { type: array, items: { type: object, properties: { id: { type: string }, threadId: { type: string } } } }
+
+  - name: modify_email
+    description: Apply or remove labels on a single message (use to archive, mark read/unread, star, move).
+    input_schema:
+      type: object
+      required: [messageId]
+      properties:
+        messageId:      { type: string }
+        addLabelIds:    { type: array, items: { type: string } }
+        removeLabelIds: { type: array, items: { type: string } }
+    output_schema:
+      type: object
+      properties:
+        message_id: { type: string }
+        labels:     { type: array, items: { type: string } }
+
+  - name: delete_email
+    description: Permanently delete a single message (NOT trash — bypasses Trash).
+    input_schema:
+      type: object
+      required: [messageId]
+      properties:
+        messageId: { type: string }
+    output_schema:
+      type: object
+      properties:
+        deleted: { type: boolean }
+
+  # ── Batch — messages -------------------------------------------------
+  - name: batch_modify_emails
+    description: Apply label changes to multiple messages in one call.
+    input_schema:
+      type: object
+      required: [messageIds]
+      properties:
+        messageIds:     { type: array, items: { type: string } }
+        addLabelIds:    { type: array, items: { type: string } }
+        removeLabelIds: { type: array, items: { type: string } }
+        batchSize:      { type: integer, default: 50 }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+
+  - name: batch_delete_emails
+    description: Permanently delete multiple messages in one call.
+    input_schema:
+      type: object
+      required: [messageIds]
+      properties:
+        messageIds: { type: array, items: { type: string } }
+        batchSize:  { type: integer, default: 50 }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+
+  # ── Attachments ─────────────────────────────────────────────────────
+  - name: download_attachment
+    description: Save a message attachment to the local filesystem.
+    input_schema:
+      type: object
+      required: [messageId, attachmentId]
+      properties:
+        messageId:    { type: string }
+        attachmentId: { type: string }
+        filename:     { type: string }
+        savePath:     { type: string }
+    output_schema:
+      type: object
+      properties:
+        path: { type: string }
+
+  # ── Labels ──────────────────────────────────────────────────────────
+  - name: list_email_labels
+    description: Return all Gmail labels (system + user-defined).
+    input_schema:
+      type: object
+      properties: {}
+    output_schema:
+      type: object
+      properties:
+        labels: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string } } } }
+
+  - name: create_label
+    description: Create a new user-defined label.
+    input_schema:
+      type: object
+      required: [name]
+      properties:
+        name:                   { type: string }
+        messageListVisibility:  { type: string, enum: [show, hide] }
+        labelListVisibility:    { type: string, enum: [labelShow, labelShowIfUnread, labelHide] }
+    output_schema:
+      type: object
+      properties:
+        id:   { type: string }
+        name: { type: string }
+
+  - name: update_label
+    description: Update label name or visibility.
+    input_schema:
+      type: object
+      required: [id]
+      properties:
+        id:                     { type: string }
+        name:                   { type: string }
+        messageListVisibility:  { type: string, enum: [show, hide] }
+        labelListVisibility:    { type: string, enum: [labelShow, labelShowIfUnread, labelHide] }
+    output_schema:
+      type: object
+      properties:
+        id:   { type: string }
+        name: { type: string }
+
+  - name: delete_label
+    description: Delete a label by id.
+    input_schema:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+    output_schema:
+      type: object
+      properties:
+        deleted: { type: boolean }
+
+  - name: get_or_create_label
+    description: Return an existing label by name, or create it if absent.
+    input_schema:
+      type: object
+      required: [name]
+      properties:
+        name:                   { type: string }
+        messageListVisibility:  { type: string, enum: [show, hide] }
+        labelListVisibility:    { type: string, enum: [labelShow, labelShowIfUnread, labelHide] }
+    output_schema:
+      type: object
+      properties:
+        id:   { type: string }
+        name: { type: string }
+
+  # ── Filters ─────────────────────────────────────────────────────────
+  - name: create_filter
+    description: Create an auto-handling filter (criteria + action).
+    input_schema:
+      type: object
+      required: [criteria, action]
+      properties:
+        criteria:
+          type: object
+          properties:
+            from:           { type: string }
+            to:             { type: string }
+            subject:        { type: string }
+            query:          { type: string }
+            negatedQuery:   { type: string }
+            hasAttachment:  { type: boolean }
+            excludeChats:   { type: boolean }
+            size:           { type: integer }
+            sizeComparison: { type: string, enum: [unspecified, smaller, larger] }
+        action:
+          type: object
+          properties:
+            addLabelIds:    { type: array, items: { type: string } }
+            removeLabelIds: { type: array, items: { type: string } }
+            forward:        { type: string, format: email }
+    output_schema:
+      type: object
+      properties:
+        id: { type: string }
+
+  - name: list_filters
+    description: List all configured filters.
+    input_schema:
+      type: object
+      properties: {}
+    output_schema:
+      type: object
+      properties:
+        filters: { type: array, items: { type: object } }
+
+  - name: get_filter
+    description: Fetch a single filter by id.
+    input_schema:
+      type: object
+      required: [filterId]
+      properties:
+        filterId: { type: string }
+    output_schema:
+      type: object
+      properties:
+        criteria: { type: object }
+        action:   { type: object }
+
+  - name: delete_filter
+    description: Delete a filter by id.
+    input_schema:
+      type: object
+      required: [filterId]
+      properties:
+        filterId: { type: string }
+    output_schema:
+      type: object
+      properties:
+        deleted: { type: boolean }
+
+  - name: create_filter_from_template
+    description: Create a filter from a parameterised template (fromSender, withSubject, withAttachments, largeEmails, containingText, mailingList).
+    input_schema:
+      type: object
+      required: [template, parameters]
+      properties:
+        template:
+          type: string
+          enum: [fromSender, withSubject, withAttachments, largeEmails, containingText, mailingList]
+        parameters:
+          type: object
+          properties:
+            senderEmail:    { type: string, format: email }
+            subjectText:    { type: string }
+            searchText:     { type: string }
+            listIdentifier: { type: string }
+            sizeInBytes:    { type: integer }
+            labelIds:       { type: array, items: { type: string } }
+            archive:        { type: boolean }
+            markAsRead:     { type: boolean }
+            markImportant:  { type: boolean }
+    output_schema:
+      type: object
+      properties:
+        id: { type: string }

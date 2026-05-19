@@ -1,24 +1,28 @@
 _meta:
   name: manifests/gmail/actions/apply_label.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    apply_label action — apply a Gmail label to a specific thread from a
-    list view. Recipe: select row → open Labels menu → type label →
-    pick match. Requires thread_id + label inputs (state-dependent;
-    Phase 8 will wire fixture-driven testing).
+    apply_label atom — apply a Gmail label to a specific thread. Spec
+    70: `browser` flavor for the list-view toolbar UI + `mcp` flavor
+    backed by gmail.modify_email (addLabelIds). Writes prefer
+    browser > mcp per spec 70 §7.
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest. toolbar_labels_button widget reverted to atomic click after heal-overreach incident (see project_phase5_slice1_shipped.md)"
+    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker on the label-pick step (Phase 3)."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Apply a Gmail label to a specific thread from a list view. Selects the row,
-  opens the Labels menu, types the label name into the menu's typeahead, and
-  picks the matching item.
+  Apply a Gmail label to a specific thread. Browser flavor selects the row from
+  Inbox, opens the Labels menu, types the label name, and picks the match. MCP
+  flavor calls gmail.modify_email with addLabelIds to attach the label without
+  driving the UI.
 object: Thread
 commits_changes: true
 depends_on_view: Inbox
+mcp_tool: gmail.modify_email
 inputs:
   thread_id:
     type: text
@@ -29,9 +33,9 @@ inputs:
 result:
   applied: boolean
 flavors:
-  dom_submit:
+  browser:
     requires_auth: session_cookie
-    label: Select row + Labels menu + pick label
+    label: Select row + Labels menu; pick label when commit:true
     recipe:
       - id: select_row
         type: use_widget
@@ -47,16 +51,38 @@ flavors:
           op: invoke
       - id: pick_label
         type: use_widget
+        commit: true
         args:
           widget: gmail.label_menu_search
           op: fill
           inputs:
             value: "{{inputs.label}}"
     outcomes:
+      - action: ready_to_apply
+        signal:
+          type: selector_appears
+          selector: div[role='menu'] input[placeholder='Label as:']
       - action: applied
         signal:
           type: selector_appears
           selector: div.b8.UC div.vh
+        extract:
+          applied:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Add label via gmail.modify_email MCP tool
+    server: gmail
+    tool: modify_email
+    inputs_map:
+      messageId: "{{inputs.thread_id}}"
+      addLabelIds: ["{{inputs.label}}"]
+    outcomes:
+      - action: applied
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
         extract:
           applied:
             literal: true

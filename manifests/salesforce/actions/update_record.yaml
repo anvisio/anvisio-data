@@ -1,18 +1,25 @@
 _meta:
   name: manifests/salesforce/actions/update_record.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-19
   description: |
-    update_record action — generic record update parameterized by object_type + record_id + field map. Opens record view, clicks Edit, fills fields, clicks Save.
+    update_record atom — PATCH semantics on a single SF record. Spec 70:
+    `browser` flavor opens the edit modal + fills + clicks Save (commit
+    step); `session_api` PATCHes the REST endpoint directly; `mcp`
+    calls dml_records with operation: update. Writes prefer
+    browser > session_api > mcp per spec 70 §7.
   changelog:
+    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified selectors carry over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Edit an existing record via /lightning/r/{object_type}/{record_id}/edit modal.
 object: "{{inputs.object_type}}"
+object_types: [Opportunity, Lead, Contact, Account, Task, Note]
 commits_changes: true
 depends_on_view: RecordEditModal
+mcp_tool: salesforce.dml_records
 inputs:
   object_type:
     type: text
@@ -30,7 +37,7 @@ result:
   record_id: text
   updated: boolean
 flavors:
-  dom:
+  browser:
     requires_auth: session_cookie
     label: Fill the edit modal; click Save when commit:true
     recipe:
@@ -47,13 +54,11 @@ flavors:
           op: invoke
     outcomes:
       - action: ready_to_save
-        emits_when: pre_commit
         signal:
           type: selector_appears
           selector: button[name='SaveEdit']
           timeout_ms: 8000
       - action: updated
-        emits_when: post_commit
         signal:
           type: selector_disappears
           selector: button[name='SaveEdit']
@@ -63,3 +68,39 @@ flavors:
             from_input: record_id
           updated:
             literal: true
+  session_api:
+    requires_auth: session_cookie
+    label: PATCH /services/data/v62.0/sobjects/{object_type}/{record_id}
+    api: salesforce.update_record_session
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "/services/data/v62.0/sobjects/.*/.*"
+          status: 204
+        extract:
+          record_id:
+            from_input: record_id
+          updated:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Update via SF MCP server (dml_records update)
+    server: salesforce
+    tool: dml_records
+    inputs_map:
+      operation: update
+      objectName: "{{inputs.object_type}}"
+      records:
+        - Id: "{{inputs.record_id}}"
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          record_id:
+            from_input: record_id
+          updated:
+            from_api_response: ".results[0].success"

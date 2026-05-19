@@ -1,19 +1,27 @@
 _meta:
   name: manifests/salesforce/actions/create_record.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-19
   description: |
-    create_record action — generic record creation parameterized by object_type. Navigates to /lightning/o/{object_type}/new, fills the form via schema-driven widget bindings, clicks Save.
+    create_record atom — parameterized over object_type. Single
+    canonical action for creating Opportunity / Lead / Contact /
+    Account / etc. Spec 70 single `browser` flavor with `commit: true`
+    step marker on the destructive Save click + optional `session_api`
+    (Aura POST) + `mcp` (KirtiJha dml_records) flavors. Writes prefer
+    browser > session_api > mcp per spec 70 §7.
   changelog:
+    - "2.0.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. URL match regex + samples carry over from v1.0.0 (live-verified)."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Create a new Opportunity / Account / Lead record via
   /lightning/o/{object_type}/new.
 object: "{{inputs.object_type}}"
+object_types: [Opportunity, Lead, Contact, Account, Task, Note]
 commits_changes: true
 depends_on_view: RecordNewModal
+mcp_tool: salesforce.dml_records
 inputs:
   object_type:
     type: text
@@ -31,11 +39,7 @@ result:
   record_name: text
   created: boolean
 flavors:
-  # Phase 3 (2026-05-16): single `dom` flavor with commit-marked
-  # last-step. commit:false fires `ready_to_save` (form is filled,
-  # SaveEdit button is visible); commit:true runs the full recipe and
-  # fires `created` (URL settles on /lightning/r/<id>/view).
-  dom:
+  browser:
     requires_auth: session_cookie
     label: Fill the new-record modal; click Save when commit:true
     recipe:
@@ -52,13 +56,11 @@ flavors:
           op: invoke
     outcomes:
       - action: ready_to_save
-        emits_when: pre_commit
         signal:
           type: selector_appears
           selector: button[name='SaveEdit']
           timeout_ms: 8000
       - action: created
-        emits_when: post_commit
         signal:
           type: url_matches
           pattern: /lightning/r/(?:[A-Za-z]+/)?(?<record_id>[A-Za-z0-9]{15,18})/view
@@ -71,3 +73,38 @@ flavors:
             from_input: fields.Name
           created:
             literal: true
+  session_api:
+    requires_auth: session_cookie
+    label: POST /services/data/v62.0/sobjects/{object_type}
+    api: salesforce.create_record_session
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "/services/data/v62.0/sobjects/.*"
+          status: 201
+        extract:
+          record_id:
+            from_api_response: ".id"
+          created:
+            from_api_response: ".success"
+  mcp:
+    requires_auth: mcp_server
+    label: Create via SF MCP server (dml_records insert)
+    server: salesforce
+    tool: dml_records
+    inputs_map:
+      operation: insert
+      objectName: "{{inputs.object_type}}"
+      records: ["{{inputs.fields}}"]
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          record_id:
+            from_api_response: ".results[0].id"
+          created:
+            from_api_response: ".results[0].success"

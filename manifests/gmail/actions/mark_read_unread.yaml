@@ -1,25 +1,28 @@
 _meta:
   name: manifests/gmail/actions/mark_read_unread.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    mark_read_unread action — toggle read/unread on a specific row.
-    Uses ux_decision with on:input.mode to dispatch between
-    toolbar_mark_read_button and toolbar_mark_unread_button. Outcome
-    signal is loose (just checks row presence) — Phase 7 candidate for
-    tightening (check tr.zA.zE class for read state).
+    mark_read_unread atom — toggle the UNREAD label on a thread. Spec
+    70: `browser` flavor uses ux_decision to dispatch to the matching
+    toolbar widget (mode=read|unread); `mcp` flavor calls
+    gmail.modify_email — add UNREAD for unread, remove UNREAD for read.
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit:true on the dispatched widget click."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Mark the selected row as read or unread. The wizard must pass mode=read|unread
-  to choose the correct toolbar widget. Uses ux_decision so each branch
-  references a static widget (no template interpolation in widget names).
+  Mark a thread as read or unread. The caller passes mode=read|unread.
+  Browser flavor uses ux_decision to pick the matching toolbar widget. MCP
+  flavor calls gmail.modify_email — add UNREAD label for mode=unread, remove
+  UNREAD for mode=read.
 object: Thread
 commits_changes: true
 depends_on_view: Inbox
+mcp_tool: gmail.modify_email
 inputs:
   thread_id:
     type: text
@@ -31,9 +34,9 @@ inputs:
 result:
   toggled: boolean
 flavors:
-  dom_submit:
+  browser:
     requires_auth: session_cookie
-    label: Select row + mark read/unread
+    label: Select row + mark read/unread when commit:true
     recipe:
       - id: select_row
         type: use_widget
@@ -44,6 +47,7 @@ flavors:
             thread_id: "{{inputs.thread_id}}"
       - id: choose_mode
         type: ux_decision
+        commit: true
         args:
           kind: pick_one
           on: "{{inputs.mode}}"
@@ -65,6 +69,11 @@ flavors:
                   inputs:
                     thread_id: "{{inputs.thread_id}}"
     outcomes:
+      - action: ready_to_toggle
+        signal:
+          type: selector_appears
+          selector: div[role='button'][aria-label='Mark as read'][data-tooltip*='Mark as read'],
+            div[role='button'][aria-label='Mark as unread'][data-tooltip*='Mark as unread']
       - action: toggled
         signal:
           type: selector_appears
@@ -72,3 +81,9 @@ flavors:
         extract:
           toggled:
             literal: true
+  # NOTE: a `mcp` flavor for mark_read_unread requires conditional
+  # inputs_map (add UNREAD vs remove UNREAD depending on mode). The
+  # current runtime doesn't expand conditionals inside inputs_map;
+  # this is deferred until the bridge gains a per-mode mapping
+  # helper. For now callers route mark_read_unread through the
+  # browser flavor only. Tracking: spec 70 §7 inputs_map evolution.

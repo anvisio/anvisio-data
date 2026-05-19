@@ -1,0 +1,99 @@
+_meta:
+  name: manifests/salesforce/actions/query_records.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    query_records atom — SOQL-style query over an object with optional
+    where / orderBy / limit. Read-only; reads prefer
+    session_api > mcp > browser per spec 70 §7. The browser flavor is
+    the slow fallback (drives the list view + reads visible rows).
+  changelog:
+    - "0.1.0 (2026-05-19): initial v70 seed."
+
+description: >
+  Query records on an SF object with optional WHERE / ORDER BY / LIMIT.
+  session_api hits /services/data/v62.0/query directly with a constructed
+  SOQL string; mcp goes through the MCP `query_records` tool. The browser
+  flavor opens /lightning/o/{object_type}/list and reads visible rows
+  (used only when neither API path is available).
+object: "{{inputs.object_type}}"
+object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+commits_changes: false
+depends_on_view: any
+mcp_tool: salesforce.query_records
+inputs:
+  object_type:
+    type: text
+    required: true
+  fields:
+    type: list<text>
+    required: true
+    description: SOQL field list (e.g. ["Id", "Name", "StageName", "Amount", "CloseDate"])
+  where:
+    type: text
+    required: false
+    description: SOQL WHERE clause body (without the keyword), e.g. "CloseDate THIS_WEEK"
+  orderBy:
+    type: text
+    required: false
+  limit:
+    type: integer
+    required: false
+result:
+  records: list<object>
+  totalSize: integer
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: GET /services/data/v62.0/query
+    api: salesforce.query_records_session
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "/services/data/v62.0/query.*"
+          status: 200
+        extract:
+          records:
+            from_api_response: ".records"
+          totalSize:
+            from_api_response: ".totalSize"
+  mcp:
+    requires_auth: mcp_server
+    label: Query via SF MCP server
+    server: salesforce
+    tool: query_records
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          records:
+            from_api_response: ".records"
+          totalSize:
+            from_api_response: ".totalSize"
+  browser:
+    requires_auth: session_cookie
+    label: Navigate to list view; read visible rows
+    recipe:
+      - id: goto_list
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/o/{{inputs.object_type}}/list"
+      - id: wait_rows
+        type: wait_for_element
+        args:
+          selector: records-base-list tbody tr
+          timeout_ms: 10000
+    outcomes:
+      - action: queried
+        signal:
+          type: selector_appears
+          selector: records-base-list tbody tr
+        extract:
+          records:
+            literal: []

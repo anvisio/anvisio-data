@@ -1,0 +1,35 @@
+_meta:
+  name: manifests/salesforce/views/RecordListView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    List view for any standard SF object — /lightning/o/<Object>/list.
+    Lands on the Recently Viewed list view by default; URL-deeplink
+    entry. Hosts the New button (gateway to RecordNewModal) and the
+    row list (gateway to RecordView for individual records).
+  changelog:
+    - "0.1.0 (2026-05-19): initial v70 seed."
+
+name: RecordListView
+description: List view for the named SF object. Shows recently-viewed records by default.
+entry:
+  url: "{instance.origin}/lightning/o/{object_type}/list"
+url_patterns:
+  - "{instance.origin}/lightning/o/.*/list.*"
+identifying_selectors:
+  - one-list-view-manager
+  - records-base-list
+landmark_probe:
+  selector: one-list-view-manager
+  timeout_ms: 8000
+placeholders:
+  object_type:
+    type: text
+    sample: Opportunity
+widgets:
+  - salesforce.new_button
+  - salesforce.list_search_input
+  - salesforce.list_view_dropdown
+  - salesforce.row_link

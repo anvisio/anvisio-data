@@ -4,15 +4,15 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/action.schema.json",
-      "version": "1.0.0",
-      "cdn_schema_version": "60.3.0",
+      "version": "1.1.0",
+      "cdn_schema_version": "70.0.0",
       "authored_by": "cd2k + claude",
-      "authored_at": "2026-05-11",
-      "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Requires description + flavors; object / commits_changes / depends_on_view / inputs / result are optional. Per-flavor recipe shape validated permissively here; runtime validator enforces step-type vocabulary.",
-      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+      "authored_at": "2026-05-19",
+      "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Spec 70 update: accepts optional `mcp_tool:` pointer at the action level; per-flavor `recipe` is required ONLY for the `browser` flavor — API flavors (session_api / oauth_api / byok_api) use `api:` and the `mcp` flavor uses `server:` + `tool:` instead. Runtime validator enforces step-type vocabulary inside recipe[].",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled."
     }
   },
-  "title": "Spec 60 — actions/<verb>.yaml body",
+  "title": "Spec 70 — actions/<verb>.yaml body",
   "description": "Validates the body of a per-SaaS action recipe file (e.g. manifests/gmail/actions/send_email.yaml) after _meta is stripped. description + flavors required.",
   "type": "object",
   "required": ["description", "flavors"],
@@ -26,13 +26,23 @@
       "type": "string",
       "description": "Entity name this action operates on (e.g. Message, Thread)."
     },
+    "object_types": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "When `object:` is a runtime template (e.g. \"{{inputs.object_type}}\"), enumerate the valid runtime values here so validate-views + propose-time check can resolve schemas/<Type>.yaml for each."
+    },
     "commits_changes": {
       "type": "boolean",
-      "description": "Whether this action mutates server-side state. Drives commit-confirmation UX."
+      "description": "Whether this action mutates server-side state. Drives commit-confirmation UX + the runtime's transport priority (commits_changes:true → prefer browser > API; false → prefer API > browser)."
     },
     "depends_on_view": {
       "type": "string",
       "description": "View the user must be in before this action can run (e.g. ComposePanel for send_email)."
+    },
+    "mcp_tool": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*\\.[a-z][a-z0-9_-]*$",
+      "description": "Optional pointer to the matching entry in MCP_TOOL_CATALOG (_mcp_tools.yaml). Format: <server>.<tool_name>. Per spec 70 §3, atom actions whose verb maps to an MCP tool carry this pointer so the bridge can route the `mcp` flavor without a separate lookup."
     },
     "inputs": {
       "type": "object",
@@ -44,34 +54,45 @@
     },
     "flavors": {
       "type": "object",
-      "description": "Map of flavor id (dom_no_submit, dom_submit, api, …) → flavor definition (recipe + outcomes). At least one flavor required.",
+      "description": "Map of flavor id (browser, session_api, oauth_api, byok_api, mcp) → flavor definition. At least one flavor required. The `browser` flavor requires `recipe`; API flavors require `api:`; the `mcp` flavor requires `server:` + `tool:`.",
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
-        "required": ["recipe"],
         "additionalProperties": true,
         "properties": {
-          "requires_auth": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
+          "requires_auth": { "type": "string" },
+          "label": { "type": "string" },
           "recipe": {
             "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": true
-            }
+            "items": { "type": "object", "additionalProperties": true }
+          },
+          "api": {
+            "type": "string",
+            "description": "Reference to an apis.yaml entry (used by session_api / oauth_api / byok_api flavors)."
+          },
+          "server": {
+            "type": "string",
+            "description": "MCP server identifier (used by `mcp` flavor; matches the `server.name` field in _mcp_tools.yaml)."
+          },
+          "tool": {
+            "type": "string",
+            "description": "MCP tool name within the named server (used by `mcp` flavor; matches a tools[].name entry in _mcp_tools.yaml)."
+          },
+          "inputs_map": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional input-shape mapping for the flavor (e.g. mcp flavor's `operation: insert` constant fed alongside the action's inputs)."
           },
           "outcomes": {
             "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": true
-            }
+            "items": { "type": "object", "additionalProperties": true }
           }
-        }
+        },
+        "oneOf": [
+          { "required": ["recipe"], "description": "browser flavor: DOM recipe." },
+          { "required": ["api"], "description": "session_api / oauth_api / byok_api flavor: references apis.yaml." },
+          { "required": ["server", "tool"], "description": "mcp flavor: references _mcp_tools.yaml." }
+        ]
       }
     }
   }
