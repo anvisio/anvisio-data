@@ -4,11 +4,15 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/view.schema.json",
-      "version": "1.0.0",
-      "cdn_schema_version": "60.3.0",
+      "version": "1.1.0",
+      "cdn_schema_version": "60.4.2",
       "authored_by": "cd2k + claude",
-      "authored_at": "2026-05-11",
+      "authored_at": "2026-05-19",
       "description": "Per-role schema for manifests/<saas>/views/<View>.yaml body (post-_meta-strip). Requires name + entry; url_patterns / identifying_selectors / widgets / landmarks / exit are optional. Runtime validator enforces widget refs + entry recipe vocabulary.",
+      "changelog": [
+        "1.1.0 (2026-05-19): entry.anyOf gains `widget` shape per schema-feature atomicity rule (CLAUDE.md #7). Runtime + propose validator already allowed entry: { widget: <id> } since Phase 4; schema now matches.",
+        "1.0.0 (2026-05-11): initial."
+      ],
       "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
     }
   },
@@ -27,11 +31,12 @@
     },
     "entry": {
       "type": "object",
-      "description": "How the runtime navigates to this view. Either url-based (entry.url) or recipe-based (entry.recipe).",
+      "description": "How the runtime navigates to this view. One of: url-based (entry.url), recipe-based (entry.recipe), or widget-triggered (entry.widget — click a widget on the current page to reveal this view, e.g. button-triggered modals).",
       "additionalProperties": true,
       "anyOf": [
         { "required": ["url"] },
-        { "required": ["recipe"] }
+        { "required": ["recipe"] },
+        { "required": ["widget"] }
       ]
     },
     "exit": {

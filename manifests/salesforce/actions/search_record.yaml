@@ -1,101 +1,45 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 0.1.0
-  cdn_schema_version: 70.0.0
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-16
   description: |
-    search_record atom — global SF search (SOSL), spanning multiple
-    objects. Read-only; spec 70 transport priority: reads prefer
-    session_api > mcp > browser. The browser flavor types into the
-    Lightning header search; mcp goes through search_all; session_api
-    fires an Aura controller call.
+    search_record action — global search via SF Lightning's omnibar; results land on the GlobalSearchResults view.
   changelog:
-    - "0.1.0 (2026-05-19): initial v70 seed."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-description: >
-  Global SF search — phrase or fuzzy match across multiple sObject types
-  (the SOSL surface). Returns matching records grouped by object type.
-  Distinct from query_records (which is SOQL-style, single object,
-  field-filtered).
-object: SearchResult
+description: Run global search for a query string; lands on /lightning/search/.
+object: "{{inputs.object_type}}"
 commits_changes: false
 depends_on_view: any
-mcp_tool: salesforce.search_all
 inputs:
   query:
     type: text
     required: true
-    description: phrase or word(s) to search for
-  object_types:
-    type: list<text>
+    sample: Anvisio
+  object_type:
+    type: text
     required: false
-    description: |
-      Optional allowlist of sObject names to search. When omitted, SF
-      searches the user's default set (the orgs's "Find" menu list).
 result:
-  matches: list<object>
+  searched: boolean
 flavors:
-  browser:
+  dom:
     requires_auth: session_cookie
-    label: Type into Lightning header search; submit; land on search-results page
+    label: Navigate to global search results
     recipe:
-      - id: focus_search
-        type: use_widget
+      - id: nav_to_search
+        type: navigate
         args:
-          widget: salesforce.list_search_input
-          op: fill
-          inputs:
-            value: "{{inputs.query}}"
-      - id: submit_search
-        type: submit_form_widget
-        args:
-          widget: salesforce.list_search_input
+          url: "{instance.origin}/lightning/search/?q={{inputs.query}}"
     outcomes:
       - action: searched
         signal:
           type: url_matches
-          pattern: "/lightning/r/Global_Search.*"
+          pattern: /lightning/search/
+          timeout_ms: 15000
         extract:
-          matches:
-            literal: []
-  session_api:
-    requires_auth: session_cookie
-    label: SF Aura SOSL search via MAIN-world (session cookie + CSRF)
-    recipe:
-      - id: aura_search
-        type: call_platform_api
-        args:
-          api_def:
-            kind: aura
-            descriptor: "aura://RecordGlobalActionListController/ACTION$globalSearch"
-            extract_path: "actions[0].returnValue.searchResultGroups"
-          args:
-            term: "{{inputs.query}}"
-            scopeOrder: "[]"
-            additionalFields: "[]"
-            groupId: ""
-            sourceContext: "GLOBAL"
-            maxResults: 25
-    outcomes:
-      - action: searched
-        signal:
-          type: network_response
-          pattern: "/aura\\?.*aura\\.token="
-        extract:
-          matches:
-            from_step: aura_search
-  mcp:
-    requires_auth: mcp_server
-    label: SOSL search via SF MCP server
-    server: salesforce
-    tool: search_all
-    outcomes:
-      - action: searched
-        signal:
-          type: network_response
-          url_pattern: "*/mcp/*"
-          status: 200
-        extract:
-          matches:
-            from_api_response: ".matches"
+          searched:
+            literal: true
+          query:
+            from_input: query

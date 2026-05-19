@@ -1,0 +1,34 @@
+_meta:
+  name: manifests/salesforce/views/GlobalSearchResults.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    GlobalSearchResults view — SOSL / global-search results page. Reached via search_record; entry waits for results list.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+name: GlobalSearchResults
+
+entry:
+  depends_on_view: Dashboard
+  recipe:
+    - id: run_global_search
+      type: use_widget
+      args:
+        widget: salesforce.global_search_input
+        op: fill
+        inputs:
+          value: Anvisio
+landmark_probe:
+  selector: div[role='main'], .forceSearchResults, lst-list-view-manager
+  timeout_ms: 12000
+verify:
+  - type: url_matches
+    pattern: /lightning/search/
+  - type: selector_appears
+    selector: div[role='main']
+    timeout_ms: 10000
+widgets:
+  - salesforce.global_search_input

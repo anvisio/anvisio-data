@@ -1,0 +1,17 @@
+_meta:
+  name: manifests/outlook-calendar/schemas/Event.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Outlook Calendar Event schema. Fields: title (text), attendees (email list), body (rich_text), start/end (datetime). Used by create_event / edit_event when assembling the event editor panel.
+
+object: Event
+fields:
+  id: { type: text, readonly: true }
+  title: { type: text }
+  start: { type: datetime }
+  end: { type: datetime }
+  attendees: { type: email, multivalued: true }
+  body: { type: rich_text }

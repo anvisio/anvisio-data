@@ -1,20 +1,18 @@
 _meta:
   name: manifests/salesforce/schemas/Opportunity.yaml
-  version: 0.1.0
-  cdn_schema_version: 70.0.0
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-16
   description: |
-    Salesforce Opportunity schema — primary CRM entity for the
-    pipeline_prep composition. Fields below match the standard
-    Opportunity sObject; per-org customizations (extra picklists,
-    record types) heal at first use.
+    Opportunity schema — standard SF Opportunity object fields (Name, AccountId, Amount, CloseDate, StageName, NextStep). Used by create_record / update_record when object_type=Opportunity.
   changelog:
-    - "0.1.0 (2026-05-19): initial v70 seed (standard Opportunity fields)."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: |
-  Salesforce Opportunity — a potential deal in the pipeline. Standard
-  sObject; every SF org has Opportunity unless explicitly removed.
+  A Salesforce Opportunity. Key prefix 006.
+  Required: Name, StageName, CloseDate.
+  Sales deal in the pipeline. References Account. Live-probed.
 fields:
   Id:
     type: id
@@ -23,64 +21,47 @@ fields:
     readonly: true
   Name:
     type: text
-    label: Opportunity Name
+    label: Name
     required: true
-    sample: Acme Q4 Renewal
-  AccountId:
-    type: id
-    label: Account Name
-    required: true
-    ref: Account
-    sample: 001000000000001AAA
   StageName:
     type: picklist
     label: Stage
     required: true
-    default_values:
-      - Prospecting
-      - Qualification
-      - Needs Analysis
-      - Value Proposition
-      - Id. Decision Makers
-      - Perception Analysis
-      - Proposal/Price Quote
-      - Negotiation/Review
-      - Closed Won
-      - Closed Lost
-    sample: Prospecting
-  Amount:
-    type: currency
-    label: Amount
-    sample: 50000
   CloseDate:
     type: date
     label: Close Date
     required: true
-    sample: 2026-06-30
-  OwnerId:
-    type: id
-    label: Opportunity Owner
-    readonly: true
-    ref: User
-  Description:
-    type: rich_text
-    label: Description
+  Amount:
+    type: number
+    label: Amount
+    optional: true
   Probability:
-    type: percent
+    type: number
     label: Probability (%)
-    readonly: true
-  ForecastCategoryName:
-    type: picklist
-    label: Forecast Category
-    default_values: [Omitted, Pipeline, Best Case, Commit, Closed]
+    optional: true
   Type:
     type: picklist
-    label: Type
-    default_values: [Existing Customer - Upgrade, Existing Customer - Replacement, Existing Customer - Downgrade, New Customer]
-  LastModifiedDate:
-    type: datetime
-    label: Last Modified Date
-    readonly: true
-natural_keys:
-  - Name
-  - AccountId
+    label: Opportunity Type
+    optional: true
+  LeadSource:
+    type: picklist
+    label: Lead Source
+    optional: true
+  AccountId:
+    type: id
+    label: Account ID
+    optional: true
+    ref: Account.Id
+  OwnerId:
+    type: id
+    label: Owner ID
+    optional: true
+    ref: User.Id
+  Description:
+    type: textarea
+    label: Description
+    optional: true
+  NextStep:
+    type: text
+    label: Next Step
+    optional: true

@@ -1,32 +1,27 @@
 _meta:
   name: manifests/salesforce/widgets.yaml
-  version: 0.1.0
-  cdn_schema_version: 70.0.0
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-16
   description: |
-    Per-org SF widgets — minimal extends-stub of the shared
-    `widget-libraries/lightning.widgets.yaml` library. Every SF
-    Lightning org reuses the same 9-widget archetype set; per-org
-    overrides go below `widgets:` when a specific org's customized
-    Lightning skin deviates from the standard selectors.
+    Per-org Salesforce widgets stub. Inherits the full 13-widget set
+    from widget-libraries/salesforce.widgets.yaml via the `extends:`
+    field. Per-org overrides (custom field-layout selectors, vendor-
+    specific custom components) would live under a `widgets:` map
+    below; currently empty (the library is sufficient for the
+    canonical SF Lightning UI).
+
+    Promoted from .tmp-sf-manifest-8of8-2026-05-15/widgets.yaml on
+    2026-05-16 — the original .tmp file authored `salesforce.text` /
+    `salesforce.picklist` / etc. inline (12 widgets, ~240 lines). Now
+    collapsed to a 2-line `extends:` stub since the library has the
+    same widget ids canonically.
+
   changelog:
-    - "0.1.0 (2026-05-19): initial v70 seed; extends-only."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15. Collapsed to extends-stub; library carries the 13-widget canonical set."
 
-extends: widget-libraries/lightning.widgets.yaml
+extends: widget-libraries/salesforce.widgets.yaml
 
-# Per-org overrides go here. The single override below is a
-# placeholder until a real per-org drift surfaces; it duplicates the
-# library's `salesforce.save_button` so the schema's `widgets`
-# minProperties:1 constraint is satisfied. Heal will overwrite or add
-# entries as needed on first onboarding run.
-widgets:
-  salesforce.save_button:
-    archetype: modal_button
-    invoke:
-      - id: click
-        type: click
-        args:
-          selector:
-            - button[name='SaveEdit']
-            - button.slds-button.slds-button_brand[name='SaveEdit']
+# Per-app overrides go here. Empty = use extends: library as-is.
+widgets: {}

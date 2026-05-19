@@ -3,13 +3,14 @@
  * Gate 2 — Schema validation.
  *
  * Validates changed YAML / JSON files against their JSON Schema:
- *   - manifests/<saas>/apis.yaml       → schemas/manifest-v60/apis.schema.json
- *   - manifests/<saas>/widgets.yaml    → schemas/manifest-v60/widgets.schema.json
- *   - manifests/<saas>/schemas/*.yaml  → schemas/manifest-v60/entity-schema.schema.json
- *   - manifests/<saas>/views/*.yaml    → schemas/manifest-v60/view.schema.json
- *   - manifests/<saas>/actions/*.yaml  → schemas/manifest-v60/action.schema.json
- *   - intent.yaml fixtures             → schemas/intent-v60.json
- *   - test_catalog.json files          → schemas/test-catalog-v60.json
+ *   - manifests/<saas>/apis.yaml         → schemas/manifest-v60/apis.schema.json
+ *   - manifests/<saas>/widgets.yaml      → schemas/manifest-v60/widgets.schema.json
+ *   - manifests/<saas>/schemas/*.yaml    → schemas/manifest-v60/entity-schema.schema.json
+ *   - manifests/<saas>/views/*.yaml      → schemas/manifest-v60/view.schema.json
+ *   - manifests/<saas>/actions/*.yaml    → schemas/manifest-v60/action.schema.json
+ *   - manifests/<saas>/workflows/*.yaml  → schemas/manifest-v60/workflow.schema.json
+ *   - intent.yaml fixtures               → schemas/intent-v60.json
+ *   - test_catalog.json files            → schemas/test-catalog-v60.json
  *
  * The umbrella `schemas/manifest-v60.json` describes the bundle envelope
  * shape that propose-step emits (`{ files: {...} }`) and is not applied
@@ -71,6 +72,9 @@ function pickSchema(repoPath) {
     }
     if (repoPath.match(/^manifests\/[^/]+\/actions\/[^/]+\.ya?ml$/)) {
       return 'schemas/manifest-v60/action.schema.json';
+    }
+    if (repoPath.match(/^manifests\/[^/]+\/workflows\/[^/]+\.ya?ml$/)) {
+      return 'schemas/manifest-v60/workflow.schema.json';
     }
     // Any other yaml under manifests/<saas>/ is unrecognised — let it
     // through (gate 4 cross-refs + gate 1 frontmatter still apply).

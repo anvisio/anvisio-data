@@ -1,37 +1,36 @@
 _meta:
   name: manifests/salesforce/views/RecordView.yaml
-  version: 0.1.0
-  cdn_schema_version: 70.0.0
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-16
   description: |
-    Record detail view — /lightning/r/<Object>/<record_id>/view. The
-    landing surface for read / update / delete on an individual record.
-    URL-deeplink entry.
+    RecordView view — record detail / view page (/lightning/r/{object_type}/{record_id}/view). Reached via open_record; anchor for update + delete affordances.
   changelog:
-    - "0.1.0 (2026-05-19): initial v70 seed."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 name: RecordView
-description: Detail view for a single SF record.
+
 entry:
   url: "{instance.origin}/lightning/r/{object_type}/{record_id}/view"
-url_patterns:
-  - "{instance.origin}/lightning/r/.*/.*/view.*"
-identifying_selectors:
-  - records-highlights2
-  - records-record-layout2
 landmark_probe:
   selector: records-highlights2
-  timeout_ms: 10000
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: /lightning/r/.+/view
+  - type: selector_appears
+    selector: records-highlights2
+    timeout_ms: 12000
 placeholders:
   object_type:
     type: text
     sample: Opportunity
   record_id:
     type: id
-    sample: 0060000000000001AAA
+    sample: 006dM00000fJSAMPLE
 widgets:
-  - salesforce.edit_button
-  - salesforce.delete_button
-  - salesforce.show_more_actions_button
-  - salesforce.field_value
+  - salesforce.record_overflow_caret
+  - salesforce.edit_menu_item
+  - salesforce.delete_menu_item
+  - salesforce.global_search_input

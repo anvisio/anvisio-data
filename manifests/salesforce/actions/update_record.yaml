@@ -1,56 +1,40 @@
 _meta:
   name: manifests/salesforce/actions/update_record.yaml
-  version: 0.1.0
-  cdn_schema_version: 70.0.0
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-16
   description: |
-    update_record atom — PATCH semantics on a single SF record. Spec 70
-    transport priority: browser > session_api > mcp for writes. The
-    browser flavor opens the inline edit modal; session_api PATCHes the
-    REST endpoint; mcp calls dml_records with operation: update.
+    update_record action — generic record update parameterized by object_type + record_id + field map. Opens record view, clicks Edit, fills fields, clicks Save.
   changelog:
-    - "0.1.0 (2026-05-19): initial v70 seed."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-description: >
-  Update field values on a single SF record by object_type + record_id.
-  PATCH semantics — only the fields in `fields` are changed. Browser
-  flavor opens RecordEditModal (Edit button on RecordView), fills changed
-  fields, clicks Save when commit:true.
+description: Edit an existing record via /lightning/r/{object_type}/{record_id}/edit modal.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
 commits_changes: true
-depends_on_view: RecordView
-mcp_tool: salesforce.dml_records
+depends_on_view: RecordEditModal
 inputs:
   object_type:
     type: text
     required: true
+    sample: Opportunity
   record_id:
     type: id
     required: true
   fields:
     type: object
     required: true
+    sample:
+      NextStep: Follow up after pilot
 result:
-  record_id: id
-  success: boolean
+  record_id: text
+  updated: boolean
 flavors:
-  browser:
+  dom:
     requires_auth: session_cookie
-    label: Open edit modal; fill changed fields; click Save when commit:true
+    label: Fill the edit modal; click Save when commit:true
     recipe:
-      - id: open_edit
-        type: use_widget
-        args:
-          widget: salesforce.edit_button
-          op: invoke
-      - id: wait_modal
-        type: wait_for_element
-        args:
-          selector: records-record-edit-form
-          timeout_ms: 8000
-      - id: fill_each
+      - id: fill_fields
         type: fill_fields
         args:
           object: "{{inputs.object_type}}"
@@ -63,57 +47,19 @@ flavors:
           op: invoke
     outcomes:
       - action: ready_to_save
+        emits_when: pre_commit
         signal:
           type: selector_appears
           selector: button[name='SaveEdit']
           timeout_ms: 8000
       - action: updated
+        emits_when: post_commit
         signal:
-          any:
-            - { type: url_matches, pattern: "/lightning/r/.*/{{inputs.record_id}}/view" }
-            - { type: selector_disappears, selector: records-record-edit-form }
+          type: selector_disappears
+          selector: button[name='SaveEdit']
+          timeout_ms: 10000
         extract:
           record_id:
             from_input: record_id
-          success:
+          updated:
             literal: true
-  session_api:
-    requires_auth: session_cookie
-    label: PATCH /services/data/v62.0/sobjects/{object_type}/{record_id}
-    api: salesforce.update_record_session
-    outcomes:
-      - action: updated
-        signal:
-          type: network_response
-          url_pattern: "/services/data/v62.0/sobjects/.*/.*"
-          status: 204
-        extract:
-          record_id:
-            from_input: record_id
-          success:
-            literal: true
-  mcp:
-    requires_auth: mcp_server
-    label: Update via SF MCP server (dml_records update)
-    server: salesforce
-    tool: dml_records
-    inputs_map:
-      operation: update
-      objectName: "{{inputs.object_type}}"
-      records:
-        - Id: "{{inputs.record_id}}"
-          # The fields map gets spread into the record object at
-          # bridge time (runtime helper inputs_map_merge). For now
-          # the mcp bridge accepts the {{inputs.fields}} structure
-          # directly via fields_spread; heal will normalize.
-    outcomes:
-      - action: updated
-        signal:
-          type: network_response
-          url_pattern: "*/mcp/*"
-          status: 200
-        extract:
-          record_id:
-            from_input: record_id
-          success:
-            from_api_response: ".results[0].success"

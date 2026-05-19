@@ -1,0 +1,46 @@
+_meta:
+  name: manifests/outlook/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Outlook on the Web widget library. Single widget today: outlook.search (typeahead_search archetype) parameterized for the global search input. Authored 2026-05-17 to verify the trusted-CDP press_key fix.
+
+defaults_by_type: {}
+
+widgets:
+  outlook.search:
+    archetype: typeahead_search
+    selectors:
+      trigger:
+        - input[aria-label='Search for email, meetings, files and more.']
+        - input#topSearchInput
+      input:
+        - input[aria-label='Search for email, meetings, files and more.']
+        - input#topSearchInput
+    fill:
+      - id: open_search
+        type: click
+        args:
+          selector:
+            - input[aria-label='Search for email, meetings, files and more.']
+            - input#topSearchInput
+      - id: type_query
+        type: type_sequentially
+        args:
+          selector:
+            - input[aria-label='Search for email, meetings, files and more.']
+            - input#topSearchInput
+          value: "{{value}}"
+          delay_ms: 30
+      - id: submit_search
+        type: press_key
+        args:
+          key: Enter
+          selector:
+            - input[aria-label='Search for email, meetings, files and more.']
+        verify:
+          type: selector_appears
+          selector: "button[aria-label='Exit search']"
+          timeout_ms: 8000

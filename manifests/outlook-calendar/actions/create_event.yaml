@@ -1,0 +1,48 @@
+_meta:
+  name: manifests/outlook-calendar/actions/create_event.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Open the New event editor + fill title (caller closes). v0 ships
+    only the editor-open + fill path; actual Save (which sends invites
+    / creates the event) deferred to a separate dom_submit flavor.
+
+description: Open the New event editor, type a title.
+object: Event
+commits_changes: false
+depends_on_view: Calendar
+inputs:
+  title:
+    type: text
+    required: true
+    sample: Anvisio test event
+result:
+  ready_to_create: boolean
+flavors:
+  dom:
+    requires_auth: session_cookie
+    label: Open editor, type title, verify editor surfaced.
+    recipe:
+      - id: open_editor
+        type: use_widget
+        args:
+          widget: outlook-calendar.new_event_button
+          op: invoke
+      - id: fill_title
+        type: use_widget
+        args:
+          widget: outlook-calendar.event_title
+          op: fill
+          inputs:
+            value: "{{inputs.title}}"
+    outcomes:
+      - action: ready_to_create
+        signal:
+          type: selector_appears
+          selector: input[placeholder='Add title']
+          timeout_ms: 6000
+        extract:
+          ready_to_create:
+            literal: true

@@ -1,0 +1,88 @@
+_meta:
+  name: manifests/salesforce/schemas/Lead.yaml
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-16
+  description: |
+    Lead schema — standard SF Lead object fields (FirstName, LastName, Company, Email, Phone, LeadSource, Status). Used by create_record / update_record when object_type=Lead.
+  changelog:
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+
+description: >
+  A Salesforce Lead. Key prefix 00Q.
+
+  Required: LastName, Company.
+
+  Unqualified prospect — convertible to Account/Contact/Opportunity.
+  Live-probed.
+fields:
+  Id:
+    type: id
+    label: Lead ID
+    primary: true
+    readonly: true
+  LastName:
+    type: text
+    label: Last Name
+    required: true
+  Company:
+    type: text
+    label: Company
+    required: true
+  Salutation:
+    type: picklist
+    label: Salutation
+    optional: true
+  FirstName:
+    type: text
+    label: First Name
+    optional: true
+  Email:
+    type: text
+    label: Email
+    optional: true
+  Phone:
+    type: text
+    label: Phone
+    optional: true
+  MobilePhone:
+    type: text
+    label: Mobile Phone
+    optional: true
+  Title:
+    type: text
+    label: Title
+    optional: true
+  Industry:
+    type: picklist
+    label: Industry
+    optional: true
+  LeadSource:
+    type: picklist
+    label: Lead Source
+    optional: true
+  Status:
+    type: picklist
+    label: Status
+    optional: true
+  Rating:
+    type: picklist
+    label: Rating
+    optional: true
+  Website:
+    type: text
+    label: Website
+    optional: true
+  AnnualRevenue:
+    type: number
+    label: Annual Revenue
+    optional: true
+  NumberOfEmployees:
+    type: number
+    label: Employees
+    optional: true
+  Description:
+    type: textarea
+    label: Description
+    optional: true

@@ -1,0 +1,19 @@
+_meta:
+  name: manifests/outlook-calendar/workflows/create_event_smoke.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    End-to-end smoke workflow: creates a single event from the Calendar via the New event button + EventEditor. Validates the create_event action chain works against live Outlook Calendar.
+
+name: create_event_smoke
+description: |
+  End-to-end smoke: open New event editor + type a title.
+steps:
+  - id: open_and_title
+    action: create_event
+    flavor: dom
+    inputs:
+      title: "Anvisio onboarding smoke"
+    expected_outcome: ready_to_create

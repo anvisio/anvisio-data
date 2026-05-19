@@ -1,0 +1,21 @@
+_meta:
+  name: manifests/outlook/views/Inbox.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Inbox folder list view at outlook.live.com/mail/. Anchor for the global search affordance. Identifying selector is the top search input.
+
+name: Inbox
+description: Inbox folder list view at outlook.live.com/mail/
+entry:
+  url: https://outlook.live.com/mail/
+url_patterns:
+  - https://outlook\.live\.com/mail/
+  - https://outlook\.live\.com/mail/0/
+identifying_selectors:
+  - input[aria-label='Search for email, meetings, files and more.']
+  - input#topSearchInput
+widgets:
+  - outlook.search

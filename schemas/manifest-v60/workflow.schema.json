@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdn.jsdelivr.net/gh/anvisio/anvisio-data@release/schemas/manifest-v60/workflow.schema.json",
+  "$comment": {
+    "data_cdn_meta": {
+      "name": "schemas/manifest-v60/workflow.schema.json",
+      "version": "1.0.0",
+      "cdn_schema_version": "60.4.2",
+      "authored_by": "cd2k + claude",
+      "authored_at": "2026-05-16",
+      "description": "Per-workflow file shape for manifests/<saas>/workflows/<name>.yaml. Phase 4 of the 2026-05-16 four-cleanup refactor: replaces the legacy test_catalog.json (single bare array) with per-workflow files so a SaaS can have multiple independent workflows (opportunity_crud, lead_crud, account_crud) and the runner / wizard / validator address them by name.",
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled.",
+      "changelog": [
+        "1.0.0 (2026-05-16): initial. Workflow body = { name, description?, inputs?, steps[] }. Each step matches the Phase 3 TestCatalogEntry shape (id, action, flavor, commit?, inputs?, depends_on?, input_from?, expected_outcome?)."
+      ]
+    }
+  },
+  "title": "Spec 60 — manifests/<saas>/workflows/<name>.yaml body",
+  "description": "Validates the body of a per-workflow YAML file after the _meta block is stripped. Multiple workflows per SaaS live as sibling files in workflows/; the file basename is the workflow name (e.g. workflows/opportunity_crud.yaml → name: 'opportunity_crud').",
+  "type": "object",
+  "required": ["name", "steps"],
+  "additionalProperties": true,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Workflow identifier. MUST match the file basename (workflows/<name>.yaml).",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "description": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Workflow-level inputs (rare). Most steps source inputs from earlier steps via input_from."
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/Step" }
+    }
+  },
+  "$defs": {
+    "Step": {
+      "type": "object",
+      "required": ["id", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Step id. Unique within the workflow; referenced by depends_on / input_from of later steps."
+        },
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Action name in the manifest (matches actions/<verb>.yaml)."
+        },
+        "flavor": {
+          "type": "string",
+          "description": "Flavor name (typically 'dom' for the Phase 3 single-flavor shape; 'session_api' / 'oauth_api' / etc. for API alternatives)."
+        },
+        "commit": {
+          "type": "boolean",
+          "description": "Phase 3 commit mode for the single-`dom`-flavor shape. true = run full recipe + watch post_commit outcomes; false = skip commit-marked steps + watch pre_commit outcomes."
+        },
+        "inputs": {
+          "type": "object",
+          "description": "Step-level inputs. Override probe synthesis; yield to input_from values."
+        },
+        "depends_on": {
+          "oneOf": [
+            { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+            { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" } }
+          ],
+          "description": "Step ids of parents whose outcomes this step needs. The runner topo-sorts."
+        },
+        "input_from": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Map of THIS step's input field name → dotted path (`<parent_id>.outcomes.<extract_key>`) resolved against parent step's completed outcome.data."
+        },
+        "expected_outcome": {
+          "type": "string",
+          "description": "Optional. Asserts the runner observed this outcome.action."
+        }
+      }
+    }
+  }
+}

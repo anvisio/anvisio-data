@@ -1,50 +1,45 @@
 _meta:
   name: manifests/salesforce/actions/create_record.yaml
-  version: 0.1.0
-  cdn_schema_version: 70.0.0
+  version: 1.0.0
+  cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-16
   description: |
-    create_record atom — parameterized over object_type. Single
-    canonical action for creating Opportunity / Lead / Contact /
-    Account / etc. Three flavors: browser (DOM-driven via Lightning
-    new-record modal), session_api (Aura REST POST), mcp (the
-    KirtiJha SF MCP `dml_records` tool with operation: insert).
-    Writes prefer browser > session_api > mcp per spec 70 §7.
+    create_record action — generic record creation parameterized by object_type. Navigates to /lightning/o/{object_type}/new, fills the form via schema-driven widget bindings, clicks Save.
   changelog:
-    - "0.1.0 (2026-05-19): initial v70 seed (gmail-pattern translated to SF meta-model)."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-description: >
-  Create a new SF record of any standard or custom object type. Browser flavor
-  opens the new-record modal on /lightning/o/{object_type}/list, fills the form
-  from the `fields` map, and clicks Save when commit:true. session_api / mcp
-  flavors call the REST / MCP endpoints directly.
+description: Create a new Opportunity / Account / Lead record via
+  /lightning/o/{object_type}/new.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
 commits_changes: true
 depends_on_view: RecordNewModal
-mcp_tool: salesforce.dml_records
 inputs:
   object_type:
     type: text
     required: true
-    description: e.g. Opportunity, Lead, Contact, Account, Task, Note, or a custom__c
+    sample: Opportunity
   fields:
     type: object
     required: true
-    description: |
-      Map of API field name → value. Browser flavor uses fill_fields
-      to resolve each field's widget from schemas/<object_type>.yaml.
+    sample:
+      Name: Anvisio Onboarding Test Opp
+      StageName: Prospecting
+      CloseDate: 12/31/2026
 result:
-  record_id: id
+  record_id: text
   record_name: text
-  success: boolean
+  created: boolean
 flavors:
-  browser:
+  # Phase 3 (2026-05-16): single `dom` flavor with commit-marked
+  # last-step. commit:false fires `ready_to_save` (form is filled,
+  # SaveEdit button is visible); commit:true runs the full recipe and
+  # fires `created` (URL settles on /lightning/r/<id>/view).
+  dom:
     requires_auth: session_cookie
-    label: Fill new-record modal; click Save when commit:true
+    label: Fill the new-record modal; click Save when commit:true
     recipe:
-      - id: fill_each
+      - id: fill_fields
         type: fill_fields
         args:
           object: "{{inputs.object_type}}"
@@ -57,53 +52,22 @@ flavors:
           op: invoke
     outcomes:
       - action: ready_to_save
+        emits_when: pre_commit
         signal:
           type: selector_appears
           selector: button[name='SaveEdit']
           timeout_ms: 8000
       - action: created
+        emits_when: post_commit
         signal:
           type: url_matches
-          pattern: "/lightning/r/.*/.*/view"
+          pattern: /lightning/r/(?:[A-Za-z]+/)?(?<record_id>[A-Za-z0-9]{15,18})/view
         extract:
           record_id:
             from_url_match: record_id
+          object_type:
+            from_input: object_type
           record_name:
             from_input: fields.Name
-          success:
+          created:
             literal: true
-  session_api:
-    requires_auth: session_cookie
-    label: POST /services/data/v62.0/sobjects/{object_type}
-    api: salesforce.create_record_session
-    outcomes:
-      - action: created
-        signal:
-          type: network_response
-          url_pattern: "/services/data/v62.0/sobjects/.*"
-          status: 201
-        extract:
-          record_id:
-            from_api_response: ".id"
-          success:
-            from_api_response: ".success"
-  mcp:
-    requires_auth: mcp_server
-    label: Create via SF MCP server (dml_records insert)
-    server: salesforce
-    tool: dml_records
-    inputs_map:
-      operation: insert
-      objectName: "{{inputs.object_type}}"
-      records: ["{{inputs.fields}}"]
-    outcomes:
-      - action: created
-        signal:
-          type: network_response
-          url_pattern: "*/mcp/*"
-          status: 200
-        extract:
-          record_id:
-            from_api_response: ".results[0].id"
-          success:
-            from_api_response: ".results[0].success"

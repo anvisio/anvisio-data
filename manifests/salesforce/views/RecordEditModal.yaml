@@ -1,20 +1,20 @@
 _meta:
-  name: manifests/salesforce/views/RecordNewModal.yaml
+  name: manifests/salesforce/views/RecordEditModal.yaml
   version: 1.0.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
-    RecordNewModal view — new-record modal opened from the object's list view + 'New' button. URL deeplink /lightning/o/{object_type}/new.
+    RecordEditModal view — record edit modal opened from a record view. URL deeplink /lightning/r/{object_type}/{record_id}/edit (Shape A per propose v7.5).
   changelog:
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-name: RecordNewModal
+name: RecordEditModal
 
 entry:
-  url: "{instance.origin}/lightning/o/{object_type}/new"
+  url: "{instance.origin}/lightning/r/{object_type}/{record_id}/edit"
 landmark_probe:
-  selector: records-record-layout-item, div[role='dialog'][aria-label^='New ']
+  selector: records-record-layout-item, div[role='dialog'][aria-label^='Edit ']
   timeout_ms: 15000
 verify:
   - type: selector_appears
@@ -27,9 +27,11 @@ placeholders:
   object_type:
     type: text
     sample: Opportunity
+  record_id:
+    type: id
+    sample: 006dM00000fJSAMPLE
 widgets:
   - salesforce.save_button
-  - salesforce.cancel_button
 exit:
   - id: exit_via_navigate
     type: navigate

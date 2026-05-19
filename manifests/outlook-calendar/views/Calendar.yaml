@@ -1,0 +1,21 @@
+_meta:
+  name: manifests/outlook-calendar/views/Calendar.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-17
+  description: |
+    Calendar grid view (default week). URL pattern covers week/day/month/workweek. Anchor for the 'New event' affordance.
+
+name: Calendar
+description: Calendar grid view (default week).
+entry:
+  url: https://outlook.live.com/calendar/view/week
+url_patterns:
+  - https://outlook\\.live\\.com/calendar/view/(week|day|month|workweek)
+  - https://outlook\\.live\\.com/calendar/
+identifying_selectors:
+  - button[aria-label='New event']
+  - "[role='grid']"
+widgets:
+  - outlook-calendar.new_event_button
