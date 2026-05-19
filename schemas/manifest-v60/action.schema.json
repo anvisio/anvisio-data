@@ -4,11 +4,11 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/action.schema.json",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "cdn_schema_version": "70.0.0",
       "authored_by": "cd2k + claude",
       "authored_at": "2026-05-19",
-      "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Spec 70 update: accepts optional `mcp_tool:` pointer at the action level; per-flavor `recipe` is required ONLY for the `browser` flavor — API flavors (session_api / oauth_api / byok_api) use `api:` and the `mcp` flavor uses `server:` + `tool:` instead. Runtime validator enforces step-type vocabulary inside recipe[].",
+      "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Spec 70 update: accepts optional `mcp_tool:` pointer at the action level; per-flavor `recipe` is required ONLY for the `browser` flavor — API flavors (session_api / oauth_api / byok_api) use `api:` reference OR an inline `call_platform_api` step within `recipe`; the `mcp` flavor uses `server:` + `tool:` instead. Runtime validator enforces step-type vocabulary inside recipe[] and the ApiDef shape inside `call_platform_api` args (kind: aura | gapi | rest_session as of 1.2.0).",
       "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled."
     }
   },

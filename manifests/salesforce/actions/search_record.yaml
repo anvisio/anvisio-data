@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 2.0.0
+  version: 2.1.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
@@ -8,12 +8,14 @@ _meta:
     search_record atom — global SF search (SOSL across multiple
     sObjects). Spec 70: three flavors. `browser` navigates to
     /lightning/search/?q= (live-verified, fastest browser path).
-    `session_api` dispatches an Aura SOSL call from MAIN-world via
-    call_platform_api (session cookie + CSRF auto-extracted; no DOM
-    drive). `mcp` calls gmail.search_all. Reads prefer
-    session_api > mcp > browser per spec 70 §7. The session_api
-    flavor is the search_and_summarize demo's transport.
+    `session_api` dispatches REST parameterizedSearch from MAIN-world
+    via call_platform_api kind: rest_session (session cookie auths the
+    fetch; no Aura CSRF dance, no descriptor lottery). `mcp` calls
+    salesforce.search_all. Reads prefer session_api > mcp > browser
+    per spec 70 §7. The session_api flavor is the search_and_summarize
+    demo's transport.
   changelog:
+    - "2.1.0 (2026-05-19): swap session_api flavor from Aura `RecordGlobalActionListController/ACTION$globalSearch` (descriptor lottery — every search descriptor returned `aura: non-success` 2026-05-19 evening) to REST `parameterizedSearch` via the new `kind: rest_session` ApiDef transport. Standard REST endpoint, no per-build descriptor churn, cross-sObject SOSL in user's default scope. Unblocks the search_and_summarize demo. Requires plugin with platform-api.ts rest_session branch."
     - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api (Aura) + mcp flavors. Live-verified browser nav carries over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
@@ -55,30 +57,26 @@ flavors:
             from_input: query
   session_api:
     requires_auth: session_cookie
-    label: SF Aura SOSL search via MAIN-world (session cookie + CSRF)
+    label: SF SOSL search via REST parameterizedSearch (session cookie)
     recipe:
-      - id: aura_search
+      - id: rest_search
         type: call_platform_api
         args:
           api_def:
-            kind: aura
-            descriptor: "aura://RecordGlobalActionListController/ACTION$globalSearch"
-            extract_path: "actions[0].returnValue.searchResultGroups"
+            kind: rest_session
+            method: GET
+            url_pattern: "{instance.origin}/services/data/v62.0/parameterizedSearch?q={q}"
+            extract_path: "searchRecords"
           args:
-            term: "{{inputs.query}}"
-            scopeOrder: "[]"
-            additionalFields: "[]"
-            groupId: ""
-            sourceContext: "GLOBAL"
-            maxResults: 25
+            q: "{{inputs.query}}"
     outcomes:
       - action: searched
         signal:
           type: network_response
-          pattern: "/aura\\?.*aura\\.token="
+          pattern: "/services/data/v[0-9]+\\.[0-9]+/parameterizedSearch"
         extract:
           matches:
-            from_step: aura_search
+            from_step: rest_search
           searched:
             literal: true
   mcp:
