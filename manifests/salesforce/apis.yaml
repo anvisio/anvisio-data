@@ -1,0 +1,108 @@
+_meta:
+  name: manifests/salesforce/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Salesforce session-API + Aura controller endpoints. The session_api
+    flavor on actions references `salesforce.<verb>_session` entries
+    below. Aura controller descriptors are stubbed with the canonical
+    pattern; specific descriptors heal at first use per org.
+  changelog:
+    - "0.1.0 (2026-05-19): initial seed for v70 SF manifest."
+
+apis:
+  # ── SF REST describe / SOQL / DML (session_cookie auth) ───────────
+  describe_session:
+    transport: rest
+    method: GET
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/sobjects/{object_type}/describe"
+    auth: session_cookie
+    request_shape: {}
+    response_shape:
+      type: object
+      properties:
+        name: { type: string }
+        label: { type: string }
+        fields: { type: array }
+
+  query_records_session:
+    transport: rest
+    method: GET
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/query/?q={soql}"
+    auth: session_cookie
+    request_shape:
+      type: object
+      properties:
+        soql: { type: string, description: SOQL query }
+    response_shape:
+      type: object
+      properties:
+        records:   { type: array }
+        totalSize: { type: integer }
+        done:      { type: boolean }
+
+  create_record_session:
+    transport: rest
+    method: POST
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/sobjects/{object_type}"
+    auth: session_cookie
+    request_shape:
+      type: object
+      additionalProperties: true
+    response_shape:
+      type: object
+      properties:
+        id:      { type: string }
+        success: { type: boolean }
+
+  update_record_session:
+    transport: rest
+    method: PATCH
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/sobjects/{object_type}/{record_id}"
+    auth: session_cookie
+    request_shape:
+      type: object
+      additionalProperties: true
+    response_shape:
+      type: "null"
+
+  delete_record_session:
+    transport: rest
+    method: DELETE
+    endpoint_pattern: "{instance.origin}/services/data/v62.0/sobjects/{object_type}/{record_id}"
+    auth: session_cookie
+    request_shape: {}
+    response_shape:
+      type: "null"
+
+  # ── Aura controller (session_cookie + CSRF token, MAIN-world only) ─
+  aura_controller:
+    transport: aura
+    method: POST
+    endpoint_pattern: "{instance.origin}/aura?aura.token={csrf}"
+    auth: session_cookie
+    request_shape:
+      type: object
+      properties:
+        message:
+          type: object
+          properties:
+            actions:
+              type: array
+              items:
+                type: object
+                properties:
+                  descriptor: { type: string, description: e.g. serviceComponent://... }
+                  params:     { type: object, additionalProperties: true }
+    response_shape:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            type: object
+            properties:
+              state:        { type: string, enum: [SUCCESS, ERROR] }
+              returnValue:  { description: per-controller response payload }

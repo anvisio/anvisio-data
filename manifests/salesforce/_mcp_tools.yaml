@@ -1,0 +1,128 @@
+_meta:
+  name: manifests/salesforce/_mcp_tools.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Salesforce MCP tool catalog. Per spec 70 §3 — canonical
+    atom-action input/output schemas for SF CRUD verbs. The
+    SF MCP ecosystem has multiple servers:
+
+      - `salesforcecli/mcp` (Salesforce official; CRUD via run_soql_query
+        only — too thin for our atoms).
+      - `KirtiJha/salesforce-mcp-server` (community; ~59 tools incl.
+        explicit CRUD — what this catalog mirrors).
+      - `tsmztech/mcp-server-salesforce`, `advancedcommunities/...`,
+        `smn2gnt/MCP-Salesforce` (community alternatives).
+
+    Sourced from KirtiJha/salesforce-mcp-server for the CRUD surface;
+    keep the catalog tool names aligned with that server so a
+    drop-in MCP client can call them directly. Anvisio's `mcp_tool:`
+    pointer in each action carries the full `<server>.<tool>` id.
+  changelog:
+    - "0.1.0 (2026-05-19): initial seed from KirtiJha/salesforce-mcp-server (CRUD surface)."
+
+server:
+  name: salesforce-mcp
+  source_url: https://github.com/KirtiJha/salesforce-mcp-server
+  transport: stdio
+  fetched_at: 2026-05-19T00:00:00Z
+
+tools:
+  # ── CRUD primitives ────────────────────────────────────────────────
+  - name: query_records
+    description: Query records with relationship support (parent + child fields). Wraps SOQL but returns structured records.
+    input_schema:
+      type: object
+      required: [objectName, fields]
+      properties:
+        objectName: { type: string, description: e.g. Opportunity, Account, Contact }
+        fields:     { type: array, items: { type: string }, description: SOQL field list }
+        where:      { type: string, description: SOQL WHERE clause (without the keyword) }
+        orderBy:    { type: string, description: SOQL ORDER BY clause (without the keyword) }
+        limit:      { type: integer, minimum: 1, maximum: 2000 }
+    output_schema:
+      type: object
+      properties:
+        records:    { type: array, items: { type: object } }
+        totalSize:  { type: integer }
+        done:       { type: boolean }
+
+  - name: aggregate_query
+    description: Aggregate query (GROUP BY + COUNT/SUM/AVG/MIN/MAX).
+    input_schema:
+      type: object
+      required: [objectName, aggregations]
+      properties:
+        objectName:   { type: string }
+        aggregations: { type: array, items: { type: string }, description: e.g. ["COUNT(Id)", "SUM(Amount)"] }
+        groupBy:      { type: array, items: { type: string } }
+        where:        { type: string }
+        limit:        { type: integer }
+    output_schema:
+      type: object
+      properties:
+        groups: { type: array, items: { type: object } }
+
+  - name: dml_records
+    description: Insert / update / delete / upsert records on one sObject. The single canonical write atom.
+    input_schema:
+      type: object
+      required: [operation, objectName, records]
+      properties:
+        operation:  { type: string, enum: [insert, update, delete, upsert] }
+        objectName: { type: string }
+        records:    { type: array, items: { type: object }, description: each record is a fields map; for update/delete include Id }
+        externalIdField: { type: string, description: required for upsert; the external id key }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object, properties: { id: { type: string }, success: { type: boolean }, errors: { type: array } } } }
+
+  - name: search_all
+    description: SOSL search across multiple objects (global search).
+    input_schema:
+      type: object
+      required: [searchText]
+      properties:
+        searchText:  { type: string, description: phrase or word(s) }
+        objectNames: { type: array, items: { type: string }, description: limit search to these sObjects }
+        fields:      { type: array, items: { type: string }, description: optional fields to return per object }
+    output_schema:
+      type: object
+      properties:
+        matches: { type: array, items: { type: object, properties: { objectName: { type: string }, records: { type: array } } } }
+
+  - name: bulk_operations
+    description: Bulk DML for large datasets (thousands of records). Same shape as dml_records but routes through Bulk API.
+    input_schema:
+      type: object
+      required: [operation, objectName, records]
+      properties:
+        operation:  { type: string, enum: [insert, update, delete, upsert] }
+        objectName: { type: string }
+        records:    { type: array, items: { type: object } }
+        externalIdField: { type: string }
+    output_schema:
+      type: object
+      properties:
+        jobId:   { type: string }
+        status:  { type: string }
+        results: { type: array, items: { type: object } }
+
+  - name: manage_duplicates
+    description: Find duplicate records by matching rule + optionally merge them.
+    input_schema:
+      type: object
+      required: [objectName, matchingRule]
+      properties:
+        objectName:   { type: string }
+        matchingRule: { type: string }
+        merge:        { type: boolean, default: false }
+        mergeMapping: { type: object, description: per-field winner mapping when merge=true }
+    output_schema:
+      type: object
+      properties:
+        duplicates: { type: array, items: { type: object } }
+        merged:     { type: array, items: { type: object } }

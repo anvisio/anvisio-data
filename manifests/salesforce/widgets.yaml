@@ -1,0 +1,32 @@
+_meta:
+  name: manifests/salesforce/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Per-org SF widgets — minimal extends-stub of the shared
+    `widget-libraries/lightning.widgets.yaml` library. Every SF
+    Lightning org reuses the same 9-widget archetype set; per-org
+    overrides go below `widgets:` when a specific org's customized
+    Lightning skin deviates from the standard selectors.
+  changelog:
+    - "0.1.0 (2026-05-19): initial v70 seed; extends-only."
+
+extends: widget-libraries/lightning.widgets.yaml
+
+# Per-org overrides go here. The single override below is a
+# placeholder until a real per-org drift surfaces; it duplicates the
+# library's `salesforce.save_button` so the schema's `widgets`
+# minProperties:1 constraint is satisfied. Heal will overwrite or add
+# entries as needed on first onboarding run.
+widgets:
+  salesforce.save_button:
+    archetype: modal_button
+    invoke:
+      - id: click
+        type: click
+        args:
+          selector:
+            - button[name='SaveEdit']
+            - button.slds-button.slds-button_brand[name='SaveEdit']

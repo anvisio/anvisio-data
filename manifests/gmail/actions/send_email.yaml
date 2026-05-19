@@ -1,17 +1,19 @@
 _meta:
   name: manifests/gmail/actions/send_email.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    send_email action — compose and send a new email. Wizard opens
-    compose via gmail.compose_button on Inbox before invoking. Two
-    flavors: dom_no_submit (fill compose only; ready_to_send signal)
-    and dom_submit (fill + click Send; network_response signal). Phase
-    6 validated dom_no_submit.
+    send_email atom — compose and send a new email. Wizard opens
+    compose via gmail.compose_button on Inbox before invoking. Spec 70:
+    single `browser` flavor with commit-marked send step + an MCP
+    flavor pointing at the gmail.send_email MCP tool for invisible
+    sends. Transport priority (commits_changes:true → browser > mcp).
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool pointer + mcp flavor."
+    - "0.2.0 (2026-05-16): collapse dom_no_submit + dom_submit into single `dom` flavor with commit:true on send step."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
   Compose and send a new email to one or more recipients with subject and body,
@@ -21,41 +23,22 @@ description: >
 object: Message
 commits_changes: true
 depends_on_view: ComposePanel
+mcp_tool: gmail.send_email
 inputs:
   fields:
     type: object
     required: true
     description: |
-      Subset of Message fields. Required: To, Subject, Body. Optional: Cc, Bcc.
+      Subset of Message fields. Required: To, Subject, Body.
+      Optional: Cc, Bcc, ThreadId (when replying), InReplyTo.
 result:
   sent: boolean
   message_id: text
+  thread_id: text
 flavors:
-  dom_no_submit:
+  browser:
     requires_auth: session_cookie
-    label: Fill compose; you click Send
-    recipe:
-      - id: fill
-        type: fill_fields
-        args:
-          object: Message
-          from: "{{inputs.fields}}"
-    outcomes:
-      - action: ready_to_send
-        signal:
-          type: element_value_equals
-          selector: input[name='subjectbox']
-          value: "{{inputs.fields.Subject}}"
-      - action: sent
-        signal:
-          type: click_observed
-          widget: gmail.compose_send_button
-        extract:
-          sent:
-            literal: true
-  dom_submit:
-    requires_auth: session_cookie
-    label: Fill compose + click Send
+    label: Fill compose; click Send when commit:true
     recipe:
       - id: fill
         type: fill_fields
@@ -64,14 +47,38 @@ flavors:
           from: "{{inputs.fields}}"
       - id: send
         type: use_widget
+        commit: true
         args:
           widget: gmail.compose_send_button
           op: invoke
     outcomes:
+      - action: ready_to_send
+        signal:
+          type: element_value_equals
+          selector: input[name='subjectbox']
+          value: "{{inputs.fields.Subject}}"
       - action: sent
         signal:
           type: network_response
           pattern: POST .*/mail/u/0/.*sendmail
         extract:
+          sent:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Send via Gmail MCP server
+    server: gmail
+    tool: send_email
+    outcomes:
+      - action: sent
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          message_id:
+            from_api_response: ".message_id"
+          thread_id:
+            from_api_response: ".thread_id"
           sent:
             literal: true

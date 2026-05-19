@@ -1,35 +1,44 @@
 _meta:
   name: manifests/gmail/actions/search_email.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-19
   description: |
-    search_email action — search the mailbox using Gmail's search
-    syntax. Read-only; URL transitions to #search/<query>. Works from
-    any view. Phase 5 healed search_input to use click-submit-button
-    instead of press Enter (typeahead popup ate the keystroke).
+    search_email atom — find messages via Gmail's search-query syntax
+    (from:, subject:, has:attachment, label:...). Read-only; spec 70
+    shape (`browser` flavor + `mcp` flavor pointing at gmail.search_emails).
+    Reads prefer `mcp > browser` per spec 70 §7.
   changelog:
-    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.2.0 (2026-05-16): rename dom_submit → dom."
+    - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
   Search the mailbox using Gmail's search query syntax (from:, subject:,
-  has:attachment, etc.). The user enters a query into the top search bar and the
-  URL transitions to #search/<query>. Works from any landing view;
-  depends_on_view 'any' because the search input is in the global header.
+  has:attachment, label:...). The browser flavor types the query into the
+  global search bar and waits for the URL to transition to #search/<query>.
+  The mcp flavor calls gmail.search_emails for an invisible API search.
 object: Thread
 commits_changes: false
 depends_on_view: any
+mcp_tool: gmail.search_emails
 inputs:
   query:
     type: text
     required: true
+  maxResults:
+    type: integer
+    required: false
+    description: |
+      Only consulted by the mcp flavor. Caps the result list size.
 result:
   searched: boolean
+  message_ids: list<id>
 flavors:
-  dom_submit:
+  browser:
     requires_auth: session_cookie
-    label: Type query and submit
+    label: Type query into search bar; wait for URL transition
     recipe:
       - id: run_search
         type: use_widget
@@ -44,5 +53,21 @@ flavors:
           type: url_matches
           pattern: "#search/.*"
         extract:
+          searched:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Search via Gmail MCP server
+    server: gmail
+    tool: search_emails
+    outcomes:
+      - action: searched
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          message_ids:
+            from_api_response: ".messages[*].id"
           searched:
             literal: true

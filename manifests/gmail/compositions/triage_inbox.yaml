@@ -1,0 +1,50 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: triage-inbox
+  version: '1.0.0'
+  title: Triage recent inbox
+  summary: |
+    Search the inbox for messages from the last 24h, read each, judge
+    whether it needs a reply, and synthesize a short overview the user
+    can act on. The "what's important in my inbox?" pattern that pairs
+    well with a morning standup.
+
+do:
+  - recent:
+      call: gmail.atom.search_email
+      with:
+        query: 'newer_than:1d -category:promotions -category:social'
+        maxResults: 10
+
+  - perMessage:
+      for:
+        each: msg
+        in: '${ .recent.message_ids }'
+      do:
+        - details:
+            call: gmail.atom.read_email
+            with:
+              message_id: '${ $msg }'
+
+        - importance:
+            judge: |
+              Given the email's subject, sender, and first paragraph,
+              classify importance as "needs_reply" (direct question or
+              action item for the user), "fyi" (informational only), or
+              "skip" (noise, marketing, list-server traffic).
+            options: [needs_reply, fyi, skip]
+            with:
+              subject: '${ .details.Subject }'
+              from:    '${ .details.From }'
+              body:    '${ .details.Body }'
+
+  - summary:
+      synthesize: |
+        Produce a 3-bullet overview of the inbox triage:
+        (1) the count of needs_reply / fyi / skip,
+        (2) the top 3 needs_reply subjects + senders,
+        (3) anything urgent (deadlines, escalations) the user should
+        handle first.
+      with:
+        triaged: '${ .perMessage }'

@@ -1,0 +1,46 @@
+_meta:
+  name: manifests/salesforce/views/RecordNewModal.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-19
+  description: |
+    Modal opened by clicking the "New" button on RecordListView. Hosts
+    the create form for the named object. The Save button is the
+    commit-marked step in the create_record atom recipe.
+  changelog:
+    - "0.1.0 (2026-05-19): initial v70 seed."
+
+name: RecordNewModal
+description: Modal for creating a new SF record of the named object_type.
+entry:
+  depends_on_view: RecordListView
+  recipe:
+    - id: click_new
+      type: use_widget
+      args:
+        widget: salesforce.new_button
+        op: invoke
+    - id: wait_modal
+      type: wait_for_element
+      args:
+        selector: records-record-layout-event-form, records-record-edit-form
+        timeout_ms: 8000
+url_patterns:
+  - "{instance.origin}/lightning/o/.*/list.*"
+identifying_selectors:
+  - records-record-edit-form
+  - records-record-layout-event-form
+landmark_probe:
+  selector: records-record-edit-form
+  timeout_ms: 8000
+placeholders:
+  object_type:
+    type: text
+    sample: Opportunity
+widgets:
+  - salesforce.save_button
+  - salesforce.cancel_button
+  - salesforce.text
+  - salesforce.picklist
+  - salesforce.lookup
