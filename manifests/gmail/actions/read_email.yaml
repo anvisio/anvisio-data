@@ -1,24 +1,26 @@
 _meta:
   name: manifests/gmail/actions/read_email.yaml
-  version: 0.3.0
+  version: 0.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    read_email atom — return Subject/From/Body of the open thread.
-    Read-only; spec 70 shape (`browser` flavor + `mcp` flavor pointing
-    at gmail.read_email). Reads prefer `mcp > browser` per spec 70 §7
-    transport priority (faster + invisible via API).
+    read_email atom — return Subject/From/Body of a message. A `browser`
+    flavor scrapes the open ThreadView; an `oauth_api` flavor fetches a
+    message by id via the Gmail REST users.messages.get endpoint. Reads
+    prefer oauth_api > browser per spec 70 §7.
   changelog:
+    - "0.4.0 (2026-05-19): replace the unbuildable `mcp` flavor with an `oauth_api` flavor (inline Gmail REST request, reads a message by id); the runtime oauth_api transport executes it."
     - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): collapse legacy two-flavor read into single `dom` flavor."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Read the currently open thread, returning subject, from, and body of the
-  latest message. The browser flavor scrapes the open ThreadView. The mcp
-  flavor takes a message_id and fetches via the Gmail MCP read_email tool —
-  no thread navigation required.
+  Read a message, returning subject, from, and body. The browser flavor
+  scrapes whatever thread is open in the ThreadView. The oauth_api flavor
+  takes a message_id and fetches it via the Gmail REST API — no thread
+  navigation; Subject/From come from the message headers and Body is the
+  Gmail snippet preview.
 object: Thread
 commits_changes: false
 depends_on_view: ThreadView
@@ -26,10 +28,10 @@ mcp_tool: gmail.read_email
 inputs:
   message_id:
     type: text
-    required: false
+    required: true
     description: |
-      Only required for the mcp flavor. The browser flavor reads
-      whatever thread is currently open and ignores this field.
+      Gmail message id. Required by the oauth_api flavor (it fetches that
+      message). The browser flavor ignores it and reads the open thread.
 result:
   Subject: text
   From: email
@@ -62,21 +64,24 @@ flavors:
           Body:
             from_step: read_thread
             path: fields.Body
-  mcp:
-    requires_auth: mcp_server
-    label: Fetch via Gmail MCP server
-    server: gmail
-    tool: read_email
+  oauth_api:
+    requires_auth: oauth_token
+    label: Fetch a message by id via the Gmail REST API (users.messages.get)
+    request:
+      provider: google
+      method: GET
+      url: https://gmail.googleapis.com/gmail/v1/users/me/messages/{{inputs.message_id}}
+      query:
+        format: metadata
     outcomes:
       - action: read
-        signal:
-          type: network_response
-          url_pattern: "*/mcp/*"
-          status: 200
         extract:
           Subject:
-            from_api_response: ".subject"
+            from_api_response: true
+            path: payload.headers[name=Subject].value
           From:
-            from_api_response: ".from"
+            from_api_response: true
+            path: payload.headers[name=From].value
           Body:
-            from_api_response: ".body"
+            from_api_response: true
+            path: snippet

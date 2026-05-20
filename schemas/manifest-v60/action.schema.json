@@ -4,11 +4,11 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/action.schema.json",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "cdn_schema_version": "70.0.0",
       "authored_by": "cd2k + claude",
       "authored_at": "2026-05-19",
-      "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Spec 70 update: accepts optional `mcp_tool:` pointer at the action level; per-flavor `recipe` is required ONLY for the `browser` flavor — API flavors (session_api / oauth_api / byok_api) use `api:` reference OR an inline `call_platform_api` step within `recipe`; the `mcp` flavor uses `server:` + `tool:` instead. Runtime validator enforces step-type vocabulary inside recipe[] and the ApiDef shape inside `call_platform_api` args (kind: aura | gapi | rest_session as of 1.2.0).",
+      "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Spec 70 update: accepts optional `mcp_tool:` pointer at the action level; per-flavor `recipe` is required ONLY for the `browser` flavor — the `oauth_api` flavor declares an inline `request:` block (provider/method/url/query) issued by the runtime oauth_api transport; session_api / byok_api flavors use an `api:` reference; the `mcp` flavor uses `server:` + `tool:`. Runtime validator enforces step-type vocabulary inside recipe[] and the ApiDef shape inside `call_platform_api` args (kind: aura | gapi | rest_session as of 1.2.0).",
       "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled."
     }
   },
@@ -37,12 +37,12 @@
     },
     "depends_on_view": {
       "type": "string",
-      "description": "View the user must be in before this action can run (e.g. ComposePanel for send_email)."
+      "description": "View the user must be in before this action can run (e.g. ComposePanel for send_email). Pre-navigation runs only for the `browser` flavor; API flavors skip it."
     },
     "mcp_tool": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]*\\.[a-z][a-z0-9_-]*$",
-      "description": "Optional pointer to the matching entry in MCP_TOOL_CATALOG (_mcp_tools.yaml). Format: <server>.<tool_name>. Per spec 70 §3, atom actions whose verb maps to an MCP tool carry this pointer so the bridge can route the `mcp` flavor without a separate lookup."
+      "description": "Optional pointer to the matching entry in MCP_TOOL_CATALOG (_mcp_tools.yaml). Format: <server>.<tool_name>. Per spec 70 §3, atom actions whose verb maps to an MCP tool carry this pointer as authoring provenance."
     },
     "inputs": {
       "type": "object",
@@ -54,7 +54,7 @@
     },
     "flavors": {
       "type": "object",
-      "description": "Map of flavor id (browser, session_api, oauth_api, byok_api, mcp) → flavor definition. At least one flavor required. The `browser` flavor requires `recipe`; API flavors require `api:`; the `mcp` flavor requires `server:` + `tool:`.",
+      "description": "Map of flavor id (browser, oauth_api, session_api, byok_api, mcp) → flavor definition. At least one flavor required. The `browser` flavor requires `recipe`; the `oauth_api` flavor requires `request:`; session_api / byok_api require `api:`; the `mcp` flavor requires `server:` + `tool:`.",
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
@@ -68,7 +68,12 @@
           },
           "api": {
             "type": "string",
-            "description": "Reference to an apis.yaml entry (used by session_api / oauth_api / byok_api flavors)."
+            "description": "Reference to an apis.yaml entry (used by session_api / byok_api flavors)."
+          },
+          "request": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Inline OAuth-bearer REST call (used by the oauth_api flavor). Issued by the runtime oauth_api transport. Shape: { provider, method, url, query? }."
           },
           "server": {
             "type": "string",
@@ -90,7 +95,8 @@
         },
         "oneOf": [
           { "required": ["recipe"], "description": "browser flavor: DOM recipe." },
-          { "required": ["api"], "description": "session_api / oauth_api / byok_api flavor: references apis.yaml." },
+          { "required": ["request"], "description": "oauth_api flavor: inline OAuth-bearer REST request." },
+          { "required": ["api"], "description": "session_api / byok_api flavor: references apis.yaml." },
           { "required": ["server", "tool"], "description": "mcp flavor: references _mcp_tools.yaml." }
         ]
       }
