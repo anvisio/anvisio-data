@@ -1,6 +1,6 @@
 _meta:
   name: manifests/gmail/views/ThreadView.yaml
-  version: 0.1.0
+  version: 0.2.0
   cdn_schema_version: 60.3.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
@@ -10,6 +10,7 @@ _meta:
     Entry chains via Inbox + first-row click; Phase 4 validated.
   changelog:
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
+    - "0.2.0 (2026-05-21): add entry.url deep-link template + message_id placeholder so workflows can build per-message links (WorkflowFeed item_link)."
 
 name: ThreadView
 description: Opened email conversation showing message contents and reply
@@ -19,6 +20,10 @@ description: Opened email conversation showing message contents and reply
   production wizards may seek a specific row before invoking actions on this
   view.
 entry:
+  # url: the buildable per-message deep link — used by production wizards
+  # (the WorkflowFeed item_link). depends_on_view + recipe: how validate-views
+  # reaches the view at onboarding time, when no message_id is available.
+  url: https://mail.google.com/mail/u/0/#inbox/{message_id}
   depends_on_view: Inbox
   recipe:
     - id: open_first_row
@@ -32,6 +37,10 @@ entry:
       args:
         selector: h2.hP
         timeout_ms: 8000
+placeholders:
+  message_id:
+    type: id
+    sample: 18f2a1b3c4d5e6f7
 url_patterns:
   - https://mail.google.com/mail/u/0/#inbox/.+
   - https://mail.google.com/mail/u/0/#search/.*/.+
