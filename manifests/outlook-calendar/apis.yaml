@@ -1,10 +1,18 @@
 _meta:
   name: manifests/outlook-calendar/apis.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Outlook Calendar API surface placeholder. outlook.live.com/calendar is gapi-style but credentials don't flow through; verbs are DOM-driven today.
+    Outlook Calendar server-side API endpoints. Empty for the browser-DOM-first
+    integration — OWA calendar runs via the cookie-authed outlook.live.com page.
+    A future oauth_api flavor would call Microsoft Graph calendar endpoints
+    (GET /me/calendarView, GET/POST /me/events), but consumer outlook.live.com
+    (MSA) accounts have limited Graph OAuth support, so the browser flavor is
+    the shipping path. Graph endpoints land here with confidence: low +
+    verified_at: null once live-verified.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new. Browser-DOM-first — apis empty by design; Graph endpoints documented in _mcp_tools.yaml as the oauth_api follow-up."
 
 apis: {}

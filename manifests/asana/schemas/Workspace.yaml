@@ -1,0 +1,40 @@
+_meta:
+  name: manifests/asana/schemas/Workspace.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana Workspace (and Organization) property schema.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[gid] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Workspace
+object_type_id: workspace
+mcp_object_type: workspace
+primary_key: [gid]
+
+properties:
+  gid:
+    label: Workspace ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    sample: "1213743270865179"
+  name:
+    label: Name
+    type: string
+    field_type: text
+  is_organization:
+    label: Is Organization
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+    description: "Organizations have teams; workspaces don't. Affects whether projects can be team-scoped."
+  email_domains:
+    label: Email Domains
+    type: array
+    field_type: text
+    description: "Pre-approved email domains for auto-add (organizations only)."

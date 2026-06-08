@@ -1,0 +1,105 @@
+_meta:
+  name: manifests/hubspot/schemas/Company.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot Company (objectTypeId 0-2) curated property schema.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[hs_object_id] per v70 INTEGRATION_FORMAT signature parity rule. hs_object_id is the canonical HubSpot identifier (the REST top-level `id` maps to it)."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Company
+object_type_id: "0-2"
+mcp_object_type: companies
+primary_key: [hs_object_id]
+
+properties:
+  name:
+    label: Name
+    type: string
+    field_type: text
+    required: true
+    sample: HubSpot
+  domain:
+    label: Company Domain Name
+    type: string
+    field_type: text
+    description: Primary website domain; HubSpot enforces uniqueness per portal.
+    sample: hubspot.com
+  website:
+    label: Website URL
+    type: string
+    field_type: text
+  industry:
+    label: Industry
+    type: string
+    field_type: select
+  type:
+    label: Type
+    type: enumeration
+    field_type: select
+    options:
+      - { value: PROSPECT,   label: Prospect }
+      - { value: PARTNER,    label: Partner }
+      - { value: RESELLER,   label: Reseller }
+      - { value: VENDOR,     label: Vendor }
+      - { value: OTHER,      label: Other }
+  phone:
+    label: Phone Number
+    type: string
+    field_type: text
+  city:
+    label: City
+    type: string
+    field_type: text
+  state:
+    label: State/Region
+    type: string
+    field_type: text
+  country:
+    label: Country/Region
+    type: string
+    field_type: text
+  numberofemployees:
+    label: Number of Employees
+    type: number
+    field_type: number
+  annualrevenue:
+    label: Annual Revenue
+    type: number
+    field_type: number
+  description:
+    label: Description
+    type: string
+    field_type: textarea
+  lifecyclestage:
+    label: Lifecycle Stage
+    type: enumeration
+    field_type: radio
+    description: Same option set as Contact.lifecyclestage.
+  hubspot_owner_id:
+    label: Company Owner
+    type: string
+    field_type: select
+  hs_object_id:
+    label: Company ID
+    type: number
+    field_type: number
+    read_only: true
+  createdate:
+    label: Create Date
+    type: datetime
+    field_type: date
+    read_only: true
+  hs_lastmodifieddate:
+    label: Last Modified Date
+    type: datetime
+    field_type: date
+    read_only: true
+
+associations:
+  - { name: contacts, object_type_id: "0-1" }
+  - { name: deals,    object_type_id: "0-3" }
+  - { name: tickets,  object_type_id: "0-5" }

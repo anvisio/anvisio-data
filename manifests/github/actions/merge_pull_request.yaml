@@ -1,0 +1,130 @@
+_meta:
+  name: manifests/github/actions/merge_pull_request.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    merge_pull_request atom: merge a PR into its base branch.
+    commits_changes:true (writes the merge commit + closes the PR);
+    spec 70 §7 prefers browser per user-clicks-Confirm contract.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.pull_request per v70 signature parity rule. PK fields (owner, repo, number) come from input across all three flavors. Keep merged + sha as primitive; browser flavor backfills sha:literal:null since the merge commit SHA isn't observable from DOM (mcp + oauth_api still extract it from response.sha)."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Merge a GitHub pull request.
+object: "{{inputs.repo}}"
+object_types: [PullRequest]
+commits_changes: true
+depends_on_view: PullRequestView
+mcp_tool: github.merge_pull_request
+inputs:
+  owner:          { type: text,    required: true }
+  repo:           { type: text,    required: true }
+  pull_number:    { type: integer, required: true }
+  merge_method:   { type: text,    required: false, default: merge, description: "merge | squash | rebase" }
+  commit_title:   { type: text,    required: false }
+  commit_message: { type: text,    required: false }
+result:
+  merged: boolean
+  sha:
+    type: text
+    nullable: true
+  pull_request:
+    schema: PullRequest
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open PR + click Merge + Confirm (user clicks Confirm on commit:true)
+    recipe:
+      - id: nav_pr
+        type: navigate
+        args:
+          url: "https://github.com/{{inputs.owner}}/{{inputs.repo}}/pull/{{inputs.pull_number}}"
+      - id: click_merge
+        type: use_widget
+        args:
+          widget: github.merge_pull_request_button
+          op: invoke
+      - id: click_confirm
+        type: use_widget
+        args:
+          widget: github.confirm_merge_button
+          op: invoke
+        commit: true
+    outcomes:
+      - action: merged
+        signal:
+          type: selector_appears
+          selector: "[class*='State']:has-text('Merged')"
+          timeout_ms: 15000
+        extract:
+          merged:
+            literal: true
+          sha:
+            literal: null
+          pull_request:
+            owner:
+              from_input: owner
+            repo:
+              from_input: repo
+            number:
+              from_input: pull_number
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official github-mcp-server merge_pull_request
+    server: github
+    tool: merge_pull_request
+    outcomes:
+      - action: merged
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          merged:
+            from_api_response: true
+            path: merged
+          sha:
+            from_api_response: true
+            path: sha
+          pull_request:
+            owner:
+              from_input: owner
+            repo:
+              from_input: repo
+            number:
+              from_input: pull_number
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: REST PUT /repos/{owner}/{repo}/pulls/{number}/merge
+    request:
+      method: PUT
+      url: "https://api.github.com/repos/{{inputs.owner}}/{{inputs.repo}}/pulls/{{inputs.pull_number}}/merge"
+      body:
+        merge_method:   "{{inputs.merge_method}}"
+        commit_title:   "{{inputs.commit_title}}"
+        commit_message: "{{inputs.commit_message}}"
+    outcomes:
+      - action: merged
+        signal:
+          type: network_response
+          url_pattern: "api.github.com/repos/*/pulls/*/merge"
+          status: 200
+        extract:
+          merged:
+            from_api_response: true
+            path: merged
+          sha:
+            from_api_response: true
+            path: sha
+          pull_request:
+            owner:
+              from_input: owner
+            repo:
+              from_input: repo
+            number:
+              from_input: pull_number

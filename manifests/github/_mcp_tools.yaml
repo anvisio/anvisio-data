@@ -1,0 +1,451 @@
+_meta:
+  name: manifests/github/_mcp_tools.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    GitHub MCP tool catalog. The official GitHub MCP server is at
+    https://api.githubcopilot.com/mcp/ (remote) with a Docker
+    local-stdio alternative at github/github-mcp-server. The server
+    exposes 80+ tools organized into 17 toolsets (context, repos,
+    issues, pull_requests, actions, code_security, discussions,
+    gists, git, labels, notifications, orgs, projects, dependabot,
+    secret_protection, security_advisories, stargazers, users).
+
+    This catalog is the daily-driver subset (~25 tools) the Anvisio
+    atom actions reference. Full catalog at github/github-mcp-server
+    README; tool surface is stable across OAuth + PAT auth and
+    Enterprise / Cloud deployments.
+
+    Auth: OAuth 2.1 (remote) or Personal Access Token (local). The
+    server enforces the token's scopes; `read-only` flag disables
+    write tools.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. 25 tools across context /
+       repos / issues / pull_requests / actions / users toolsets :
+       enough to back open_record / list / search / get / create /
+       update / comment / merge atom actions."
+
+server:
+  name: github-mcp
+  source_url: https://github.com/github/github-mcp-server
+  remote_url: https://api.githubcopilot.com/mcp/
+  transport: http
+  auth: oauth2_pkce_or_pat
+  fetched_at: 2026-05-23T00:00:00Z
+
+tools:
+
+  # ── Context (who am I) ──────────────────────────────────────────────
+  - name: get_me
+    description: Returns the authenticated user's profile. Use at session start.
+    input_schema: { type: object }
+    output_schema:
+      type: object
+      properties:
+        login:      { type: string }
+        id:         { type: integer }
+        name:       { type: string }
+        email:      { type: string }
+        company:    { type: string }
+        avatar_url: { type: string }
+
+  # ── Repositories ────────────────────────────────────────────────────
+  - name: search_repositories
+    description: Discover repositories by query (qualifiers per GitHub search syntax).
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query:   { type: string, description: 'e.g. "anvisio language:typescript stars:>10"' }
+        sort:    { type: string, enum: [stars, forks, help-wanted-issues, updated] }
+        order:   { type: string, enum: [asc, desc] }
+        page:    { type: integer }
+        perPage: { type: integer, maximum: 100 }
+    output_schema:
+      type: object
+      properties:
+        total_count:        { type: integer }
+        incomplete_results: { type: boolean }
+        items:              { type: array, items: { type: object } }
+
+  - name: get_file_contents
+    description: Retrieve file or directory contents from a repo.
+    input_schema:
+      type: object
+      required: [owner, repo]
+      properties:
+        owner: { type: string }
+        repo:  { type: string }
+        path:  { type: string, description: file or dir path; empty = repo root }
+        ref:   { type: string, description: branch / tag / sha; defaults to default branch }
+        sha:   { type: string }
+    output_schema: { type: object }
+
+  - name: list_commits
+    description: Show commit history for a repo, optionally filtered.
+    input_schema:
+      type: object
+      required: [owner, repo]
+      properties:
+        owner:  { type: string }
+        repo:   { type: string }
+        sha:    { type: string, description: branch or sha to start from }
+        author: { type: string }
+        path:   { type: string }
+        since:  { type: string, description: ISO8601 }
+        until:  { type: string, description: ISO8601 }
+    output_schema:
+      type: object
+      properties:
+        commits: { type: array, items: { type: object } }
+
+  - name: list_branches
+    description: Display all branches in a repo.
+    input_schema:
+      type: object
+      required: [owner, repo]
+      properties:
+        owner: { type: string }
+        repo:  { type: string }
+    output_schema:
+      type: object
+      properties:
+        branches: { type: array, items: { type: object } }
+
+  - name: create_or_update_file
+    description: Write or modify file content on a branch.
+    input_schema:
+      type: object
+      required: [owner, repo, path, content, message, branch]
+      properties:
+        owner:   { type: string }
+        repo:    { type: string }
+        path:    { type: string }
+        content: { type: string, description: file body (base64 not required) }
+        message: { type: string, description: commit message }
+        branch:  { type: string }
+        sha:     { type: string, description: required for update; the file's current blob sha }
+    output_schema:
+      type: object
+      properties:
+        commit:  { type: object, properties: { sha: { type: string }, url: { type: string } } }
+        content: { type: object, properties: { sha: { type: string }, path: { type: string } } }
+
+  # ── Issues ──────────────────────────────────────────────────────────
+  - name: issue_read
+    description: Retrieve issue details (method=get_issue | get_issue_comments | get_issue_events | …).
+    input_schema:
+      type: object
+      required: [owner, repo, issue_number, method]
+      properties:
+        owner:        { type: string }
+        repo:         { type: string }
+        issue_number: { type: integer }
+        method:       { type: string, enum: [get_issue, get_issue_comments, get_issue_events] }
+    output_schema: { type: object }
+
+  - name: issue_write
+    description: Create / update / close / reopen an issue.
+    input_schema:
+      type: object
+      required: [owner, repo, method]
+      properties:
+        owner:       { type: string }
+        repo:        { type: string }
+        method:      { type: string, enum: [create, update, close, reopen] }
+        issue_number: { type: integer, description: required for update / close / reopen }
+        title:       { type: string }
+        body:        { type: string }
+        state:       { type: string, enum: [open, closed] }
+        assignees:   { type: array, items: { type: string } }
+        labels:      { type: array, items: { type: string } }
+        milestone:   { type: integer }
+    output_schema:
+      type: object
+      properties:
+        id:           { type: integer }
+        number:       { type: integer }
+        url:          { type: string }
+        state:        { type: string }
+
+  - name: add_issue_comment
+    description: Post a comment on an issue or PR.
+    input_schema:
+      type: object
+      required: [owner, repo, issue_number, body]
+      properties:
+        owner:        { type: string }
+        repo:         { type: string }
+        issue_number: { type: integer, description: also accepts a PR number }
+        body:         { type: string }
+    output_schema:
+      type: object
+      properties:
+        id:   { type: integer }
+        url:  { type: string }
+        body: { type: string }
+
+  - name: list_issues
+    description: Display issues in a repo, filtered by state / labels / since.
+    input_schema:
+      type: object
+      required: [owner, repo]
+      properties:
+        owner:    { type: string }
+        repo:     { type: string }
+        state:    { type: string, enum: [open, closed, all], default: open }
+        labels:   { type: array, items: { type: string } }
+        since:    { type: string, description: ISO8601 }
+        orderBy:  { type: string, enum: [created, updated, comments] }
+    output_schema:
+      type: object
+      properties:
+        issues: { type: array, items: { type: object } }
+
+  - name: search_issues
+    description: Find issues across one or many repos via GitHub search syntax.
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, description: 'e.g. "repo:owner/repo is:open label:bug"' }
+        owner: { type: string }
+        repo:  { type: string }
+        page:  { type: integer }
+        perPage: { type: integer, maximum: 100 }
+    output_schema:
+      type: object
+      properties:
+        total_count: { type: integer }
+        items:       { type: array, items: { type: object } }
+
+  - name: list_label
+    description: Show every label in a repo.
+    input_schema:
+      type: object
+      required: [owner, repo]
+      properties:
+        owner: { type: string }
+        repo:  { type: string }
+    output_schema:
+      type: object
+      properties:
+        labels: { type: array, items: { type: object } }
+
+  # ── Pull Requests ───────────────────────────────────────────────────
+  - name: create_pull_request
+    description: Open a new pull request.
+    input_schema:
+      type: object
+      required: [owner, repo, head, base, title]
+      properties:
+        owner: { type: string }
+        repo:  { type: string }
+        head:  { type: string, description: branch (or owner:branch for cross-fork) }
+        base:  { type: string, description: target branch }
+        title: { type: string }
+        body:  { type: string }
+        draft: { type: boolean, default: false }
+    output_schema:
+      type: object
+      properties:
+        id:     { type: integer }
+        number: { type: integer }
+        url:    { type: string }
+        state:  { type: string }
+
+  - name: list_pull_requests
+    description: Display PRs filtered by state / branch / sort.
+    input_schema:
+      type: object
+      required: [owner, repo]
+      properties:
+        owner: { type: string }
+        repo:  { type: string }
+        state: { type: string, enum: [open, closed, all], default: open }
+        head:  { type: string }
+        base:  { type: string }
+        sort:  { type: string, enum: [created, updated, popularity, long-running] }
+    output_schema:
+      type: object
+      properties:
+        pull_requests: { type: array, items: { type: object } }
+
+  - name: pull_request_read
+    description: Fetch PR details (method=get_pull_request | get_pull_request_files | get_pull_request_reviews | …).
+    input_schema:
+      type: object
+      required: [owner, repo, pullNumber, method]
+      properties:
+        owner:      { type: string }
+        repo:       { type: string }
+        pullNumber: { type: integer }
+        method:     { type: string, enum: [get_pull_request, get_pull_request_files, get_pull_request_reviews, get_pull_request_comments, get_pull_request_status] }
+    output_schema: { type: object }
+
+  - name: update_pull_request
+    description: Modify PR title / body / state / reviewers.
+    input_schema:
+      type: object
+      required: [owner, repo, pullNumber]
+      properties:
+        owner:      { type: string }
+        repo:       { type: string }
+        pullNumber: { type: integer }
+        title:      { type: string }
+        body:       { type: string }
+        state:      { type: string, enum: [open, closed] }
+        reviewers:  { type: array, items: { type: string } }
+    output_schema:
+      type: object
+      properties:
+        id:     { type: integer }
+        number: { type: integer }
+        url:    { type: string }
+        state:  { type: string }
+
+  - name: merge_pull_request
+    description: Merge a PR into its base branch.
+    input_schema:
+      type: object
+      required: [owner, repo, pullNumber]
+      properties:
+        owner:        { type: string }
+        repo:         { type: string }
+        pullNumber:   { type: integer }
+        merge_method: { type: string, enum: [merge, squash, rebase], default: merge }
+        commit_title: { type: string }
+        commit_message: { type: string }
+    output_schema:
+      type: object
+      properties:
+        merged:  { type: boolean }
+        sha:     { type: string }
+        message: { type: string }
+
+  - name: pull_request_review_write
+    description: Manage PR reviews (method=create_review | submit_review | dismiss_review | …).
+    input_schema:
+      type: object
+      required: [owner, repo, pullNumber, method]
+      properties:
+        owner:      { type: string }
+        repo:       { type: string }
+        pullNumber: { type: integer }
+        method:     { type: string, enum: [create_review, submit_review, dismiss_review, request_changes, approve, comment] }
+        body:       { type: string }
+        event:      { type: string, enum: [APPROVE, REQUEST_CHANGES, COMMENT] }
+    output_schema:
+      type: object
+      properties:
+        id:    { type: integer }
+        state: { type: string }
+        url:   { type: string }
+
+  - name: search_pull_requests
+    description: Find PRs across one or many repos via GitHub search syntax.
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query:   { type: string }
+        owner:   { type: string }
+        repo:    { type: string }
+        page:    { type: integer }
+        perPage: { type: integer, maximum: 100 }
+    output_schema:
+      type: object
+      properties:
+        total_count: { type: integer }
+        items:       { type: array, items: { type: object } }
+
+  # ── Actions / CI ────────────────────────────────────────────────────
+  - name: actions_list
+    description: Display workflows or workflow runs.
+    input_schema:
+      type: object
+      required: [owner, repo, method]
+      properties:
+        owner:       { type: string }
+        repo:        { type: string }
+        method:      { type: string, enum: [list_workflows, list_workflow_runs, list_workflow_jobs] }
+        resource_id: { type: string, description: workflow_id (for runs) or run_id (for jobs) }
+        per_page:    { type: integer }
+    output_schema: { type: object }
+
+  - name: actions_get
+    description: Fetch workflow run or job details.
+    input_schema:
+      type: object
+      required: [owner, repo, method, resource_id]
+      properties:
+        owner:       { type: string }
+        repo:        { type: string }
+        method:      { type: string, enum: [get_workflow_run, get_workflow_job, get_workflow] }
+        resource_id: { type: string }
+    output_schema: { type: object }
+
+  - name: actions_run_trigger
+    description: Execute or cancel workflow runs.
+    input_schema:
+      type: object
+      required: [owner, repo, method]
+      properties:
+        owner:       { type: string }
+        repo:        { type: string }
+        method:      { type: string, enum: [dispatch_workflow, cancel_workflow_run, rerun_workflow_run] }
+        workflow_id: { type: string }
+        run_id:      { type: integer }
+        ref:         { type: string, description: branch / tag for dispatch }
+        inputs:      { type: object, description: workflow_dispatch inputs }
+    output_schema: { type: object }
+
+  - name: get_job_logs
+    description: Retrieve CI job logs (failed_only=true returns only failed-step output).
+    input_schema:
+      type: object
+      required: [owner, repo]
+      properties:
+        owner:       { type: string }
+        repo:        { type: string }
+        job_id:      { type: integer }
+        run_id:      { type: integer, description: alternative to job_id; returns logs for all jobs in the run }
+        failed_only: { type: boolean, default: false }
+    output_schema:
+      type: object
+      properties:
+        logs: { type: string }
+
+  # ── Users ───────────────────────────────────────────────────────────
+  - name: search_users
+    description: Find GitHub users by query.
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query:   { type: string }
+        sort:    { type: string, enum: [followers, repositories, joined] }
+        order:   { type: string, enum: [asc, desc] }
+        page:    { type: integer }
+        perPage: { type: integer, maximum: 100 }
+    output_schema:
+      type: object
+      properties:
+        total_count: { type: integer }
+        items:       { type: array, items: { type: object } }
+
+  - name: assign_copilot_to_issue
+    description: Activate GitHub Copilot coding agent on an issue (remote MCP only).
+    input_schema:
+      type: object
+      required: [owner, repo, issue_number]
+      properties:
+        owner:        { type: string }
+        repo:         { type: string }
+        issue_number: { type: integer }
+    output_schema:
+      type: object
+      properties:
+        assigned: { type: boolean }

@@ -1,7 +1,7 @@
 _meta:
   name: manifests/gmail/schemas/Reply.yaml
   version: 0.1.0
-  cdn_schema_version: 60.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |

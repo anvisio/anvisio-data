@@ -1,31 +1,38 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 2.2.0
+  version: 3.1.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    search_record atom — list-backed record search. Spec 70: three
-    flavors. `browser` navigates to /lightning/search/?q= (live-verified,
-    real cross-sObject SOSL, fastest browser path). `session_api`
-    dispatches Aura `ListUiController.postListRecordsByName` from
-    MAIN-world via call_platform_api kind: aura (session cookie + CSRF
-    auto-extracted). This is the ONLY SF read path proven to work
-    statelessly: SF REST (/services/data/...) 401s on the Lightning
-    cookie, and every Aura *search* descriptor (SearchController,
-    RecordGlobalActionListController.globalSearch, ...) returns
-    non-success. postListRecordsByName lists a listview's records;
-    callers filter / summarize client-side. `mcp` calls
-    salesforce.search_all. Reads prefer session_api > mcp > browser per
-    spec 70 §7. The session_api flavor is the search_and_summarize
-    demo's transport.
-  changelog:
-    - "2.2.0 (2026-05-19): session_api reverts to Aura — `ListUiController.postListRecordsByName` (the descriptor proven working since 2026-04-16, used live in platform-extractors.ts salesforceLiveSearch). v2.1.0's `rest_session` parameterizedSearch failed live: heal proved SF REST API 401s INVALID_SESSION_ID on the Lightning session cookie (it needs an OAuth bearer token). postListRecordsByName lists the AllAccounts listview; the query is not server-side (SF list controllers ignore it) — the composition's synthesize step focuses the summary on the picked query. Outcome signal: url_matches on the SF domain (the Aura call runs inside the recipe step, so there is no post-recipe network event for network_response to catch)."
-    - "2.1.0 (2026-05-19): swap session_api flavor to REST `parameterizedSearch` via `kind: rest_session` — REVERTED in 2.2.0 (SF REST rejects the session cookie)."
-    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api (Aura) + mcp flavors. Live-verified browser nav carries over from v1.0.0."
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    search_record atom: per-object record search via Aura
+    postListRecordsByName + the call_platform_api `filter` primitive.
+    Spec 70 reads prefer session_api > mcp.
 
-description: Search SF records. browser flavor runs real cross-sObject SOSL; session_api lists the AllAccounts listview (callers filter client-side).
+    Browser flavor removed 2026-05-30: /lightning/search/?q= deep-link
+    redirects to /home (live-confirmed on a healthy dev org, not a
+    session-degradation artifact). No DOM scrape salvages it; a future
+    search-box-driven recipe (click search, type, Enter, scrape) would
+    be a separate atom.
+
+    Cross-object SOSL via session cookie ruled out 2026-05-30: every
+    Aura search descriptor (`LightningExperienceFinder/searchEntities`,
+    `globalSearch`, `SearchController/execute`, `getLookupRecords`,
+    `getRecentRecords`) fails `callingDescriptor:'UNKNOWN'` — verified
+    live, searchEntities returns `actions:[]`. So the realistic
+    session_api shape is per-object: fetch one object's listview and
+    filter client-side. The caller MUST supply `object_type` and a
+    `list_view_api_name`.
+  changelog:
+    - "3.1.0 (2026-05-31): flatten matches via from_aura_records (was from_step) → flat {Id, Name, Email, Title, ...} matching the declared schema_union, so callers read ${ $item.Name } / ${ $item.Id } directly (not raw {id, fields:{Name:{value}}}). Live finding (probed against the org): postListRecordsByName returns the listview's FULL column set regardless of listRecordsQuery.fields, so matches are already rich (AllContacts → Name/Email/Phone/Title/Account) with no per-object field list needed. The 0-matches symptom seen while wiring upsert_contact was NOT this atom — it was step-executor passing api_def RAW, so the client-filter's contains stayed the literal '{{inputs.query}}' and excluded everything; fixed in step-executor.ts the same day. fields/sortBy unchanged here."
+    - "3.0.0 (2026-05-30): MAJOR REWIRE. Remove broken browser flavor (deep-link to /lightning/search/?q= redirects to /home — live-confirmed on a healthy dev org). Make `object_type` + `list_view_api_name` required. session_api parameterizes objectApiName / listViewApiName / fields by inputs and uses the new call_platform_api `filter` primitive (field: fields.Name.value, contains: inputs.query) to client-filter records. Returns REAL matches now (was either matches: literal:null on browser, or a full unfiltered Account-only listview on session_api). Common list_view_api_name values: AllAccounts, AllOpportunities, AllLeads, AllContacts, AllCases."
+    - "2.3.0 (2026-05-24): add Case + Event to object_types (8 SF schemas). Add schema-typed result.matches: schema_union list (nullable: true since browser doesn't extract structured matches from /lightning/search/ DOM). session_api populates matches from the Aura listview step; mcp from the SOSL response. The 'searched' boolean stays alongside."
+    - "2.2.0 (2026-05-19): session_api reverts to Aura postListRecordsByName (the descriptor proven working since 2026-04-16). REST parameterizedSearch failed live (401 INVALID_SESSION_ID on Lightning cookie)."
+    - "2.1.0 (2026-05-19): tried `rest_session` parameterizedSearch (REVERTED in 2.2.0)."
+    - "2.0.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + session_api (Aura) + mcp flavors."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/."
+
+description: Search one SF object's listview by name (Aura + client-filter); cross-object SOSL not available via session cookie.
 object: SearchResult
 commits_changes: false
 depends_on_view: any
@@ -37,33 +44,22 @@ inputs:
     sample: Anvisio
   object_type:
     type: text
-    required: false
+    required: true
+    sample: Account
+  list_view_api_name:
+    type: text
+    required: true
+    sample: AllAccounts
 result:
   searched: boolean
-  matches: list<object>
+  matches:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
+    cardinality: list
+    nullable: true
 flavors:
-  browser:
-    requires_auth: session_cookie
-    label: Navigate to global search results
-    recipe:
-      - id: nav_to_search
-        type: navigate
-        args:
-          url: "{instance.origin}/lightning/search/?q={{inputs.query}}"
-    outcomes:
-      - action: searched
-        signal:
-          type: url_matches
-          pattern: /lightning/search/
-          timeout_ms: 15000
-        extract:
-          searched:
-            literal: true
-          query:
-            from_input: query
   session_api:
     requires_auth: session_cookie
-    label: SF list records via Aura postListRecordsByName (session cookie + CSRF)
+    label: SF per-object search via Aura postListRecordsByName + client-filter
     recipe:
       - id: aura_list
         type: call_platform_api
@@ -72,19 +68,32 @@ flavors:
             kind: aura
             descriptor: "aura://ListUiController/ACTION$postListRecordsByName"
             extract_path: "actions[0].returnValue.records"
+            # No Aura SOSL descriptor works via session cookie; filter
+            # client-side on the listview result. Aura UI-API wraps fields
+            # as { Id: { value }, Name: { value } } — match on the dot-path.
+            filter:
+              field: "fields.Name.value"
+              contains: "{{inputs.query}}"
           args:
-            objectApiName: "Account"
-            listViewApiName: "AllAccounts"
+            objectApiName: "{{inputs.object_type}}"
+            listViewApiName: "{{inputs.list_view_api_name}}"
             listRecordsQuery:
+              # `fields` is a minimal hint, NOT a column restriction:
+              # postListRecordsByName returns the listview's FULL column set
+              # regardless (AllContacts → Name, Email, Phone, Title, Account;
+              # verified live 2026-05-31 against the org), and from_aura_records
+              # flattens all of them → rich {Id, Name, Email, Title, ...}
+              # matches with no per-object field list needed. The client-side
+              # Name filter (api_def.filter) does the scoping; its
+              # {{inputs.query}} is substituted by the call_platform_api step
+              # (step-executor.ts — fixed 2026-05-31; it previously matched the
+              # literal "{{inputs.query}}" and returned 0 for every search).
               fields:
-                - "Account.Id"
-                - "Account.Name"
-                - "Account.Industry"
-                - "Account.Type"
-                - "Account.Phone"
-              pageSize: 50
+                - "{{inputs.object_type}}.Id"
+                - "{{inputs.object_type}}.Name"
+              pageSize: 200
               sortBy:
-                - "Account.Name"
+                - "{{inputs.object_type}}.Name"
     outcomes:
       - action: searched
         # The Aura call runs entirely inside the recipe's call_platform_api
@@ -98,7 +107,11 @@ flavors:
           timeout_ms: 10000
         extract:
           matches:
-            from_step: aura_list
+            # Flatten the (filtered) Aura records to {Id, Name, Email, ...} —
+            # the consumable flat shape matching the declared schema_union,
+            # not raw {id, fields:{Name:{value}}}. The Name filter (api_def
+            # above) has already run on the raw records before this flatten.
+            from_aura_records: aura_list
           searched:
             literal: true
   mcp:

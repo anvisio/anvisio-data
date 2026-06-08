@@ -1,0 +1,41 @@
+_meta:
+  name: manifests/hubspot/views/ListView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Object list view (/contacts/{portalId}/objects/{objectTypeId}/views/{viewId}/list).
+    Default landing for Contacts / Companies / Tickets. Deal is
+    usually opened in board view (see BoardView.yaml) but the list
+    is also available at the same URL pattern.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: ListView
+
+entry:
+  url: "{instance.origin}/contacts/{portal_id}/objects/{object_type_id}/views/{view_id}/list"
+landmark_probe:
+  selector: "[data-test-id='crm-index-table'], [data-test-id='index-page']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/objects/[0-9]+-[0-9]+/views/[A-Za-z0-9_-]+/list"
+  - type: selector_appears
+    selector: "[data-test-id='crm-index-table'], table"
+    timeout_ms: 12000
+placeholders:
+  portal_id:
+    type: text
+    sample: "245597800"
+  object_type_id:
+    type: text
+    sample: "0-1"
+  view_id:
+    type: text
+    sample: "all"
+widgets:
+  - hubspot.list_search_input
+  - hubspot.create_new_button
+  - hubspot.record_card_link

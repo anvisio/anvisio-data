@@ -1,0 +1,94 @@
+_meta:
+  name: manifests/outlook/actions/send_email.yaml
+  version: 1.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    send_email atom: compose and send a new email. The wizard opens compose
+    (ComposePanel entry → outlook.compose_button) before invoking; this atom
+    fills To/Subject/Body (fill_fields over the Message schema's compose
+    widget pointers) and clicks Send when commit:true.
+
+    L4 commit signal — OWA-specific (live-hardened 2026-06-01): OWA send is
+    DOM-SILENT. There is NO success toast, and the send POSTs from a Web
+    Worker — proven by 3 live sends that all landed in Sent Items with ZERO
+    [role='alert'] / role=status / aria-live mutation. So the commit signal
+    is the compose SURFACE-DISAPPEAR (the Send button vanishes). That alone
+    would be a Trap-2 fake-success (Discard also closes compose) — EXCEPT a
+    Discard first pops a "Discard message — …discard this draft?" confirmation
+    dialog and KEEPS the compose open until OK. The flavor's spec-72
+    abandon_signal watches for that dialog and routes Discard → cancelled, so
+    selector_disappears(Send) fires ONLY on a real send. grace_ms:0 because
+    OWA's commit signal IS the editor-close (unlike calendar's
+    close-before-toast, nothing lands after it to wait for) — a non-zero grace
+    would let a CONFIRMED discard's editor-close masquerade as a commit.
+  changelog:
+    - "1.1.0 (2026-06-01): HARDENED live. Replaced the authoring-stub `all:`[transient_appears toast + selector_disappears] with the real OWA shape: commit = selector_disappears(Send), abandon_signal = the 'discard this draft' confirmation dialog (spec 72), grace_ms:0. Discovery: OWA shows NO send toast (send fires from a Worker) — a toast-based positive rung is impossible here, so the discriminator is the discard dialog (per cd2k's mutation-watching guidance). Stronger corroboration (a Sent-folder delta matched by Subject) is a noted follow-up — it needs a post-send nav we skip for UX."
+    - "1.0.0 (2026-06-01): net-new. fill_fields(Message) + Send; authoring stub used a [needs-live-probe] toast placeholder (superseded by 1.1.0 — OWA has no toast)."
+
+object: Message
+object_types: [Message]
+commits_changes: true
+depends_on_view: ComposePanel
+mcp_tool: outlook.send_email
+inputs:
+  fields:
+    type: object
+    required: true
+    description: |
+      Subset of Message fields. Required: To, Subject, Body.
+result:
+  sent: boolean
+  message_id: text
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Fill compose; click Send when commit:true
+    # Spec 72 abandon detection. In HITL (commit:false) a user Discard pops the
+    # "Discard message — Are you sure you want to discard this draft?" dialog
+    # (live-probed 2026-06-01) and KEEPS compose open until OK, so the commit
+    # signal never fires on discard. This routes that path → cancelled.
+    abandon_signal:
+      type: selector_appears
+      selector: "[role='dialog']"
+      must_contain_text: "discard this draft"
+      grace_ms: 0
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          object: Message
+          from: "{{inputs.fields}}"
+      - id: send
+        type: use_widget
+        commit: true
+        args:
+          widget: outlook.send_button
+          op: invoke
+    outcomes:
+      - action: ready_to_send
+        signal:
+          type: element_value_equals
+          selector: input[aria-label='Subject']
+          value: "{{inputs.fields.Subject}}"
+      - action: sent
+        # Commit = compose surface-disappear (Send button gone). NOT Trap 2
+        # here: the abandon_signal above catches Discard (which pops a dialog +
+        # keeps Send present), so this fires ONLY on a real send. 600s timeout
+        # supports the HITL window (user clicks Send themselves in commit:false).
+        signal:
+          type: selector_disappears
+          selector: button[aria-label='Send']
+          timeout_ms: 600000
+        extract:
+          sent:
+            literal: true
+          # message_id is null in EVERY flavor — not a browser-only limitation.
+          # VERIFIED 2026-06-01 against MS Graph v1.0: POST /me/sendMail returns
+          # 202 Accepted with NO body and NO id (see _mcp_tools.yaml). The
+          # browser also can't read it (send via Worker, no post-send view).
+          # The only post-hoc id source is a Sent-folder lookup by Subject (the
+          # noted follow-up); sendMail itself never yields one.
+          message_id:
+            literal: null

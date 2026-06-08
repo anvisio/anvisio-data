@@ -1,0 +1,87 @@
+_meta:
+  name: manifests/linkedin/actions/view_profile.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    view_profile atom: read a LinkedIn member's profile for prospect /
+    lead research. Browser flavor ONLY: LinkedIn exposes no public API for
+    arbitrary members (the official REST API covers only your OWN profile,
+    content posting, and events), so there is no oauth_api / mcp flavor and
+    no _mcp_tools.yaml. Navigates to /in/<slug>/ and reads the hero card +
+    About via read_fields. All read selectors are `xpath=` (LinkedIn DOM
+    ships hashed classes + no id anchors); see linkedin.md. It is a READ,
+    so success is url_matches + populated fields, not a write signal.
+  changelog:
+    - "0.1.0 (2026-06-01): initial. Browser-only read; xpath hero + About fields."
+
+description: >
+  Read a LinkedIn member's profile: name, headline, location, current
+  company, connection / follower counts, and About. Browser-only;
+  navigates to the member's /in/<slug>/ page and reads the hero card.
+object: "{{inputs.profile_slug}}"
+object_types: [Person]
+commits_changes: false
+depends_on_view: ProfileView
+inputs:
+  profile_slug:
+    type: text
+    required: true
+    sample: "chanudamarla"
+    description: The LinkedIn vanity slug from the profile URL (linkedin.com/in/<slug>).
+result:
+  person:
+    schema: Person
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the member's profile and read the hero card + About
+    recipe:
+      - id: read_profile
+        type: read_fields
+        args:
+          object: Person
+          only:
+            - name
+            - headline
+            - location
+            - current_company
+            - current_company_url
+            - connections
+            - followers
+            - about
+    outcomes:
+      - action: read
+        signal:
+          type: url_matches
+          pattern: "linkedin\\.com/in/"
+          timeout_ms: 12000
+        extract:
+          person:
+            profile_slug:
+              from_input: profile_slug
+            name:
+              from_step: read_profile
+              path: fields.name
+            headline:
+              from_step: read_profile
+              path: fields.headline
+            location:
+              from_step: read_profile
+              path: fields.location
+            current_company:
+              from_step: read_profile
+              path: fields.current_company
+            current_company_url:
+              from_step: read_profile
+              path: fields.current_company_url
+            connections:
+              from_step: read_profile
+              path: fields.connections
+            followers:
+              from_step: read_profile
+              path: fields.followers
+            about:
+              from_step: read_profile
+              path: fields.about

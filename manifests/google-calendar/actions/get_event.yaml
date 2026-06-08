@@ -1,0 +1,254 @@
+_meta:
+  name: manifests/google-calendar/actions/get_event.yaml
+  version: 0.4.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-28
+  description: |
+    get_event atom: return the full detail of one event by id. The
+    session_api flavor calls gapi.client.calendar.events.get from the
+    calendar tab's MAIN world (session-based, no OAuth) — and crucially
+    needs NO grid chip, sidestepping the API-id-vs-grid-data-eventid
+    mismatch (see google-calendar.md gotcha #1). The browser flavor opens
+    the event in the editor and reads its fields; the oauth_api + mcp
+    flavors fetch the event resource directly. Reads prefer
+    session_api > oauth_api > mcp > browser per spec 70 §7.
+  changelog:
+    - "0.4.0 (2026-05-28): add optional occurrence_date input (browser-flavor only — navigates the grid to the day so the chip renders, gotcha #2). The default session_api flavor reads by id and ignores it."
+    - "0.3.0 (2026-05-28): add session_api flavor (gapi events.get). The no-OAuth read path (googleapis.com/oauth_api 403s on a session cookie) AND it needs no grid chip — the browser flavor's event_chip[data-eventid] only matches the eid form, not the API id (live-confirmed 2026-05-28), so session_api is the robust by-id read. NOTE: calendar_id passed through; if the caller omits it, gapi events.get 404s (shared default-to-primary gap with oauth_api; follow-up)."
+    - "0.2.0 (2026-05-24): add schema-typed result.event per v70 signature parity rule (all 3 flavors populate event.Id at minimum). FIXED mcp flavor: it previously stopped at EndTime, dropping Location + Description even though the same MCP response carries them (.event.location / .event.description) - added the missing extracts."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.get-event."
+
+description: >
+  Read a single event, returning its title, start, end, location, and
+  description. The browser flavor reaches the EventDetail popup for the
+  given event_id, opens the editor via the edit pencil, and reads the form
+  fields. The oauth_api and mcp flavors fetch the event resource by id.
+object: Event
+commits_changes: false
+depends_on_view: EventDetail
+mcp_tool: google-calendar.get-event
+inputs:
+  event_id:
+    type: text
+    required: true
+    description: Google Calendar event id.
+  calendar_id:
+    type: text
+    description: Calendar id the event belongs to. Defaults to the primary calendar.
+  occurrence_date:
+    type: text
+    description: |
+      Optional ISO date of the event's occurrence. Only used by the (degraded)
+      browser flavor to navigate the grid to that day so the chip renders
+      (gotcha #2); the default session_api (gapi events.get) reads by id and
+      ignores it.
+result:
+  Title: text
+  StartTime: datetime
+  EndTime: datetime
+  Location: text
+  Description: text
+  event:
+    schema: Event
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the event in the editor and read its fields
+    recipe:
+      - id: open_editor
+        type: use_widget
+        args:
+          widget: google-calendar.event_edit_button
+          op: invoke
+      - id: read_event
+        type: read_fields
+        args:
+          object: Event
+          only:
+            - Title
+            - StartTime
+            - EndTime
+            - Location
+            - Description
+    outcomes:
+      - action: read
+        signal:
+          type: selector_appears
+          selector: input[aria-label='Add title']
+        extract:
+          Title:
+            from_step: read_event
+            path: fields.Title
+          StartTime:
+            from_step: read_event
+            path: fields.StartTime
+          EndTime:
+            from_step: read_event
+            path: fields.EndTime
+          Location:
+            from_step: read_event
+            path: fields.Location
+          Description:
+            from_step: read_event
+            path: fields.Description
+          event:
+            Id:
+              from_input: event_id
+            Title:
+              from_step: read_event
+              path: fields.Title
+            StartTime:
+              from_step: read_event
+              path: fields.StartTime
+            EndTime:
+              from_step: read_event
+              path: fields.EndTime
+            Location:
+              from_step: read_event
+              path: fields.Location
+            Description:
+              from_step: read_event
+              path: fields.Description
+  session_api:
+    requires_auth: session_cookie
+    label: Fetch the event by id via gapi.client.calendar.events.get (MAIN-world session)
+    recipe:
+      - id: gapi_get
+        type: call_platform_api
+        args:
+          api_def:
+            kind: gapi
+            library: calendar
+            version: v3
+            method_path: events.get
+            # extract_path: result → the step value is the Event resource.
+            extract_path: result
+          args:
+            calendarId: "{{inputs.calendar_id}}"
+            eventId: "{{inputs.event_id}}"
+    outcomes:
+      - action: read
+        # gapi call completes inside the recipe; url_matches resolves on
+        # the first poll, then extract reads the Event resource fields.
+        signal:
+          type: url_matches
+          pattern: "calendar\\.google\\.com"
+          timeout_ms: 10000
+        extract:
+          Title:
+            from_step: gapi_get
+            path: summary
+          StartTime:
+            from_step: gapi_get
+            path: start.dateTime
+          EndTime:
+            from_step: gapi_get
+            path: end.dateTime
+          Location:
+            from_step: gapi_get
+            path: location
+          Description:
+            from_step: gapi_get
+            path: description
+          event:
+            Id:
+              from_step: gapi_get
+              path: id
+            Title:
+              from_step: gapi_get
+              path: summary
+            StartTime:
+              from_step: gapi_get
+              path: start.dateTime
+            EndTime:
+              from_step: gapi_get
+              path: end.dateTime
+            Location:
+              from_step: gapi_get
+              path: location
+            Description:
+              from_step: gapi_get
+              path: description
+  oauth_api:
+    requires_auth: oauth_token
+    label: Fetch the event by id via the Calendar API (events.get)
+    request:
+      provider: google
+      method: GET
+      url: https://www.googleapis.com/calendar/v3/calendars/{{inputs.calendar_id}}/events/{{inputs.event_id}}
+    outcomes:
+      - action: read
+        extract:
+          Title:
+            from_api_response: true
+            path: summary
+          StartTime:
+            from_api_response: true
+            path: start.dateTime
+          EndTime:
+            from_api_response: true
+            path: end.dateTime
+          Location:
+            from_api_response: true
+            path: location
+          Description:
+            from_api_response: true
+            path: description
+          event:
+            Id:
+              from_api_response: true
+              path: id
+            Title:
+              from_api_response: true
+              path: summary
+            StartTime:
+              from_api_response: true
+              path: start.dateTime
+            EndTime:
+              from_api_response: true
+              path: end.dateTime
+            Location:
+              from_api_response: true
+              path: location
+            Description:
+              from_api_response: true
+              path: description
+  mcp:
+    requires_auth: mcp_server
+    label: Fetch the event via the google-calendar get-event MCP tool
+    server: google-calendar
+    tool: get-event
+    inputs_map:
+      eventId: "{{inputs.event_id}}"
+      calendarId: "{{inputs.calendar_id}}"
+    outcomes:
+      - action: read
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          Title:
+            from_api_response: ".event.summary"
+          StartTime:
+            from_api_response: ".event.start.dateTime"
+          EndTime:
+            from_api_response: ".event.end.dateTime"
+          Location:
+            from_api_response: ".event.location"
+          Description:
+            from_api_response: ".event.description"
+          event:
+            Id:
+              from_api_response: ".event.id"
+            Title:
+              from_api_response: ".event.summary"
+            StartTime:
+              from_api_response: ".event.start.dateTime"
+            EndTime:
+              from_api_response: ".event.end.dateTime"
+            Location:
+              from_api_response: ".event.location"
+            Description:
+              from_api_response: ".event.description"

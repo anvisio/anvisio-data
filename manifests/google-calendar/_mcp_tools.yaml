@@ -1,0 +1,220 @@
+_meta:
+  name: manifests/google-calendar/_mcp_tools.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Google Calendar MCP tool catalog. Per spec 70 §3 — canonical
+    atom-action input/output schemas for the integration. Future
+    propose runs read this file and emit actions/<verb>.yaml with
+    matching `inputs:` + `result:` shapes plus an `mcp_tool:` pointer
+    back into this catalog.
+
+    The Google Calendar MCP ecosystem (as of 2026-05):
+      - `calendarmcp.googleapis.com` (Google official, remote/OAuth) —
+        8 tools: list/get/create/update/delete events, list_calendars,
+        suggest_time, respond_to_event. First-party, but no explicit
+        free/busy or text-search tool.
+      - `nspady/google-calendar-mcp` (community; the most-cited) — 12
+        tools incl. search-events + get-freebusy + multi-account. What
+        this catalog mirrors.
+      - taylorwilsdon/google_workspace_mcp, guinacio/mcp-google-calendar,
+        deciduus/calendar-mcp — community alternatives.
+
+    Sourced from nspady/google-calendar-mcp — chosen 2026-05-22 over the
+    official server for the richer surface (search-events + get-freebusy
+    matter for the scheduling blueprints). Tool names mirror nspady
+    (kebab-case); input/output schemas are grounded in the Google
+    Calendar API v3 the server wraps. `manage-accounts` (the server's
+    auth / account-management tool) is omitted — not a calendar verb,
+    not an atom-action candidate.
+  changelog:
+    - "0.1.0 (2026-05-22): initial seed from nspady/google-calendar-mcp README + Google Calendar API v3."
+
+server:
+  name: google-calendar
+  source_url: https://github.com/nspady/google-calendar-mcp
+  transport: stdio
+  fetched_at: 2026-05-22T00:00:00Z
+
+tools:
+  # ── Calendars ──────────────────────────────────────────────────────
+  - name: list-calendars
+    description: List the calendars on the user's calendar list (id, summary, access role, time zone).
+    input_schema:
+      type: object
+      properties:
+        account: { type: string, description: connected-account nickname for multi-account setups }
+    output_schema:
+      type: object
+      properties:
+        calendars:
+          type: array
+          items:
+            type: object
+            properties:
+              id:         { type: string }
+              summary:    { type: string }
+              primary:    { type: boolean }
+              accessRole: { type: string, enum: [owner, writer, reader, freeBusyReader] }
+              timeZone:   { type: string }
+
+  - name: list-colors
+    description: List the event + calendar colors available in this Google Calendar (colorId → hex).
+    input_schema:
+      type: object
+      properties: {}
+    output_schema:
+      type: object
+      properties:
+        event:    { type: object, description: "colorId → { background, foreground }" }
+        calendar: { type: object }
+
+  - name: get-current-time
+    description: Current date + time in the calendar's time zone — used to resolve relative dates ("tomorrow", "next week").
+    input_schema:
+      type: object
+      properties:
+        calendarId: { type: string, description: calendar whose time zone to use; defaults to primary }
+    output_schema:
+      type: object
+      properties:
+        currentTime: { type: string, description: ISO 8601 }
+        timeZone:    { type: string }
+
+  # ── Events — read ──────────────────────────────────────────────────
+  - name: list-events
+    description: List events across one or more calendars within a time window.
+    input_schema:
+      type: object
+      required: [timeMin, timeMax]
+      properties:
+        calendars: { type: array, items: { type: string }, description: "calendar ids; defaults to [primary]" }
+        timeMin:   { type: string, description: window start, ISO 8601 }
+        timeMax:   { type: string, description: window end, ISO 8601 }
+        account:   { type: string }
+    output_schema:
+      type: object
+      properties:
+        events: { type: array, items: { type: object } }
+
+  - name: get-event
+    description: Full detail for a single event by id (summary, start/end, attendees, conferencing, recurrence).
+    input_schema:
+      type: object
+      required: [eventId]
+      properties:
+        eventId:    { type: string }
+        calendarId: { type: string, description: defaults to primary }
+        account:    { type: string }
+    output_schema:
+      type: object
+      properties:
+        event: { type: object }
+
+  - name: search-events
+    description: Find events by free-text query (title / description / attendee / location) across calendars.
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query:     { type: string }
+        calendars: { type: array, items: { type: string }, description: "defaults to [primary]" }
+        timeMin:   { type: string, description: optional window start, ISO 8601 }
+        timeMax:   { type: string, description: optional window end, ISO 8601 }
+        account:   { type: string }
+    output_schema:
+      type: object
+      properties:
+        events: { type: array, items: { type: object } }
+
+  - name: get-freebusy
+    description: Busy intervals for one or more calendars (incl. external) over a window — the availability primitive.
+    input_schema:
+      type: object
+      required: [calendars, timeMin, timeMax]
+      properties:
+        calendars: { type: array, items: { type: string }, description: calendar ids or attendee emails }
+        timeMin:   { type: string, description: ISO 8601 }
+        timeMax:   { type: string, description: ISO 8601 }
+    output_schema:
+      type: object
+      properties:
+        calendars:
+          type: object
+          description: "calendar id → { busy: [ { start, end } ] }"
+
+  # ── Events — write ─────────────────────────────────────────────────
+  - name: create-event
+    description: Create a calendar event. Accepts ISO 8601 or natural-language start/end times.
+    input_schema:
+      type: object
+      required: [title, startTime, endTime]
+      properties:
+        title:       { type: string }
+        startTime:   { type: string, description: ISO 8601 or natural language ("tomorrow 2pm") }
+        endTime:     { type: string, description: ISO 8601 or natural language }
+        calendarId:  { type: string, description: defaults to primary }
+        description: { type: string }
+        location:    { type: string }
+        attendees:   { type: array, items: { type: string, format: email } }
+        colorId:     { type: string }
+    output_schema:
+      type: object
+      properties:
+        eventId:  { type: string }
+        htmlLink: { type: string }
+
+  - name: update-event
+    description: Update an existing event. For recurring events, `recurringUpdateScope` selects which instances change.
+    input_schema:
+      type: object
+      required: [eventId]
+      properties:
+        eventId:     { type: string }
+        calendarId:  { type: string, description: defaults to primary }
+        title:       { type: string }
+        startTime:   { type: string }
+        endTime:     { type: string }
+        description: { type: string }
+        location:    { type: string }
+        attendees:   { type: array, items: { type: string, format: email } }
+        recurringUpdateScope:
+          type: string
+          enum: [single, all, following]
+          description: for a recurring event — change this instance, the whole series, or this + following
+    output_schema:
+      type: object
+      properties:
+        event: { type: object }
+
+  - name: delete-event
+    description: Delete an event by id.
+    input_schema:
+      type: object
+      required: [eventId]
+      properties:
+        eventId:    { type: string }
+        calendarId: { type: string, description: defaults to primary }
+        account:    { type: string }
+    output_schema:
+      type: object
+      properties:
+        deleted: { type: boolean }
+
+  - name: respond-to-event
+    description: RSVP to an event invitation on the user's behalf.
+    input_schema:
+      type: object
+      required: [eventId, response]
+      properties:
+        eventId:    { type: string }
+        calendarId: { type: string, description: defaults to primary }
+        response:
+          type: string
+          enum: [accepted, declined, tentative, needsAction]
+    output_schema:
+      type: object
+      properties:
+        event: { type: object }

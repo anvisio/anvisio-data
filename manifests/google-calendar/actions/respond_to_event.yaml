@@ -1,0 +1,98 @@
+_meta:
+  name: manifests/google-calendar/actions/respond_to_event.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    respond_to_event atom: RSVP to an event invitation. The browser
+    flavor reaches the event via EventDetail and, on commit, clicks the
+    matching RSVP button; the mcp flavor calls the respond-to-event tool.
+    browser + mcp flavors only: the Calendar API v3 has no first-class
+    RSVP endpoint (see google-calendar.md known gaps).
+  changelog:
+    - "0.3.0 (2026-05-28): add optional occurrence_date input — the EventDetail entry navigates the grid to that day before clicking the chip, so RSVP reaches an event off the currently-shown range (gotcha #2)."
+    - "0.2.0 (2026-05-24): add schema-typed result.event per v70 signature parity rule. Both flavors echo event.Id from the event_id input."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.respond-to-event. No oauth_api flavor: Calendar API v3 has no dedicated RSVP endpoint."
+
+description: >
+  RSVP to an event invitation on the user's behalf — accept, decline, or
+  mark tentative. The browser flavor opens the event detail popup and, on
+  commit, clicks the matching RSVP button; preview mode reaches the popup
+  and stops. The mcp flavor calls the respond-to-event tool.
+object: Event
+commits_changes: true
+depends_on_view: EventDetail
+mcp_tool: google-calendar.respond-to-event
+inputs:
+  event_id:
+    type: text
+    required: true
+    description: Google Calendar event id to RSVP to.
+  response:
+    type: text
+    required: true
+    description: "RSVP response: one of accepted, declined, tentative."
+  calendar_id:
+    type: text
+    description: Calendar id the event belongs to. Defaults to the primary calendar.
+  occurrence_date:
+    type: text
+    description: |
+      Optional ISO date of the event's occurrence. When set, the browser
+      flavor navigates the grid to that day so the chip renders even if it's
+      off the currently-shown range (gotcha #2). Omit when already on the
+      visible grid.
+result:
+  responded: boolean
+  event:
+    schema: Event
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Click the matching RSVP button in the event popup when commit:true
+    recipe:
+      - id: rsvp
+        type: use_widget
+        commit: true
+        args:
+          widget: google-calendar.rsvp_button
+          op: invoke
+          inputs:
+            response: "{{inputs.response}}"
+    outcomes:
+      - action: ready_to_respond
+        signal:
+          type: selector_appears
+          selector: "[role='dialog']"
+      - action: responded
+        signal:
+          type: selector_appears
+          selector: "[role='dialog'] [role='button'][aria-pressed='true']"
+        extract:
+          responded:
+            literal: true
+          event:
+            Id:
+              from_input: event_id
+  mcp:
+    requires_auth: mcp_server
+    label: RSVP via the google-calendar respond-to-event MCP tool
+    server: google-calendar
+    tool: respond-to-event
+    inputs_map:
+      eventId: "{{inputs.event_id}}"
+      calendarId: "{{inputs.calendar_id}}"
+      response: "{{inputs.response}}"
+    outcomes:
+      - action: responded
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          responded:
+            literal: true
+          event:
+            Id:
+              from_input: event_id

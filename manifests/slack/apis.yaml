@@ -1,0 +1,221 @@
+_meta:
+  name: manifests/slack/apis.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Slack APIs catalog. Three transports:
+
+      - `session_api` on `<workspace>.slack.com`: the web SPA's own
+        `/api/*` endpoints (conversations.list, .history, users.list,
+        etc.). Auth via `xoxc-*` + `xoxd-*` cookies; CSRF via the
+        existing session.
+      - `oauth_api` on slack.com: the public Web API requiring an
+        OAuth user token (xoxp-*) or bot token (xoxb-*). Same
+        endpoints as session_api, different auth.
+      - `mcp` via the official Slack MCP server at mcp.slack.com.
+        See _mcp_tools.yaml.
+
+    The session_api path is the daily driver when the user has Slack
+    open in a Chrome tab (xoxc cookie works on the workspace
+    subdomain). For headless / cross-context flows, oauth_api or mcp.
+  changelog:
+    - "0.2.0 (2026-05-23): add confidence + verified_at + notes on
+       every entry (per INTEGRATION_FORMAT.md rev 2026-05-23);
+       add missing response_shape on rest_conversations_history +
+       rest_search_messages."
+    - "0.1.0 (2026-05-23): initial seed from
+       planning/tech_design/audits/41-slack-primitive-mapping.md
+       endpoint inventory."
+
+apis:
+
+  # In-session Web API (workspace subdomain, xoxc cookie)
+  session_conversations_list:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "*.slack.com"
+    method: GET
+    endpoint_pattern: "https://{workspace}.slack.com/api/conversations.list?types={types}&exclude_archived={exclude_archived}&limit={limit}&cursor={cursor}"
+    inputs:
+      workspace:        { type: text, required: true, description: subdomain (e.g. "anvisio") }
+      types:            { type: text, required: false, default: "public_channel,private_channel" }
+      exclude_archived: { type: text, required: false, default: "true" }
+      limit:            { type: integer, required: false, default: 100 }
+      cursor:           { type: text, required: false, default: "" }
+    response_shape:
+      type: object
+      properties:
+        ok:                { type: boolean }
+        channels:          { type: array }
+        response_metadata: { type: object, properties: { next_cursor: { type: string } } }
+    confidence: low
+    verified_at: null
+    notes: |
+      Returns up to 1000 channels per page; large workspaces require
+      cursor-paging. `types` is comma-separated (no array form on this
+      endpoint). xoxc cookie is sufficient: no Authorization header
+      needed when called from the SaaS tab.
+
+  session_conversations_history:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "*.slack.com"
+    method: GET
+    endpoint_pattern: "https://{workspace}.slack.com/api/conversations.history?channel={channel}&limit={limit}&cursor={cursor}"
+    inputs:
+      workspace: { type: text, required: true }
+      channel:   { type: text, required: true }
+      limit:     { type: integer, required: false, default: 100 }
+      cursor:    { type: text, required: false, default: "" }
+    response_shape:
+      type: object
+      properties:
+        ok:                { type: boolean }
+        messages:          { type: array }
+        has_more:          { type: boolean }
+        response_metadata: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Messages return newest-first. `latest` / `oldest` (ts cutoffs)
+      can be added if needed. Threaded replies are NOT included; use
+      conversations.replies (not modeled yet) to fetch them.
+
+  session_search_messages:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "*.slack.com"
+    method: GET
+    endpoint_pattern: "https://{workspace}.slack.com/api/search.messages?query={query}&sort={sort}&count={count}&page={page}"
+    inputs:
+      workspace: { type: text, required: true }
+      query:     { type: text, required: true, description: Slack search syntax }
+      sort:      { type: text, required: false, default: score }
+      count:     { type: integer, required: false, default: 20 }
+      page:      { type: integer, required: false, default: 1 }
+    response_shape:
+      type: object
+      properties:
+        ok:       { type: boolean }
+        messages: { type: object, properties: { matches: { type: array }, total: { type: integer } } }
+    confidence: low
+    verified_at: null
+    notes: |
+      Search uses Slack's query syntax (`in:#channel from:@user
+      has:link before:YYYY-MM-DD`). Result envelope nests matches
+      under `messages.matches`.
+
+  session_users_list:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "*.slack.com"
+    method: GET
+    endpoint_pattern: "https://{workspace}.slack.com/api/users.list?limit={limit}&cursor={cursor}"
+    inputs:
+      workspace: { type: text, required: true }
+      limit:     { type: integer, required: false, default: 100 }
+      cursor:    { type: text, required: false, default: "" }
+    response_shape:
+      type: object
+      properties:
+        ok:                { type: boolean }
+        members:           { type: array }
+        response_metadata: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Returns active + deactivated users; filter on `deleted: false`
+      to get active-only. Bots appear with `is_bot: true`.
+
+  # Public Web API (slack.com, xoxp / xoxb token)
+  rest_chat_post_message:
+    transport: oauth_api
+    auth: oauth_token
+    method: POST
+    endpoint_pattern: "https://slack.com/api/chat.postMessage"
+    inputs:
+      body:
+        type: object
+        required: true
+        description: "{ channel, text, thread_ts?, blocks?, attachments?, unfurl_links?, unfurl_media? }"
+    response_shape:
+      type: object
+      properties:
+        ok:      { type: boolean }
+        channel: { type: string }
+        ts:      { type: string }
+        message: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      The response `ts` plus the request `channel` form the message
+      primary key (no UUID). Bot posts require `chat:write` scope;
+      user-token posts require `chat:write:user` on the workspace.
+
+  rest_conversations_list:
+    transport: oauth_api
+    auth: oauth_token
+    method: GET
+    endpoint_pattern: "https://slack.com/api/conversations.list?types={types}&limit={limit}&cursor={cursor}"
+    inputs:
+      types:  { type: text, required: false, default: "public_channel,private_channel" }
+      limit:  { type: integer, required: false, default: 100 }
+      cursor: { type: text, required: false, default: "" }
+    response_shape:
+      type: object
+      properties:
+        ok:                { type: boolean }
+        channels:          { type: array }
+        response_metadata: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Same endpoint as the session path but using a bot/user token.
+      Requires `channels:read` scope. Bot tokens see only public +
+      added-to channels.
+
+  rest_conversations_history:
+    transport: oauth_api
+    auth: oauth_token
+    method: GET
+    endpoint_pattern: "https://slack.com/api/conversations.history?channel={channel}&limit={limit}&cursor={cursor}"
+    inputs:
+      channel: { type: text, required: true }
+      limit:   { type: integer, required: false, default: 100 }
+      cursor:  { type: text, required: false, default: "" }
+    response_shape:
+      type: object
+      properties:
+        ok:                { type: boolean }
+        messages:          { type: array }
+        has_more:          { type: boolean }
+        response_metadata: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Token must have `channels:history` (public), `groups:history`
+      (private), `im:history` (DMs), or `mpim:history` (multi-party
+      DMs) depending on channel type.
+
+  rest_search_messages:
+    transport: oauth_api
+    auth: oauth_token
+    method: GET
+    endpoint_pattern: "https://slack.com/api/search.messages?query={query}&sort={sort}&count={count}&page={page}"
+    inputs:
+      query: { type: text, required: true }
+      sort:  { type: text, required: false, default: score }
+      count: { type: integer, required: false, default: 20 }
+      page:  { type: integer, required: false, default: 1 }
+    response_shape:
+      type: object
+      properties:
+        ok:       { type: boolean }
+        messages: { type: object, properties: { matches: { type: array }, total: { type: integer } } }
+    confidence: low
+    verified_at: null
+    notes: |
+      Requires user token (xoxp); bot tokens cannot search. Same
+      result envelope as session_search_messages.

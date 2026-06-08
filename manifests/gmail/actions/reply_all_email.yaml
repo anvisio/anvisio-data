@@ -1,16 +1,55 @@
 _meta:
   name: manifests/gmail/actions/reply_all_email.yaml
-  version: 0.3.0
+  version: 0.15.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-26
   description: |
-    reply_all_email atom — reply to ALL participants on the open
+    reply_all_email atom: reply to ALL participants on the open
     thread. Spec 70: `browser` flavor fills inline reply-all composer
     + clicks Send; `mcp` flavor calls gmail.send_email with threadId
     + inReplyTo and a To list that includes the original participants.
+
+    Composer-trigger ownership note (2026-05-26): same fix shape as
+    reply_email 0.8.0 / forward_email 0.8.0. Previously this atom
+    chained through ReplyComposer.yaml's entry recipe which
+    hardcoded Reply (`.ams.bkH`); the atom then tried to fill into a
+    Reply composer (no Cc field accessible) which silently produced
+    a Reply, not a Reply-all. The atom now depends_on_view:
+    ThreadView + opens the reply-all composer via
+    `gmail.thread_reply_all_button` (a 2-step composite widget that
+    opens the per-message More-options menu and clicks the Reply-all
+    menuitem `data-action-type='24'`).
+
+    Limitation (verified 2026-05-26): Gmail conditionally HIDES the
+    Reply-all menuitem in the per-message More-options menu when the
+    thread has only one recipient (since reply-all would equal reply).
+    On single-recipient threads, the `gmail.thread_reply_all_button`
+    widget will fail with no_match. Callers should pre-check thread
+    participant count (via read_email) before dispatching to this
+    atom OR be ready to fall back to reply_email. Open follow-up.
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.15.0 (2026-06-08): CANONICAL ACTION FORM v71 (mirrors send_email + reply_email 0.15.0). (1) tab_mode: current replaces runs_in_home_tab: true (the in-thread inline composer acts in the home tab; resolveTabPlan maps current to wantsOwnTab:false, exactly what the boolean gave). (2) flat typed inputs (To/Cc/Subject/Body/ThreadId/InReplyTo) replace the fields:{type:object} bag; the recipe's fill_fields has NO `from` (fills from the flat inputs), mcp/oauth map the scalars. (3) result.outcome (auto from the winning action: sent | discarded | drafted) replaces the three booleans; the per-terminal literal extracts are dropped across all three flavors (extract carries only payload: message_id / thread_id / message). (4) the ready_to_reply_all pseudo-outcome is dropped. No live-behavior change vs 0.14.0 (same signals/selectors/grace)."
+    - "0.14.0 (2026-06-07): MCP parity — return flat top-level message_id + thread_id on `sent`, matching gmail.send_email's output_schema ({message_id, thread_id}, which reply_all maps to via mcp_tool) + send_email + reply_email 0.14.0. Was nesting the ids only as message.{Id,ThreadId}, so result.thread_id was undefined downstream + the feed showed just 'sent'. All three flavors now populate the flat pair: mcp/oauth from the API response; browser thread_id from h2.hP + message_id (and the un-nulled message.Id) from the NEW from_selector_last extract — the just-sent reply is the LAST div.adn.ads[data-legacy-message-id] (the reply_all More-menu now also targets the last message per gmail.widgets 3.16.0). Result schema adds message_id/thread_id: text."
+    - "0.13.0 (2026-06-07): slim outcome extracts to only the values the outcome produces — drop the cross-terminal literal:false + irrelevant literal:null. The result: schema still declares the full type contract; summarizeTaskOutput reads only truthy flags so the feed display is unchanged, and no consumer does a strict ===false (verified). cd2k's contract-is-what-is-returned principle."
+    - "0.12.0 (2026-06-07): FIX the `closed` signal (selector_disappears) — was `input[name='subjectbox']`, which fired immediately because the inline composer's subjectbox is collapsed to 0px → `drafted` resolved instantly + the HITL wait vanished before the user could act. Now the composer REGION `div[role='main'] div[role='region'][data-compose-id]`. Same root cause + fix as reply_email 0.12.0 (caught on the 2026-06-07 re-drive)."
+    - "0.11.0 (2026-06-07): add `runs_in_home_tab: true` — same regression fix as reply_email 0.11.0 (caught on the 2026-06-07 re-drive). As a write with no runs_in_home_tab, reply_all hit the wantsOwnTab gate and opened a BLANK own edit tab; ThreadView's 0.7.0 current-view row-click (no nav, pairing with read_email's cloned fresh tab) found no list there → await_row 15s timeout. Now runs in the home tab, which holds the thread's list. See reply_email 0.11.0 + gmail.md `runs_in_home_tab` matrix."
+    - "0.10.0 (2026-06-07): SPEC 70 SIGNALS MODEL — three terminals (sent / discarded / drafted) as `when:` / `not:` predicates over a named `signals:` map (sent / discarded / closed), matching send_email 0.13.0 + reply_email 0.10.0. Reply-all shares reply's exact inline composer (only the trigger differs — the More-menu → Reply-all menuitem), so the same findings hold: NO `autosave` signal (the inline composer doesn't flip ?compose=, so `drafted` returns draft_id:null), `closed` = subjectbox disappears, `discarded` = the shared `Draft discarded.` toast, no `then:` hook (no #link_vsm; thread_id from the in-thread h2.hP), message.Id null on the multi-message thread. Fixes the same HITL hang (a discarded/closed reply-all in commit:false previously had no terminal but `sent` → hung 600s). Adds discarded / drafted / draft_id to result for cross-flavor parity."
+    - "0.9.8 (2026-05-30): `sent` outcome signal upgraded from `selector_appears` to `transient_appears` on the snackbar — MutationObserver latch survives auto-dismiss + is pre-armed for spec-72 commit-delta detection. See reply_email 0.9.8 / send_email 0.9.0."
+    - "0.9.7 (2026-05-28): honest message.Id — was the THREAD id (h2.hP[data-legacy-thread-id]), not a message id. reply_all lands on a multi-message thread where the real per-message selector matches oldest-first, so return null until the extract DSL gains last-match. message.ThreadId stays correct. Same fix as reply_email 0.9.7; single-message sends extract the real id per send_email 0.8.5."
+    - "0.9.6 (2026-05-26): move snackbar wait into the `sent` outcome's signal — same HITL probe-mask fix as reply_email 0.9.6."
+    - "0.9.5 (2026-05-26): drop click_view_message + wait_thread_view steps — Gmail's reply-all snackbar has no link_vsm (same shape as reply_email 0.9.5). Extract thread_id from the existing h2.hP[data-legacy-thread-id] (reply-all lands in the same thread)."
+    - "0.9.4 (2026-05-26): recover message.{Id,ThreadId} via auto-click View message + ThreadView extract — see send_email 0.8.4. (Superseded by 0.9.5: snackbar has no link_vsm for replies.)"
+    - "0.9.3 (2026-05-26): switch sent outcome to DOM signal on the 'Message sent' snackbar — see send_email 0.8.3."
+    - "0.9.2 (2026-05-26): fix url_pattern + method split — see send_email 0.8.2."
+    - "0.9.1 (2026-05-26): fix browser-flavor `sent` outcome — `pattern:` renamed to `url_pattern:`. See send_email 0.8.1 for the discovery + scope."
+    - "0.9.0 (2026-05-26): populate result.message.{Id, ThreadId} from sync response via from_api_response_recursive (closes the A4 follow-up). Pattern matches send_email 0.8.0."
+    - "0.8.0 (2026-05-26): own the composer trigger. depends_on_view changed from ReplyComposer to ThreadView; recipe gains `open_composer` (use_widget gmail.thread_reply_all_button — multi-step: open More menu, click Reply-all menuitem) + `wait_composer`. Fixes the broken cross-atom interference. See [[project-gmail-browser-flavor-audit-2026-05-25]] Finding 2 + the limitation note above re: single-recipient threads."
+    - "0.7.0 (2026-05-25): add oauth_api flavor — same shape as reply_email 0.7.0 + Cc with the full participant list."
+    - "0.6.0 (2026-05-25): mcp flavor: add inputs_map (same A1 fix as send_email + reply_email 0.6.0). For reply-all the caller supplies the full To+Cc participant list via inputs.fields.{To, Cc} plus threadId + inReplyTo."
+    - "0.5.0 (2026-05-25): fix DEAD `sent` outcome network signal — modern Gmail uses `POST /mail/.*sync/u/\\d+/i/s`, not the legacy `/mail/u/0/.*sendmail`. Same fix as send_email + reply_email 0.5.0."
+    - "0.4.0 (2026-05-24): add schema-typed result.message (nullable) per v70 signature parity rule. mcp extracts message.Id + message.ThreadId; browser stubs literal:null."
+    - "0.3.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): collapse dom_no_submit + dom_submit into single `dom` flavor."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
@@ -21,50 +60,147 @@ description: >
   full To + Cc list and the threadId / inReplyTo headers.
 object: Reply
 commits_changes: true
-depends_on_view: ReplyComposer
+# v71 tab_mode (was runs_in_home_tab: true). current = act in place: the
+# in-thread inline composer runs in the HOME tab (which holds the thread's list)
+# so ThreadView's current-view row-click (0.7.0+, no nav) can open the thread.
+# resolveTabPlan maps current to wantsOwnTab:false, exactly what the boolean
+# gave. See reply_email 0.11.0.
+tab_mode: current
+depends_on_view: ThreadView
 mcp_tool: gmail.send_email
 inputs:
-  fields:
-    type: object
-    required: true
-    description: |
-      Subset of Reply fields. Required: Body.
+  # v71 flat typed scalars (was fields: {type: object}). fill_fields assembles the
+  # Reply with NO `from` (keeps only writable Reply fields); mcp/oauth map the
+  # scalars. To/Cc are implicit on a browser reply-all (Gmail auto-fills the full
+  # participant list) but mcp/oauth need them, plus Subject/ThreadId/InReplyTo.
+  To: { type: text, required: false }
+  Cc: { type: text, required: false }
+  Subject: { type: text, required: false }
+  Body: { type: rich_text, required: true }
+  ThreadId: { type: text, required: false, description: "The thread to reply in." }
+  InReplyTo: { type: text, required: false }
 result:
-  sent: boolean
+  # v71: outcome = the winning terminal's action (sent | discarded | drafted),
+  # auto-populated by the runtime (replaces the three booleans). draft_id is
+  # always null on browser: the inline reply-all composer exposes no reopenable
+  # ?compose= handle. mcp/oauth have no compose surface to abandon (only sent).
+  outcome: text
+  draft_id: text
+  # MCP parity: gmail.send_email output_schema returns flat {message_id,
+  # thread_id} (reply_all maps to send_email via mcp_tool). Match it + send_email
+  # across all flavors. message_id = the just-sent reply.
+  message_id: text
+  thread_id: text
+  message:
+    schema: Message
+    nullable: true
 flavors:
   browser:
     requires_auth: session_cookie
-    label: Fill reply-all body; click Send when commit:true
+    label: Open Reply-all composer; fill body; click Send when commit:true
+    # Spec 70 SIGNALS MODEL (see reply_email 0.10.0) — same inline composer, so
+    # the same signals: sent / discarded toasts + the closed (subjectbox-gone)
+    # surface. NO `autosave` (no ?compose= flip). `drafted` = when:[closed]
+    # not:[sent,discarded]. Fixes the discarded/closed-reply-all HITL hang.
+    signals:
+      sent:
+        type: transient_appears
+        selector: "div[role='alert']"
+        must_contain_text: "Message sent"
+      discarded:
+        type: transient_appears
+        selector: "div[role='alert']"
+        must_contain_text: "Draft discarded"
+      closed:
+        type: selector_disappears
+        # Inline composer subjectbox is collapsed to 0px → selector_disappears
+        # fired immediately on open. Use the composer REGION instead. See
+        # reply_email 0.12.0.
+        selector: "div[role='main'] div[role='region'][data-compose-id]"
     recipe:
+      # Open the inline Reply-all composer. The widget is a 2-step
+      # composite: click the per-message More-options icon, then click
+      # the Reply-all menuitem (`data-action-type='24'`). Will fail on
+      # single-recipient threads where Gmail hides the menuitem (see
+      # description limitation note).
+      - id: open_composer
+        type: use_widget
+        args:
+          widget: gmail.thread_reply_all_button
+          op: invoke
+      - id: wait_composer
+        type: wait_for_element
+        args:
+          selector: "div[role='region'][data-compose-id] div[role='textbox'][aria-label*='Message Body']"
+          timeout_ms: 6000
       - id: fill
         type: fill_fields
         args:
+          # v71: no `from` → fill the Reply from the action's flat inputs
+          # (the writable-field filter drops non-Reply keys like InReplyTo).
           object: Reply
-          from: "{{inputs.fields}}"
       - id: send
         type: use_widget
         commit: true
         args:
           widget: gmail.reply_send_button
           op: invoke
+      # Post-send moved INTO the `sent` outcome's signal (0.9.6 fix).
+      # See reply_email 0.9.6 for the HITL probe-mask rationale.
     outcomes:
-      - action: ready_to_reply_all
-        signal:
-          type: selector_appears
-          selector: div[role='main'] div[role='button'][aria-label^='Send
-            '][aria-label*='Ctrl-Enter']
+      # v71: the ready_to_reply_all pseudo-outcome is DROPPED — outcomes are the
+      # terminals the LLM consumes; the filled-and-ready state is the recipe + the
+      # HITL pause (the runtime needs no inline ready signal to mask).
       - action: sent
-        signal:
-          type: network_response
-          pattern: POST .*/mail/u/0/.*sendmail
+        # Resolves when the `sent` toast fires (BOTH modes — pre-armed latch).
+        # No then: hook (reply-all snackbar has no #link_vsm); thread_id from the
+        # in-thread h2.hP. message.Id null on the multi-message thread (see below).
+        when: [sent]
         extract:
-          sent:
-            literal: true
+          # v71: no `sent: {literal:true}` — result.outcome names the terminal.
+          # MCP parity: gmail.send_email output_schema = {message_id, thread_id}
+          # (reply_all maps to send_email via mcp_tool). Same flat top-level
+          # shape as the mcp/oauth flavors + send_email.
+          message_id:
+            # The just-sent reply is the LAST div.adn.ads[data-legacy-message-id]
+            # on the multi-message thread — from_selector_last grabs it (the
+            # extract twin of pick_last). from_selector took the OLDEST = wrong,
+            # which is why this was stubbed null pre-0.14.0.
+            from_selector_last: "div.adn.ads[data-legacy-message-id]"
+            attr: "data-legacy-message-id"
+          thread_id:
+            from_selector: "h2.hP[data-legacy-thread-id]"
+            attr: "data-legacy-thread-id"
+          # Nested schema-typed Message (v70 canonical), Id no longer null.
+          message:
+            Id:
+              from_selector_last: "div.adn.ads[data-legacy-message-id]"
+              attr: "data-legacy-message-id"
+            ThreadId:
+              from_selector: "h2.hP[data-legacy-thread-id]"
+              attr: "data-legacy-thread-id"
+      - action: discarded
+        # The `discarded` toast ("Draft discarded.") fired — a POSITIVE terminal.
+        # v71: no literal extract.
+        when: [discarded]
+      - action: drafted
+        # The reply-all composer CLOSED with neither toast — the autosaved draft
+        # persists. The `not:` guard holds a grace window so a real send/discard
+        # wins. HITL-only. draft_id null (no reopenable handle). v71: no literal.
+        when: [closed]
+        not: [sent, discarded]
   mcp:
     requires_auth: mcp_server
     label: Reply-all via gmail.send_email with full participant list
     server: gmail
     tool: send_email
+    inputs_map:
+      to: "{{inputs.To}}"
+      cc: "{{inputs.Cc}}"
+      body: "{{inputs.Body}}"
+      threadId: "{{inputs.ThreadId}}"
+      inReplyTo: "{{inputs.InReplyTo}}"
+      mimeType: "text/html"
     outcomes:
       - action: sent
         signal:
@@ -72,5 +208,45 @@ flavors:
           url_pattern: "*/mcp/*"
           status: 200
         extract:
-          sent:
-            literal: true
+          message_id:
+            from_api_response: ".message_id"
+          thread_id:
+            from_api_response: ".thread_id"
+          message:
+            Id:
+              from_api_response: ".message_id"
+            ThreadId:
+              from_api_response: ".thread_id"
+  oauth_api:
+    requires_auth: oauth_token
+    label: Reply-all via Gmail REST users.messages.send (full participant list + threading)
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/messages/send
+      body:
+        raw:
+          rfc822:
+            to: "{{inputs.To}}"
+            cc: "{{inputs.Cc}}"
+            subject: "{{inputs.Subject}}"
+            htmlBody: "{{inputs.Body}}"
+            inReplyTo: "{{inputs.InReplyTo}}"
+            references: "{{inputs.InReplyTo}}"
+        threadId: "{{inputs.ThreadId}}"
+    outcomes:
+      - action: sent
+        extract:
+          message_id:
+            from_api_response: true
+            path: id
+          thread_id:
+            from_api_response: true
+            path: threadId
+          message:
+            Id:
+              from_api_response: true
+              path: id
+            ThreadId:
+              from_api_response: true
+              path: threadId

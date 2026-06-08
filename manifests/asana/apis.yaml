@@ -1,0 +1,233 @@
+_meta:
+  name: manifests/asana/apis.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana APIs catalog. Three transports:
+
+      - `session_api` on `app.asana.com`: the SPA's own
+        `/api/1.0/*` endpoints (same shape as the public REST,
+        served from the SPA host with session-cookie auth).
+        Daily-driver path when Asana is open in Chrome.
+      - `oauth_api` on `app.asana.com`: same `/api/1.0/*` shape
+        but requires an OAuth bearer or PAT. For headless or
+        cross-context use.
+      - `mcp` via mcp.asana.com/v2/mcp. See _mcp_tools.yaml.
+
+    All Asana ids are numeric strings called `gid` (global id).
+    Pagination is cursor-based via `next_page.offset`. The input
+    field name for the workspace gid is `workspace` (matching the
+    public REST + MCP tool schema); URL path placeholders use
+    `{workspace}` to match.
+  changelog:
+    - "0.2.0 (2026-05-23): rename workspace_gid input to workspace
+       (matches MCP tool + REST docs); add confidence + verified_at
+       + notes on every entry (per INTEGRATION_FORMAT.md
+       rev 2026-05-23); add response_shape + missing fields where
+       absent."
+    - "0.1.0 (2026-05-23): initial seed. Tasks + projects + sections
+       + users + workspaces endpoints; covers the atom action
+       surface."
+
+apis:
+
+  # In-session (app.asana.com, session cookie)
+  session_get_task:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "app.asana.com"
+    method: GET
+    endpoint_pattern: "https://app.asana.com/api/1.0/tasks/{task_gid}?opt_fields={opt_fields}"
+    inputs:
+      task_gid:    { type: text, required: true, sample: "1213754599099000" }
+      opt_fields:  { type: text, required: false, default: "name,notes,assignee,due_on,completed,projects,custom_fields,memberships" }
+    response_shape:
+      type: object
+      properties:
+        data: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Without opt_fields, only the minimal Task object is returned
+      (gid, resource_type, name). Asana charges fields against rate
+      limits, so request narrow lists in production.
+
+  session_list_tasks_in_project:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "app.asana.com"
+    method: GET
+    endpoint_pattern: "https://app.asana.com/api/1.0/projects/{project_gid}/tasks?limit={limit}&offset={offset}&opt_fields={opt_fields}"
+    inputs:
+      project_gid: { type: text, required: true, sample: "1213754599092608" }
+      limit:       { type: integer, required: false, default: 50, maximum: 100 }
+      offset:      { type: text, required: false, default: "" }
+      opt_fields:  { type: text, required: false, default: "name,assignee,due_on,completed,memberships.section.name" }
+    response_shape:
+      type: object
+      properties:
+        data:      { type: array }
+        next_page: { type: object, properties: { offset: { type: text }, uri: { type: text } } }
+    confidence: low
+    verified_at: null
+    notes: |
+      Use `next_page.offset` (not numeric) for the next request.
+      Returns 100 tasks max per page regardless of higher limit.
+
+  session_search_tasks:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "app.asana.com"
+    method: GET
+    endpoint_pattern: "https://app.asana.com/api/1.0/workspaces/{workspace}/tasks/search?text={query}&limit={limit}"
+    inputs:
+      workspace: { type: text, required: true, sample: "1213743270865179", description: "Workspace gid." }
+      query:     { type: text, required: true }
+      limit:     { type: integer, required: false, default: 50, maximum: 100 }
+    response_shape:
+      type: object
+      properties:
+        data: { type: array }
+    confidence: low
+    verified_at: null
+    notes: |
+      Free-text typeahead with optional filters (assignee.any,
+      projects.any, due_on.before, etc.). Returns tasks across the
+      whole workspace, not scoped to a project.
+
+  session_list_projects:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "app.asana.com"
+    method: GET
+    endpoint_pattern: "https://app.asana.com/api/1.0/workspaces/{workspace}/projects?limit={limit}&offset={offset}&opt_fields={opt_fields}"
+    inputs:
+      workspace:  { type: text, required: true, description: "Workspace gid." }
+      limit:      { type: integer, required: false, default: 50, maximum: 100 }
+      offset:     { type: text, required: false, default: "" }
+      opt_fields: { type: text, required: false, default: "name,owner,color,default_view,archived,team" }
+    response_shape:
+      type: object
+      properties:
+        data:      { type: array }
+        next_page: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Returns projects across all teams in the workspace unless
+      filtered. Add `archived=false` (default) to exclude archived.
+
+  # Public REST (same host, OAuth / PAT)
+  rest_get_task:
+    transport: oauth_api
+    auth: oauth_token
+    method: GET
+    endpoint_pattern: "https://app.asana.com/api/1.0/tasks/{task_gid}"
+    inputs:
+      task_gid:   { type: text, required: true }
+      opt_fields: { type: text, required: false }
+    response_shape:
+      type: object
+      properties:
+        data: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Identical envelope to session_get_task. Use this from headless
+      contexts (no SaaS tab open).
+
+  rest_create_task:
+    transport: oauth_api
+    auth: oauth_token
+    method: POST
+    endpoint_pattern: "https://app.asana.com/api/1.0/tasks"
+    inputs:
+      body:
+        type: object
+        required: true
+        description: '{ data: { name, notes?, assignee?, due_on?, due_at?, projects?, workspace?, parent?, custom_fields? } }'
+    response_shape:
+      type: object
+      properties:
+        data: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Either `workspace` or `projects` (at least one project gid) is
+      required. `parent` makes the new task a subtask.
+
+  rest_update_task:
+    transport: oauth_api
+    auth: oauth_token
+    method: PUT
+    endpoint_pattern: "https://app.asana.com/api/1.0/tasks/{task_gid}"
+    inputs:
+      task_gid: { type: text, required: true }
+      body:     { type: object, required: true, description: '{ data: { name?, notes?, assignee?, completed?, due_on?, custom_fields? } }' }
+    response_shape:
+      type: object
+      properties:
+        data: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Partial update: only supplied fields are written. `assignee` may
+      be a user gid, "me", or null (to unassign).
+
+  rest_add_task_comment:
+    transport: oauth_api
+    auth: oauth_token
+    method: POST
+    endpoint_pattern: "https://app.asana.com/api/1.0/tasks/{task_gid}/stories"
+    inputs:
+      task_gid: { type: text, required: true }
+      body:     { type: object, required: true, description: '{ data: { text } }' }
+    response_shape:
+      type: object
+      properties:
+        data: { type: object, properties: { gid: { type: string } } }
+    confidence: low
+    verified_at: null
+    notes: |
+      Asana calls comments "stories." The returned gid is the story's
+      gid (not a comment-specific id type).
+
+  rest_move_task_to_section:
+    transport: oauth_api
+    auth: oauth_token
+    method: POST
+    endpoint_pattern: "https://app.asana.com/api/1.0/sections/{section_gid}/addTask"
+    inputs:
+      section_gid: { type: text, required: true }
+      body:        { type: object, required: true, description: '{ data: { task, insert_before?, insert_after? } }' }
+    response_shape:
+      type: object
+      properties:
+        data: { type: object }
+    confidence: low
+    verified_at: null
+    notes: |
+      Sections are project-scoped. The task must already be a member
+      of the section's project (use rest_update_task with
+      memberships first if not).
+
+  rest_search_tasks:
+    transport: oauth_api
+    auth: oauth_token
+    method: GET
+    endpoint_pattern: "https://app.asana.com/api/1.0/workspaces/{workspace}/tasks/search"
+    inputs:
+      workspace: { type: text, required: true }
+      query:     { type: text, required: true }
+      limit:     { type: integer, required: false, default: 50 }
+    response_shape:
+      type: object
+      properties:
+        data: { type: array }
+    confidence: low
+    verified_at: null
+    notes: |
+      Same Asana search syntax as session_search_tasks. Headless
+      callers without a workspace gid can derive it from get_me.

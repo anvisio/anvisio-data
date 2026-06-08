@@ -1,0 +1,87 @@
+_meta:
+  name: manifests/asana/actions/search_tasks.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    search_tasks atom: workspace-wide task search. Read.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.tasks: list<Task> per v70 signature parity rule. Flat extracts on .data already populate the list whole."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Search Asana tasks in a workspace.
+object: tasks
+object_types: [Task]
+commits_changes: false
+depends_on_view: any
+mcp_tool: asana.search_tasks
+inputs:
+  workspace: { type: text, required: true, description: "Workspace gid." }
+  query:     { type: text, required: true, description: "Free text + Asana search modifiers" }
+  limit:     { type: integer, required: false, default: 50, maximum: 100 }
+result:
+  tasks:
+    schema: Task
+    cardinality: list
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: SPA GET /workspaces/{gid}/tasks/search
+    recipe:
+      - id: api_call
+        type: call_platform_api
+        args:
+          api_def:
+            kind: asana_session_api
+            endpoint: "https://app.asana.com/api/1.0/workspaces/{{inputs.workspace}}/tasks/search?text={{inputs.query}}&limit={{inputs.limit}}"
+            method: GET
+            extract_path: ""
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "app.asana.com/api/1.0/workspaces/*/tasks/search*"
+          status: 200
+          timeout_ms: 10000
+        extract:
+          tasks:
+            from_step: api_call
+            path: data
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Asana MCP search_tasks
+    server: asana
+    tool: search_tasks
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          tasks:
+            from_api_response: true
+            path: data
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST GET /workspaces/{gid}/tasks/search
+    request:
+      method: GET
+      url: "https://app.asana.com/api/1.0/workspaces/{{inputs.workspace}}/tasks/search"
+      query:
+        text:  "{{inputs.query}}"
+        limit: "{{inputs.limit}}"
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "asana.com/api/1.0/workspaces/*/tasks/search"
+          status: 200
+        extract:
+          tasks:
+            from_api_response: true
+            path: data

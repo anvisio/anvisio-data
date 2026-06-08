@@ -1,28 +1,58 @@
 _meta:
   name: manifests/outlook-calendar/views/EventEditor.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    New / edit event pane. Button-triggered from Calendar (no dedicated URL), so entry uses widget instead of url. Exit dismisses via Escape key.
+    The FULL new/edit event editor (button-triggered, no dedicated URL).
+    Entry: New event (compact peek) -> More options (full editor), mirroring
+    google-calendar's EventEditor entry. The full editor hosts the discrete
+    datetime_split fields (revealed by create_event's recipe). Exit closes and
+    confirms the "Discard event" dialog so the editor doesn't leak.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new for v70 (replaces the compact-peek skeleton). Entry now reaches the FULL editor via more_options; exit handles the Discard-event confirmation dialog."
 
 name: EventEditor
-description: New / edit event pane (button-triggered, no dedicated URL).
+description: Full new/edit event editor (New event -> More options). Hosts
+  Title, Start/End date+time, attendees, location, body, and Save.
 depends_on_view: Calendar
 entry:
-  widget: outlook-calendar.new_event_button
+  recipe:
+    - id: open_quick
+      type: use_widget
+      args:
+        widget: outlook-calendar.new_event_button
+        op: invoke
+    - id: open_full
+      type: use_widget
+      args:
+        widget: outlook-calendar.more_options
+        op: invoke
 exit:
-  - id: dismiss
-    type: press_key
+  - id: close_editor
+    type: click
     args:
-      key: Escape
+      selector: button[aria-label='Close']
+  - id: confirm_discard
+    type: click
+    args:
+      selector: "[role='dialog'] button"
+      must_contain_text: "OK"
+      optional: true
+verify:
+  - type: selector_appears
+    selector: input[placeholder='Add title']
+    timeout_ms: 8000
 identifying_selectors:
   - input[placeholder='Add title']
-  - "div[contenteditable='true'][aria-label='Invite required attendees']"
+  - "[data-app-section='Form_Content']"
 widgets:
   - outlook-calendar.event_title
-  - outlook-calendar.event_body
+  - outlook-calendar.event_start
+  - outlook-calendar.event_end
   - outlook-calendar.event_attendees
-  - outlook-calendar.save_event
+  - outlook-calendar.event_location
+  - outlook-calendar.event_body
+  - outlook-calendar.event_save
   - outlook-calendar.close_event

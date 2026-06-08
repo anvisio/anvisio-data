@@ -1,0 +1,86 @@
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: opportunity-crud
+  version: '1.0.0'
+  title: Salesforce Opportunity CRUD chain
+  summary: |
+    Migrated from manifests/salesforce/blueprints/opportunity_crud.yaml
+    (v60). Full CRUD chain: list → create (dry then commit) → open →
+    update → search → delete. Self-fixturing: create_opp_committed
+    produces the record_id every downstream step uses.
+
+    Migration notes:
+      - v60 `input_from: <step>.outcomes.<field>` → SW `${ .<step>.<field> }`
+        (mapping flattens v60's outcomes wrapper).
+      - v60 `commit: false` (dry create) is encoded here by overriding
+        the v60_delegate flavor hint to dom_no_submit at runtime; until
+        per-task flavor overrides land in Step 4, both create calls hit
+        the default dom_submit and the dry preview is omitted. See the
+        commented-out create_opp_dry step below for the eventual shape.
+
+do:
+  - list_opportunities:
+      label: Listing the opportunities
+      call: salesforce.atom.list_records
+      with:
+        object_type: Opportunity
+
+  # - create_opp_dry:                # deferred until per-step flavor override
+  #     call: salesforce.atom.create_record
+  #     with:
+  #       object_type: Opportunity
+  #       fields:
+  #         Name: Anvisio Onboarding Test Opp
+  #         StageName: Prospecting
+  #         CloseDate: 12/31/2026
+
+  - create_opp_committed:
+      label: Creating the opportunity
+      call: salesforce.atom.create_record
+      with:
+        object_type: Opportunity
+        fields:
+          Name: Anvisio Onboarding Test Opp
+          StageName: Prospecting
+          CloseDate: 12/31/2026
+
+  - open_created_opp:
+      label: Opening the opportunity
+      call: salesforce.atom.open_record
+      with:
+        object_type: Opportunity
+        record_id: '${ .create_opp_committed.record_id }'
+
+  - update_created_opp:
+      label: Updating the opportunity
+      call: salesforce.atom.update_record
+      with:
+        object_type: Opportunity
+        record_id: '${ .create_opp_committed.record_id }'
+        fields:
+          NextStep: Updated by Anvisio test
+
+  - search_for_created_opp:
+      label: Searching for the opportunity
+      call: salesforce.atom.search_record
+      with:
+        query: '${ .create_opp_committed.record_name }'
+        object_type: Opportunity
+        # `RecentlyViewedOpportunities` instead of `AllOpportunities` per
+        # salesforce.md gotcha #6a: postListRecordsByName against the
+        # standard `AllOpportunities` listview lags for records created
+        # seconds-to-minutes earlier in the same session (LDS vs listview-API
+        # cache divergence). The per-user `RecentlyViewedOpportunities` view
+        # IS fresh here because `open_created_opp` above visited the record,
+        # which adds it to recently-viewed. (For callers that DIDN'T open
+        # the record first, `AllOpportunities` would still be correct — this
+        # is a blueprint-level harden, not an atom-level default change.)
+        list_view_api_name: RecentlyViewedOpportunities
+
+  - delete_created_opp:
+      label: Deleting the opportunity
+      call: salesforce.atom.delete_record
+      with:
+        object_type: Opportunity
+        record_id: '${ .create_opp_committed.record_id }'

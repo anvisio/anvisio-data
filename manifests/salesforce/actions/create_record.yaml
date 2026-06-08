@@ -1,24 +1,25 @@
 _meta:
   name: manifests/salesforce/actions/create_record.yaml
-  version: 2.0.0
+  version: 2.2.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    create_record atom — parameterized over object_type. Single
-    canonical action for creating Opportunity / Lead / Contact /
-    Account / etc. Spec 70 single `browser` flavor with `commit: true`
-    step marker on the destructive Save click + optional `session_api`
-    (Aura POST) + `mcp` (KirtiJha dml_records) flavors. Writes prefer
-    browser > session_api > mcp per spec 70 §7.
+    create_record atom: parameterized over object_type. Single canonical
+    action for creating Account / Case / Contact / Event / Lead / Note /
+    Opportunity / Task. Spec 70 single `browser` flavor with `commit:
+    true` step marker on the destructive Save click + optional
+    `session_api` (Aura POST) + `mcp` (KirtiJha dml_records) flavors.
+    Writes prefer browser > session_api > mcp per spec 70 §7.
   changelog:
-    - "2.0.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. URL match regex + samples carry over from v1.0.0 (live-verified)."
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    - "2.2.0 (2026-05-29): spec 72 — add browser `abandon_signal` (selector_disappears SaveEdit) for fast HITL discard detection. The `created` outcome STAYS `url_matches /r/{id}/view`: live-probed 2026-05-29 as discard-safe (a cancelled New modal returns to the list, never a record view) AND it is the only source of the server-assigned record_id. SF success toast captured live as `<Obj> \"<Name>\" was created.` (.toastMessage / .slds-theme--success, role=null — NOT [role='alert']); recorded in salesforce.md. No L4 toaster rung added here to avoid a cross-SPA-nav false-negative + losing the from_url_match record_id."
+    - "2.1.0 (2026-05-24): add Case + Event to object_types (matching the 8 schemas/<Type>.yaml authored from live SF describe). Add schema-typed result.record per v70 signature parity rule (schema_union across the 8 SF objects). Browser populates record.Id from the URL post-save; session_api populates from POST response.id; mcp from .results[0].id."
+    - "2.0.0 (2026-05-19): spec 70 shape: rename `dom` to `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. URL match regex + samples carry over from v1.0.0 (live-verified)."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/. Live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-description: Create a new Opportunity / Account / Lead record via
-  /lightning/o/{object_type}/new.
+description: Create a new SF record via /lightning/o/{object_type}/new.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: true
 depends_on_view: RecordNewModal
 mcp_tool: salesforce.dml_records
@@ -38,10 +39,19 @@ result:
   record_id: text
   record_name: text
   created: boolean
+  record:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
 flavors:
   browser:
     requires_auth: session_cookie
     label: Fill the new-record modal; click Save when commit:true
+    # Spec 72 R1: a HITL discard = the user cancelling the New modal (Save
+    # button gone, no "was created" toast, no /r/{id}/view nav). Raced
+    # against the `created` outcome with a grace window so a real Save still
+    # wins (the redirect can beat the toast latch by a beat).
+    abandon_signal:
+      type: selector_disappears
+      selector: button[name='SaveEdit']
     recipe:
       - id: fill_fields
         type: fill_fields
@@ -73,6 +83,11 @@ flavors:
             from_input: fields.Name
           created:
             literal: true
+          record:
+            Id:
+              from_url_match: record_id
+            Name:
+              from_input: fields.Name
   session_api:
     requires_auth: session_cookie
     label: POST /services/data/v62.0/sobjects/{object_type}
@@ -86,8 +101,15 @@ flavors:
         extract:
           record_id:
             from_api_response: ".id"
+          record_name:
+            from_input: fields.Name
           created:
             from_api_response: ".success"
+          record:
+            Id:
+              from_api_response: ".id"
+            Name:
+              from_input: fields.Name
   mcp:
     requires_auth: mcp_server
     label: Create via SF MCP server (dml_records insert)
@@ -106,5 +128,12 @@ flavors:
         extract:
           record_id:
             from_api_response: ".results[0].id"
+          record_name:
+            from_input: fields.Name
           created:
             from_api_response: ".results[0].success"
+          record:
+            Id:
+              from_api_response: ".results[0].id"
+            Name:
+              from_input: fields.Name

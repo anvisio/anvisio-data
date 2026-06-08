@@ -1,0 +1,90 @@
+_meta:
+  name: manifests/linkedin/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  archetypes_used: [read_text, read_attribute]
+  description: |
+    LinkedIn (linkedin.com) widget library. Inline (no shared library to
+    extend yet). READ-ONLY widgets for the profile hero card + About,
+    consumed by view_profile via read_fields.
+
+    CRITICAL DOM NOTE: linkedin.com ships ROTATING HASHED class names
+    (e.g. `_5c527a07 d0a6b3d9`), ZERO <h1> elements, and NO id anchors. So
+    every selector here is an `xpath=` selector anchored on stable text +
+    structure + href patterns, never on class. Grounded against a
+    signed-in profile 2026-06-01. The hero card is the <section> that
+    encloses the name <h2> (which lives inside the /in/ link); the other
+    hero fields are read relative to it. See linkedin.md for the full
+    anchoring rationale + the per-field grounding.
+  changelog:
+    - "0.1.0 (2026-06-01): initial. xpath read widgets for the profile hero + About. LIVE-HARDENED against a signed-in profile (linkedin.com/in/chanudamarla) via the runtime's exact document.evaluate resolution: name / headline / location / current_company / current_company_url / connections / followers all extract clean; about returns the section text with an 'About' heading prefix (body-anchor refinement is a follow-up). location uses hero p[3] and is position-fragile across profile shapes (flagged)."
+
+widgets:
+  # ── Profile hero card (read) ──────────────────────────────────────
+  # Hero anchor = the section enclosing the name <h2> inside the /in/ link:
+  #   (//main//a[contains(@href,'/in/')]//h2)[1]/ancestor::section[1]
+  linkedin.profile_name:
+    archetype: read_text
+    # The name is an <h2> inside the /in/ link (NOT an <h1>: there are none).
+    selectors:
+      read_target:
+        - "xpath=(//main//a[contains(@href,'/in/')]//h2)[1]"
+
+  linkedin.profile_headline:
+    archetype: read_text
+    # First <p> in the hero card.
+    selectors:
+      read_target:
+        - "xpath=((//main//a[contains(@href,'/in/')]//h2)[1]/ancestor::section[1]//p)[1]"
+
+  linkedin.profile_location:
+    archetype: read_text
+    # FLAGGED: position-fragile. Location is the 3rd <p> in the hero on a
+    # profile WITH a current-company + school row (which is p[2]); the index
+    # shifts on profiles missing those. Harden against several real profiles
+    # before trusting; refine the anchor if it drifts.
+    selectors:
+      read_target:
+        - "xpath=((//main//a[contains(@href,'/in/')]//h2)[1]/ancestor::section[1]//p)[3]"
+
+  linkedin.profile_company:
+    archetype: read_text
+    # First /company/ link in main = the hero's current-company entity.
+    selectors:
+      read_target:
+        - "xpath=(//main//a[contains(@href,'/company/')])[1]"
+
+  linkedin.profile_company_url:
+    archetype: read_attribute
+    selectors:
+      read_target:
+        - "xpath=(//main//a[contains(@href,'/company/')])[1]"
+    overrides:
+      attribute: href
+
+  linkedin.profile_connections:
+    archetype: read_text
+    selectors:
+      read_target:
+        - "xpath=(//main//a[contains(@href,'/in/')]//h2)[1]/ancestor::section[1]//a[contains(.,'connection')]"
+
+  linkedin.profile_followers:
+    archetype: read_text
+    selectors:
+      read_target:
+        - "xpath=(//main//a[contains(@href,'/in/')]//h2)[1]/ancestor::section[1]//a[contains(.,'follower')]"
+
+  # ── About section (read) ──────────────────────────────────────────
+  linkedin.profile_about:
+    archetype: read_text
+    # The About <section>, addressed by its <h2> text (no id anchors exist).
+    # LIVE-HARDENED 2026-06-01: resolves and returns the About body, but the
+    # textContent includes the leading "About" heading (e.g. "AboutI am a
+    # seasoned ..."). No heading-free body anchor found on the probed profile
+    # (no span[aria-hidden], no [dir]). FOLLOW-UP: refine the body anchor;
+    # consumers can strip /^About\s*/ meanwhile.
+    selectors:
+      read_target:
+        - "xpath=//main//h2[normalize-space()='About']/ancestor::section[1]"

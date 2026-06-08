@@ -1,0 +1,80 @@
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: upsert-contact
+  version: '1.0.0'
+  title: Log a contact (dedupe)
+  summary: |
+    Look up existing contacts that match the name / email you're logging,
+    let you pick the right one to update — or create a new contact — then
+    fill the Salesforce form for you to review and Save. The first
+    composition built on the pick: view: search -> pick one (or create
+    new) -> update / create through the spec-71 write gate. The pick auto
+    -resolves the trivial cardinalities (0 matches -> create, 1 -> select);
+    2+ shows the card.
+
+do:
+  - search:
+      label: Looking for matching contacts
+      # search_record lists the AllContacts listview's columns (Name, Email,
+      # Title, Phone, Account) via Aura postListRecordsByName, then CLIENT-
+      # FILTERS by name — the session cookie can't server-filter (SF list
+      # controllers ignore the SOQL where; see the atom). So this returns only
+      # the contacts whose Name matches the query, each with enough fields to
+      # tell two same-name people apart. search_record 3.1.0 flattens matches
+      # to {Id, Name, Email, ...}.
+      call: salesforce.atom.search_record
+      with:
+        query: "${ $input.first_name } ${ $input.last_name }"
+        object_type: Contact
+        list_view_api_name: AllContacts
+
+  - chosen:
+      label: Pick the contact
+      pick:
+        prompt: "Contacts matching ${ $input.first_name } ${ $input.last_name }. Pick one to update, or create a new contact."
+        from: '${ .search.matches }'
+        select: one
+        allow_create: true
+        display:
+          main: '${ $item.Name }'
+          sub: '${ $item.Email } · ${ $item.Title }'
+        # Per-row open ↗ — review the contact in Salesforce before selecting.
+        link:
+          view: RecordView
+          with:
+            object_type: Contact
+            record_id: '${ $item.Id }'
+
+  - apply:
+      switch:
+        # The user picked an existing contact (or one auto-matched) -> amend
+        # it. commit:false fills the edit modal and hands off to the spec-71
+        # write gate; the user reviews the values and clicks Save in SF.
+        - when: '${ .chosen.action == "select" }'
+          then:
+            - update:
+                label: Review & Save the contact
+                call: salesforce.atom.update_record
+                commit: false
+                with:
+                  object_type: Contact
+                  record_id: '${ .chosen.record.Id }'
+                  fields:
+                    Email: '${ $input.email }'
+                    Title: '${ $input.title }'
+        # No match, or the user chose "Create new" -> a new contact, again
+        # filled-then-reviewed through the write gate.
+        - when: '${ .chosen.action == "create" }'
+          then:
+            - create:
+                label: Review & Save the new contact
+                call: salesforce.atom.create_record
+                commit: false
+                with:
+                  object_type: Contact
+                  fields:
+                    LastName: '${ $input.last_name }'
+                    FirstName: '${ $input.first_name }'
+                    Email: '${ $input.email }'
+                    Title: '${ $input.title }'

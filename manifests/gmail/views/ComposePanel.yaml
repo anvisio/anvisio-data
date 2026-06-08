@@ -1,7 +1,7 @@
 _meta:
   name: manifests/gmail/views/ComposePanel.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
@@ -11,6 +11,7 @@ _meta:
     avoid dialog leaking onto next view. Entry chain + exit healed in
     Phase 4 validation.
   changelog:
+    - "0.2.0 (2026-05-25): u/0 → u/{account_index} in url_patterns (entry shape is depends_on_view + recipe, no entry.url). Add explicit `verify` entry on subjectbox — was relying on identifying_selectors fallback. Compose is a singleton dialog with no per-call input that differentiates instances, so verify is shape-only by design. send_email + draft_email atoms depends_on_view: ComposePanel."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
 name: ComposePanel
@@ -42,8 +43,12 @@ exit:
       selector: div[aria-label^='New Message']
       state: absent
       timeout_ms: 5000
+verify:
+  - type: selector_appears
+    selector: input[name='subjectbox']
+    timeout_ms: 8000
 url_patterns:
-  - https://mail.google.com/mail/u/0/#.*[?&]compose=.*
+  - https://mail.google.com/mail/u/\d+/#.*[?&]compose=.*
 identifying_selectors:
   - div[aria-label^='New Message']
   - input[name='subjectbox']

@@ -1,22 +1,24 @@
 _meta:
   name: manifests/salesforce/actions/update_record.yaml
-  version: 2.0.0
+  version: 2.2.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    update_record atom — PATCH semantics on a single SF record. Spec 70:
+    update_record atom: PATCH semantics on a single SF record. Spec 70:
     `browser` flavor opens the edit modal + fills + clicks Save (commit
     step); `session_api` PATCHes the REST endpoint directly; `mcp`
-    calls dml_records with operation: update. Writes prefer
-    browser > session_api > mcp per spec 70 §7.
+    calls dml_records with operation: update. Writes prefer browser >
+    session_api > mcp per spec 70 §7.
   changelog:
-    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified selectors carry over from v1.0.0."
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    - "2.2.0 (2026-05-29): spec 72 — browser `updated` L4 is now the consequence ladder, replacing the bare `selector_disappears SaveEdit` (Trap 2 fake-success: SaveEdit also disappears on Cancel/discard). Live-probed the toast as `<Obj> \"<Name>\" was saved.` in `.toastMessage` (.slds-theme--success, role=null — NOT [role='alert']). New signal: all:[transient_appears .toastMessage 'was saved', selector_disappears SaveEdit]. Dropped the timeout_ms:10000 (it capped the HITL budget). Added `abandon_signal` so a discard resolves as cancelled via the grace-arbitrated race. The previous bare-disappear was a DELIBERATE choice for welcome-redirect robustness (see widgets.yaml save_button) — the toaster fires regardless of where Save lands, so it is both redirect-robust AND not a fake-success."
+    - "2.1.0 (2026-05-24): add Case + Event to object_types (matching the 8 SF schemas). Add schema-typed result.record per v70 signature parity rule; all flavors echo record.Id from input."
+    - "2.0.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified selectors carry over from v1.0.0."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/. Live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Edit an existing record via /lightning/r/{object_type}/{record_id}/edit modal.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: true
 depends_on_view: RecordEditModal
 mcp_tool: salesforce.dml_records
@@ -36,10 +38,19 @@ inputs:
 result:
   record_id: text
   updated: boolean
+  record:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
 flavors:
   browser:
     requires_auth: session_cookie
     label: Fill the edit modal; click Save when commit:true
+    # Spec 72 R1: a HITL discard = the user cancelling the edit modal
+    # (SaveEdit gone, no "was saved" toast). Same selector as the `updated`
+    # composite's rung 2 — the grace window disambiguates: toast in grace ->
+    # updated, else -> cancelled.
+    abandon_signal:
+      type: selector_disappears
+      selector: button[name='SaveEdit']
     recipe:
       - id: fill_fields
         type: fill_fields
@@ -58,16 +69,30 @@ flavors:
           type: selector_appears
           selector: button[name='SaveEdit']
           timeout_ms: 8000
+      # Spec 72 L4 consequence ladder. Rung 1 (positive): the success
+      # toaster — live-probed 2026-05-29 as `<Obj> "<Name>" was saved.` in
+      # `.toastMessage` (.slds-theme--success, role=null — NOT [role='alert']).
+      # Rung 2 (corroborating): the SaveEdit button disappears. all: so a
+      # DISCARD (SaveEdit gone, NO toaster) reports NOT committed — was a
+      # Trap 2 fake-success. No per-rung timeout_ms — inherit the caller
+      # budget (30s commit / 10min HITL); an explicit timeout_ms caps the
+      # HITL wait (caught live 2026-05-29 on calendar).
       - action: updated
         signal:
-          type: selector_disappears
-          selector: button[name='SaveEdit']
-          timeout_ms: 10000
+          all:
+            - type: transient_appears
+              selector: ".toastMessage"
+              must_contain_text: "was saved"
+            - type: selector_disappears
+              selector: button[name='SaveEdit']
         extract:
           record_id:
             from_input: record_id
           updated:
             literal: true
+          record:
+            Id:
+              from_input: record_id
   session_api:
     requires_auth: session_cookie
     label: PATCH /services/data/v62.0/sobjects/{object_type}/{record_id}
@@ -83,6 +108,9 @@ flavors:
             from_input: record_id
           updated:
             literal: true
+          record:
+            Id:
+              from_input: record_id
   mcp:
     requires_auth: mcp_server
     label: Update via SF MCP server (dml_records update)
@@ -104,3 +132,6 @@ flavors:
             from_input: record_id
           updated:
             from_api_response: ".results[0].success"
+          record:
+            Id:
+              from_input: record_id

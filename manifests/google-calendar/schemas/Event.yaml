@@ -1,0 +1,72 @@
+_meta:
+  name: manifests/google-calendar/schemas/Event.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Google Calendar Event schema: the canonical entity for create /
+    update / read flows. Field-to-widget mappings drive fill_fields in
+    create_event / update_event (editor widgets) and read_fields in
+    get_event (the editor surfaces an existing event's values, so the
+    same widgets serve both fill and read). Mirrors the Google Calendar
+    API v3 Event resource the MCP server wraps.
+  changelog:
+    - "0.3.0 (2026-05-28): Recurrence field maps to the event_recurrence widget (recurrence_picker archetype) so fill_fields drives the Recurrence combobox + Custom dialog from an RRULE. Recurrence is declared after StartTime/EndTime, so fill_fields' schema-order fill sets the recurrence last (after the start day is set)."
+    - "0.2.0 (2026-05-24): add primary_key:[Id] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). Fields grounded in Google Calendar API v3 Event + nspady/google-calendar-mcp create-event/update-event input schemas."
+
+description: >
+  A Google Calendar event. The canonical entity for create_event,
+  update_event, and get_event. Title, StartTime, and EndTime are required
+  to create. Attendees is a list of invitee emails; CalendarId references
+  the owning Calendar. Status / HtmlLink / ConferenceLink are read-only
+  server-assigned fields.
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    primary: true
+    readonly: true
+  Title:
+    type: text
+    required: true
+    widget: google-calendar.event_title
+  StartTime:
+    type: datetime
+    required: true
+    widget: google-calendar.event_start
+  EndTime:
+    type: datetime
+    required: true
+    widget: google-calendar.event_end
+  Description:
+    type: textarea
+    widget: google-calendar.event_description
+  Location:
+    type: text
+    widget: google-calendar.event_location
+  Attendees:
+    type: list<email>
+    widget: google-calendar.event_guests
+  CalendarId:
+    type: id
+    ref: Calendar.Id
+  ColorId:
+    type: picklist
+  Recurrence:
+    type: text
+    widget: google-calendar.event_recurrence
+  Status:
+    type: picklist
+    readonly: true
+  HtmlLink:
+    type: text
+    readonly: true
+  ConferenceLink:
+    type: text
+    readonly: true
+natural_keys:
+  - Title
+  - StartTime
+  - Id

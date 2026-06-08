@@ -1,0 +1,161 @@
+_meta:
+  name: manifests/slack/_mcp_tools.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Slack MCP tool catalog. The official Slack MCP server is at
+    https://mcp.slack.com (GA 2026-02-17, Anthropic-published-then-
+    Slack-took-over). Pairs with Slack's Real-Time Search API for
+    LLM consumption.
+
+    The Anthropic-published reference at
+    modelcontextprotocol/servers/slack (now archived 2025-05) was the
+    original; the official Slack-maintained server replaced it.
+    Anvisio's atom actions pin `mcp_tool:` to the names below.
+
+    Auth: OAuth 2.1 / PKCE. Tools enforce the workspace's permission
+    + enterprise-key-management policy.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. Core 8 tools (channels +
+       messages + users + workspace): the daily-driver subset.
+       Real-Time Search API tools (search_messages) included."
+
+server:
+  name: slack-mcp
+  source_url: https://mcp.slack.com
+  remote_url: https://mcp.slack.com
+  transport: http
+  auth: oauth2_pkce
+  fetched_at: 2026-05-23T00:00:00Z
+
+tools:
+
+  # ── Workspace context ──────────────────────────────────────────────
+  - name: list_users
+    description: List workspace members.
+    input_schema:
+      type: object
+      properties:
+        limit:  { type: integer, maximum: 200, default: 100 }
+        cursor: { type: string, description: pagination cursor from previous response_metadata.next_cursor }
+    output_schema:
+      type: object
+      properties:
+        members:           { type: array, items: { type: object } }
+        response_metadata: { type: object, properties: { next_cursor: { type: string } } }
+
+  - name: get_user_profile
+    description: Get a user's profile (display name, email, status, timezone).
+    input_schema:
+      type: object
+      required: [user]
+      properties:
+        user: { type: string, description: User id (Uxxxx) }
+    output_schema:
+      type: object
+      properties:
+        user: { type: object }
+
+  # ── Channels ────────────────────────────────────────────────────────
+  - name: list_channels
+    description: List channels in the workspace (public + private the user can see).
+    input_schema:
+      type: object
+      properties:
+        types:                 { type: string, description: "Comma-list of channel types: public_channel,private_channel,mpim,im" }
+        exclude_archived:      { type: boolean, default: true }
+        limit:                 { type: integer, maximum: 1000, default: 100 }
+        cursor:                { type: string }
+    output_schema:
+      type: object
+      properties:
+        channels:          { type: array, items: { type: object } }
+        response_metadata: { type: object }
+
+  - name: get_channel_info
+    description: Fetch channel metadata (name, topic, purpose, members, created, archived).
+    input_schema:
+      type: object
+      required: [channel]
+      properties:
+        channel: { type: string, description: Channel id (Cxxxx) }
+    output_schema:
+      type: object
+      properties:
+        channel: { type: object }
+
+  # ── Messages ────────────────────────────────────────────────────────
+  - name: read_channel
+    description: Fetch recent messages from a channel (conversations.history).
+    input_schema:
+      type: object
+      required: [channel]
+      properties:
+        channel: { type: string, description: Channel / DM id }
+        oldest:  { type: string, description: Unix ts cutoff (start of window) }
+        latest:  { type: string, description: Unix ts cutoff (end of window) }
+        limit:   { type: integer, maximum: 999, default: 100 }
+        cursor:  { type: string }
+    output_schema:
+      type: object
+      properties:
+        messages:          { type: array, items: { type: object } }
+        has_more:          { type: boolean }
+        response_metadata: { type: object }
+
+  - name: get_thread_replies
+    description: Fetch the replies in a thread (conversations.replies).
+    input_schema:
+      type: object
+      required: [channel, ts]
+      properties:
+        channel: { type: string }
+        ts:      { type: string, description: Parent message ts }
+        limit:   { type: integer, maximum: 999, default: 100 }
+        cursor:  { type: string }
+    output_schema:
+      type: object
+      properties:
+        messages: { type: array, items: { type: object } }
+
+  - name: search_messages
+    description: |
+      Search messages across the workspace (uses Slack's Real-Time
+      Search API when available, falls back to search.messages
+      otherwise).
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query:   { type: string, description: 'Slack search syntax e.g. "in:#general from:@cd2k after:2026-05-01"' }
+        sort:    { type: string, enum: [score, timestamp], default: score }
+        count:   { type: integer, maximum: 100, default: 20 }
+        page:    { type: integer, default: 1 }
+    output_schema:
+      type: object
+      properties:
+        messages: { type: object, properties: { matches: { type: array }, total: { type: integer } } }
+
+  - name: post_message
+    description: |
+      Send a message to a channel or DM (chat.postMessage). Optional
+      thread_ts replies in a thread.
+    input_schema:
+      type: object
+      required: [channel, text]
+      properties:
+        channel:    { type: string }
+        text:       { type: string }
+        thread_ts:  { type: string, description: Parent message ts; omit for top-level post }
+        blocks:     { type: array, description: Block Kit blocks }
+        attachments: { type: array, description: Legacy attachments }
+        unfurl_links: { type: boolean }
+        unfurl_media: { type: boolean }
+    output_schema:
+      type: object
+      properties:
+        channel: { type: string }
+        ts:      { type: string }
+        message: { type: object }

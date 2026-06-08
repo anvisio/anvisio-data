@@ -1,0 +1,201 @@
+_meta:
+  name: manifests/google-calendar/actions/update_event.yaml
+  version: 0.7.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-28
+  description: |
+    update_event atom: change an existing event. The browser flavor
+    reaches the event via EventDetail, opens the editor with the edit
+    pencil, fills the changed fields, and on commit clicks Save; the
+    oauth_api + mcp flavors patch the event directly. commits_changes:true,
+    so transport priority is browser > oauth_api > mcp per spec 70 §7.
+  changelog:
+    - "0.7.0 (2026-05-29): spec 72 R1 — add browser `abandon_signal` (selector_disappears Title) so a HITL discard (editor closed, no 'Event saved' toast) resolves as cancelled via the runner's grace-arbitrated race."
+    - "0.6.0 (2026-05-28): spec 72 — browser `updated` L4 is now the consequence ladder, replacing the bare `selector_disappears input[aria-label='Title']` (Trap 2 fake-success on DISCARD). Toast is 'Event saved' in a [aria-live='polite'] announcer (the editor Save button emits the same toast for create + edit; live-probed via create). New signal: all:[transient_appears 'Event saved', selector_disappears title]."
+    - "0.5.0 (2026-05-28): add occurrence_date input — the EventDetail entry navigates the grid to that day before clicking the chip, so update reaches an event off the currently-shown range (gotcha #2). For a recurring event pass the instance's date. Live-confirmed the day-nav renders an off-week chip."
+    - "0.4.0 (2026-05-28): browser scope-dialog handling — a commit-only resolve_recurring_scope step after Save drives the 'Edit recurring event' radio (single/following/all → This event / This and following / All events), no-op on single events. Fixed stale outcome landmarks: ready_to_update now waits for the real <button> Save (was the dead [role='button'] form), updated waits for the full-editor title input[aria-label='Title'] (was 'Add title', which never exists in the editor reached via the edit pencil → fake-success). Passing fields.Recurrence (RRULE) also edits the series' recurrence via the event_recurrence widget."
+    - "0.3.0 (2026-05-28): add recurring_scope input (single/following/all) → MCP recurringUpdateScope, for editing one instance vs the whole series of a recurring event. Browser scope-dialog handling is a follow-up (the 'Edit recurring event' dialog; in HITL/preview mode the user picks the scope themselves)."
+    - "0.2.0 (2026-05-24): add schema-typed result.event per v70 signature parity rule. browser echoes event.Id from input; oauth_api extracts from .id; mcp from .event.id."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.update-event."
+
+description: >
+  Update an existing event — reschedule it, rename it, change its
+  location, guests, or description. The browser flavor opens the event in
+  the editor via EventDetail's edit pencil, fills the changed fields, and
+  on commit clicks Save; preview mode fills and stops for user review. The
+  oauth_api and mcp flavors patch the event in one call.
+object: Event
+commits_changes: true
+depends_on_view: EventDetail
+mcp_tool: google-calendar.update-event
+inputs:
+  event_id:
+    type: text
+    required: true
+    description: Google Calendar event id to update.
+  fields:
+    type: object
+    required: true
+    description: |
+      Subset of Event fields to change (Title, StartTime, EndTime,
+      Description, Location, Attendees, Recurrence). Recurrence is an RFC
+      5545 RRULE string (e.g. "RRULE:FREQ=DAILY;INTERVAL=2"). Only the
+      supplied fields change.
+  calendar_id:
+    type: text
+    description: Calendar id the event belongs to. Defaults to the primary calendar.
+  occurrence_date:
+    type: text
+    description: |
+      Optional ISO date (e.g. "2026-06-15") of the event's occurrence. When
+      set, the browser flavor first navigates the grid to that day so the
+      event's chip renders even if it's off the currently-shown range
+      (gotcha #2). For a RECURRING event pass the INSTANCE's date. Omit when
+      the event is already on the visible grid; ignored by oauth_api / mcp.
+  recurring_scope:
+    type: text
+    description: |
+      For a RECURRING event only: which instances the update applies to —
+      `single` (this instance, default), `following` (this + later), or
+      `all` (the whole series). Passes straight to the MCP
+      recurringUpdateScope. The browser flavor maps it to the
+      "Edit recurring event" scope-dialog radio (single → "This event",
+      following → "This and following", all → "All events"). Ignored for
+      non-recurring events.
+result:
+  updated: boolean
+  event_id: text
+  event:
+    schema: Event
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the editor, fill changed fields; click Save when commit:true
+    # Spec 72 R1: discard detection for the HITL preview — the editor's Title
+    # input disappearing without a success toast is a discard. Raced against
+    # the commit outcome with a grace window so a real Save still wins.
+    abandon_signal:
+      type: selector_disappears
+      selector: input[aria-label='Title']
+    recipe:
+      - id: open_editor
+        type: use_widget
+        args:
+          widget: google-calendar.event_edit_button
+          op: invoke
+      - id: fill
+        type: fill_fields
+        args:
+          object: Event
+          from: "{{inputs.fields}}"
+      - id: save
+        type: use_widget
+        commit: true
+        args:
+          widget: google-calendar.event_save
+          op: invoke
+      # Recurring instances pop an "Edit recurring event" scope dialog on
+      # Save (commit mode only). Best-effort: no-ops on single events. In
+      # preview mode (save skipped) the user picks the scope themselves.
+      - id: scope
+        type: resolve_recurring_scope
+        commit: true
+        args:
+          scope: "{{inputs.recurring_scope}}"
+          dialog: "[role='dialog']"
+          option_target:
+            - "[role='dialog'] label"
+            - "[role='dialog'] [role='radio']"
+          option_label:
+            single: "This event"
+            following: "This and following"
+            all: "All events"
+          confirm_button: "[role='dialog'] button"
+          confirm_label: "OK"
+    outcomes:
+      - action: ready_to_update
+        signal:
+          type: selector_appears
+          selector: button[aria-label='Save']
+      # Spec 72 L4 consequence ladder. Rung 1 (positive): the success
+      # toaster — live-probed 2026-05-28 as "Event saved" in a goog-lr-*
+      # [aria-live='polite'] announcer (the editor's Save button emits the
+      # SAME toast for create and edit). Rung 2 (corroborating): the Title
+      # input disappears (Save navigates editor -> grid). all: so a DISCARD
+      # (editor closes, NO toaster) reports NOT committed — was a Trap 2
+      # fake-success.
+      # No per-rung timeout_ms — inherit the caller budget (30s commit /
+      # 10min HITL). An explicit timeout_ms caps the HITL wait (caught live
+      # 2026-05-29 on create_event).
+      - action: updated
+        signal:
+          all:
+            - type: transient_appears
+              selector: "[aria-live='polite']"
+              must_contain_text: "Event saved"
+            - type: selector_disappears
+              selector: input[aria-label='Title']
+        extract:
+          updated:
+            literal: true
+          event_id:
+            from_input: event_id
+          event:
+            Id:
+              from_input: event_id
+  oauth_api:
+    requires_auth: oauth_token
+    label: Patch the event via the Calendar API (events.patch)
+    request:
+      provider: google
+      method: PATCH
+      url: https://www.googleapis.com/calendar/v3/calendars/{{inputs.calendar_id}}/events/{{inputs.event_id}}
+      body:
+        summary: "{{inputs.fields.Title}}"
+        start:
+          dateTime: "{{inputs.fields.StartTime}}"
+        end:
+          dateTime: "{{inputs.fields.EndTime}}"
+        description: "{{inputs.fields.Description}}"
+        location: "{{inputs.fields.Location}}"
+    outcomes:
+      - action: updated
+        extract:
+          event_id:
+            from_api_response: true
+            path: id
+          updated:
+            literal: true
+          event:
+            Id:
+              from_api_response: true
+              path: id
+  mcp:
+    requires_auth: mcp_server
+    label: Update the event via the google-calendar update-event MCP tool
+    server: google-calendar
+    tool: update-event
+    inputs_map:
+      eventId: "{{inputs.event_id}}"
+      calendarId: "{{inputs.calendar_id}}"
+      title: "{{inputs.fields.Title}}"
+      startTime: "{{inputs.fields.StartTime}}"
+      endTime: "{{inputs.fields.EndTime}}"
+      description: "{{inputs.fields.Description}}"
+      location: "{{inputs.fields.Location}}"
+      recurringUpdateScope: "{{inputs.recurring_scope}}"
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          event_id:
+            from_api_response: ".event.id"
+          updated:
+            literal: true
+          event:
+            Id:
+              from_api_response: ".event.id"

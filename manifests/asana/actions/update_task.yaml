@@ -1,0 +1,127 @@
+_meta:
+  name: manifests/asana/actions/update_task.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    update_task atom: update name / notes / assignee / completed / due
+    / custom fields on a single task. commits_changes:true.
+
+    Browser flavor wires the two simplest paths: mark complete (when
+    'completed' is set) and rename (when 'name' is set). The two steps
+    are when:-gated so callers can do either, both, or neither.
+    Notes / assignee / due / custom-field updates use mcp / oauth_api
+    (the field-picker widgets are deferred to heal-time authoring).
+
+    All three flavors extract the updated Task via flat
+    from_api_response on .data; the PUT /tasks/{gid} response is
+    Task-shaped, and the browser-flavor network_response signal
+    catches the same SPA-side PUT.
+  changelog:
+    - "0.3.0 (2026-05-24): adopt schema-typed result.task per v70 signature parity rule. All three flavors use flat from_api_response: true / path: data (browser via the network_response signal it already had)."
+    - "0.2.0 (2026-05-23): split ternary into when:-gated steps so the
+       template engine can render them; replace false-positive
+       url_matches signal with selector_appears on completion / name
+       affordances."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Update an Asana task.
+object: "{{inputs.task_gid}}"
+object_types: [Task]
+commits_changes: true
+depends_on_view: TaskDetail
+mcp_tool: asana.update_task
+inputs:
+  project_id:    { type: text, required: false, default: "0", description: "Project gid for browser-flavor URL." }
+  task_gid:      { type: text, required: true }
+  name:          { type: text, required: false }
+  notes:         { type: text, required: false }
+  html_notes:    { type: text, required: false }
+  assignee:      { type: text, required: false }
+  completed:     { type: text, required: false, description: "'true' | 'false'" }
+  due_on:        { type: text, required: false }
+  due_at:        { type: text, required: false }
+  custom_fields: { type: object, required: false }
+result:
+  task:
+    schema: Task
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open task pane + mark complete and/or rename (user confirms on commit:true)
+    recipe:
+      - id: nav_task
+        type: navigate
+        args:
+          url: "https://app.asana.com/0/{{inputs.project_id}}/{{inputs.task_gid}}"
+      - id: mark_complete
+        when: "{{inputs.completed}}"
+        type: use_widget
+        args:
+          widget: asana.complete_task_button
+          op: invoke
+        commit: true
+      - id: set_name
+        when: "{{inputs.name}}"
+        type: use_widget
+        args:
+          widget: asana.task_pane_name
+          op: fill
+          value: "{{inputs.name}}"
+        commit: true
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "app.asana.com/api/1.0/tasks/*"
+          status: 200
+          timeout_ms: 8000
+        extract:
+          task:
+            from_api_response: true
+            path: data
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Asana MCP update_task
+    server: asana
+    tool: update_task
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          task:
+            from_api_response: true
+            path: data
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST PUT /tasks/{gid}
+    request:
+      method: PUT
+      url: "https://app.asana.com/api/1.0/tasks/{{inputs.task_gid}}"
+      body:
+        data:
+          name:          "{{inputs.name}}"
+          notes:         "{{inputs.notes}}"
+          html_notes:    "{{inputs.html_notes}}"
+          assignee:      "{{inputs.assignee}}"
+          completed:     "{{inputs.completed}}"
+          due_on:        "{{inputs.due_on}}"
+          due_at:        "{{inputs.due_at}}"
+          custom_fields: "{{inputs.custom_fields}}"
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "asana.com/api/1.0/tasks/*"
+          status: 200
+        extract:
+          task:
+            from_api_response: true
+            path: data

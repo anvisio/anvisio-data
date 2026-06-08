@@ -1,0 +1,194 @@
+_meta:
+  name: manifests/hubspot/actions/search_records.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    search_records atom — query CRM records with structured filters.
+    Read-only; spec 70 §7 priority is `session_api` > `mcp` >
+    `oauth_api` > `browser` since commits_changes is false. The
+    session_api flavor dispatches the SPA's own GraphQL
+    `crmObjectsSearch` request (same query the deal board fires) so
+    it works statelessly against the existing HubSpot session cookie
+    with no OAuth needed.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.records: schema_union<Contact, Company, Deal, Ticket> per v70 signature parity rule. session_api swaps the unimplemented `from_hubspot_search_results` source for `from_step` on .results. Backfill missing total + has_more extracts as literal:null across mcp / oauth_api / browser for parity."
+    - "0.1.0 (2026-05-23): initial seed. Live-verified 2026-05-23
+       against the deal-board page load on portal 245597800
+       (CrmObjectPropertyBoardGlobalQuery)."
+
+description: >
+  Query HubSpot CRM records (contacts / companies / deals / tickets /
+  …) with structured filter groups + sorts + optional free-text query.
+  session_api uses the SPA's GraphQL crmObjectsSearch (same data path
+  the deal board uses); mcp goes through the official HubSpot remote
+  MCP `search_crm_objects` tool; oauth_api hits the public
+  /crm/v3/objects/{type}/search; browser opens the list view as a
+  last-resort fallback.
+object: "{{inputs.object_type}}"
+object_types: [Contact, Company, Deal, Ticket]
+commits_changes: false
+depends_on_view: any
+mcp_tool: hubspot.search_crm_objects
+inputs:
+  portal_id:
+    type: text
+    required: true
+    sample: "245597800"
+  object_type_id:
+    type: text
+    required: true
+    description: "Numeric type id — Contact 0-1, Company 0-2, Deal 0-3, Ticket 0-5."
+    sample: "0-3"
+  properties:
+    type: list<text>
+    required: true
+    description: Property names to return on each result.
+    sample: [dealname, amount, dealstage, closedate, hubspot_owner_id]
+  filter_groups:
+    type: list<object>
+    required: false
+    default: []
+    description: HubSpot filter-group shape — OR of ANDs. Empty = list-all.
+  sorts:
+    type: list<object>
+    required: false
+    default: [{ property: createdate, order: DESC }]
+  query:
+    type: text
+    required: false
+    default: ""
+    description: Free-text query (matches name / email / domain depending on object type).
+  count:
+    type: integer
+    required: false
+    default: 50
+    maximum: 200
+  offset:
+    type: integer
+    required: false
+    default: 0
+result:
+  records:
+    schema_union: [Contact, Company, Deal, Ticket]
+    cardinality: list
+  total:
+    type: integer
+    nullable: true
+  has_more:
+    type: boolean
+    nullable: true
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: SPA GraphQL crmObjectsSearch (session cookie + CSRF)
+    recipe:
+      - id: gql_search
+        type: call_platform_api
+        args:
+          api_def:
+            kind: hubspot_graphql
+            endpoint: "{instance.origin}/api/graphql/crm?portalId={{inputs.portal_id}}"
+            operation_name: CrmObjectSearch
+            extract_path: data.crmObjectsSearch
+          args:
+            objectTypeId: "{{inputs.object_type_id}}"
+            properties: "{{inputs.properties}}"
+            filterGroups: "{{inputs.filter_groups}}"
+            sorts: "{{inputs.sorts}}"
+            query: "{{inputs.query}}"
+            count: "{{inputs.count}}"
+            offset: "{{inputs.offset}}"
+    outcomes:
+      - action: queried
+        signal:
+          type: url_matches
+          pattern: "hubspot\\.com"
+          timeout_ms: 10000
+        extract:
+          records:
+            from_step: gql_search
+            path: results
+          total:
+            from_step: gql_search
+            path: total
+          has_more:
+            from_step: gql_search
+            path: hasMore
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official HubSpot MCP search_crm_objects
+    server: hubspot
+    tool: search_crm_objects
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          records:
+            from_api_response: true
+            path: results
+          has_more:
+            from_api_response: true
+            path: paging.next
+          total:
+            literal: null
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST /crm/v3/objects/{type}/search
+    request:
+      method: POST
+      url: "https://api.hubapi.com/crm/v3/objects/{{inputs.object_type}}/search"
+      body:
+        filterGroups: "{{inputs.filter_groups}}"
+        sorts: "{{inputs.sorts}}"
+        query: "{{inputs.query}}"
+        properties: "{{inputs.properties}}"
+        limit: "{{inputs.count}}"
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "api.hubapi.com/crm/v3/objects/*/search"
+          status: 200
+        extract:
+          records:
+            from_api_response: true
+            path: results
+          total:
+            from_api_response: true
+            path: total
+          has_more:
+            literal: null
+
+  browser:
+    requires_auth: session_cookie
+    label: Open the list view + verify the table renders (last-resort)
+    recipe:
+      - id: nav_list
+        type: navigate
+        args:
+          url: "{instance.origin}/contacts/{{inputs.portal_id}}/objects/{{inputs.object_type_id}}/views/all/list"
+      - id: wait_table
+        type: wait_for_element
+        args:
+          selector: "table, [data-test-id='crm-index-table']"
+          timeout_ms: 10000
+    outcomes:
+      - action: queried
+        signal:
+          type: selector_appears
+          selector: "table, [data-test-id='crm-index-table']"
+        extract:
+          records:
+            literal: []
+          total:
+            literal: null
+          has_more:
+            literal: null

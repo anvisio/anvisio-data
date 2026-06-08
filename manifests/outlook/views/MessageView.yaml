@@ -1,0 +1,50 @@
+_meta:
+  name: manifests/outlook/views/MessageView.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    MessageView — an opened conversation in OWA's reading pane
+    ([data-app-section='ConversationContainer']). Unlike gmail's ThreadView
+    (which replaces the list), OWA reads SIDE-BY-SIDE: the message list
+    persists in the left pane, so entry just row-clicks the target
+    data-convid in the always-present listbox — no fresh-tab clone needed.
+    The caller passes messageId (the conversation's data-convid) on the
+    action inputs; the entry recipe substitutes it into the row selector.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new. Current-view row-click entry (no force-nav) keyed on data-convid; shape-only verify on ConversationContainer (the row-click opens the specific conversation by construction). Per-instance verify deferred — OWA exposes the convid in the URL, not on a pane element."
+
+name: MessageView
+description: Opened conversation (reading pane) showing the latest message's
+  subject/from/body + reply/forward/archive controls. Reached by clicking the
+  matching data-convid row in the persistent message list.
+entry:
+  recipe:
+    - id: await_row
+      type: wait_for_element
+      args:
+        selector: "div[role='listbox'][aria-label^='Message list'] div[role='option'][data-convid='{{inputs.messageId}}']"
+        timeout_ms: 15000
+    - id: open_conversation
+      type: click
+      args:
+        selector: "div[role='listbox'][aria-label^='Message list'] div[role='option'][data-convid='{{inputs.messageId}}']"
+        scroll_into_view: true
+verify:
+  - type: selector_appears
+    selector: "[data-app-section='ConversationContainer']"
+    timeout_ms: 8000
+placeholders:
+  messageId:
+    type: id
+    sample: "AQQkADAwATNiZmYAZS1hZmQzLWVlADMyLTAwAi0wMAoAEAA-kYcruBGxS7yYVe-5nfpT"
+url_patterns:
+  - https://outlook\.live\.com/mail/.*/id/.+
+identifying_selectors:
+  - "[data-app-section='ConversationContainer']"
+  - button[aria-label='Reply']
+widgets:
+  - outlook.conv_subject
+  - outlook.conv_from
+  - outlook.conv_body

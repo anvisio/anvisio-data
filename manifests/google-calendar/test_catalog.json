@@ -1,0 +1,377 @@
+{
+  "integration_id": "google-calendar",
+  "generated_at": "2026-05-22T00:00:00Z",
+  "tests": [
+    {
+      "name": "list_events - browser - listed - auto",
+      "action": "list_events",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "listed",
+      "inputs": {
+        "time_min": "2026-06-01T00:00:00-07:00",
+        "time_max": "2026-06-01T23:59:59-07:00",
+        "calendar_id": "primary"
+      },
+      "expected_data": { "listed": true }
+    },
+    {
+      "name": "list_events - oauth_api - listed - auto",
+      "action": "list_events",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "listed",
+      "inputs": {
+        "time_min": "2026-06-01T00:00:00-07:00",
+        "time_max": "2026-06-01T23:59:59-07:00",
+        "calendar_id": "primary"
+      },
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "list_events - mcp - listed - auto",
+      "action": "list_events",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "listed",
+      "inputs": {
+        "time_min": "2026-06-01T00:00:00-07:00",
+        "time_max": "2026-06-01T23:59:59-07:00",
+        "calendar_id": "primary"
+      },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "get_event - browser - read - auto",
+      "action": "get_event",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "read",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" }
+    },
+    {
+      "name": "get_event - oauth_api - read - auto",
+      "action": "get_event",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "read",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" },
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "get_event - mcp - read - auto",
+      "action": "get_event",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "read",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "search_events - browser - searched - auto",
+      "action": "search_events",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "searched",
+      "inputs": { "query": "anvisio" },
+      "expected_data": { "searched": true }
+    },
+    {
+      "name": "search_events - oauth_api - searched - auto",
+      "action": "search_events",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "searched",
+      "inputs": { "query": "anvisio" },
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "search_events - mcp - searched - auto",
+      "action": "search_events",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "searched",
+      "inputs": { "query": "anvisio" },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "get_freebusy - oauth_api - queried - auto",
+      "action": "get_freebusy",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "queried",
+      "inputs": {
+        "calendars": ["primary"],
+        "time_min": "2026-06-01T00:00:00-07:00",
+        "time_max": "2026-06-05T23:59:59-07:00"
+      },
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "get_freebusy - mcp - queried - auto",
+      "action": "get_freebusy",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "queried",
+      "inputs": {
+        "calendars": ["primary"],
+        "time_min": "2026-06-01T00:00:00-07:00",
+        "time_max": "2026-06-05T23:59:59-07:00"
+      },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "list_calendars - browser - listed - auto",
+      "action": "list_calendars",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "listed",
+      "inputs": {},
+      "expected_data": { "listed": true }
+    },
+    {
+      "name": "list_calendars - oauth_api - listed - auto",
+      "action": "list_calendars",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "listed",
+      "inputs": {},
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "list_calendars - mcp - listed - auto",
+      "action": "list_calendars",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "listed",
+      "inputs": {},
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "create_event - browser - ready_to_create - auto",
+      "action": "create_event",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "ready_to_create",
+      "inputs": {
+        "fields": {
+          "Title": "Anvisio onboarding event",
+          "StartTime": "2026-06-01T15:00:00-07:00",
+          "EndTime": "2026-06-01T15:30:00-07:00",
+          "Description": "Event created by the Anvisio onboarding run.",
+          "Location": "Remote"
+        },
+        "calendar_id": "primary"
+      }
+    },
+    {
+      "name": "create_event - browser - created - auto-save",
+      "action": "create_event",
+      "flavor": "browser",
+      "variant": "auto-save",
+      "expected_outcome": "created",
+      "inputs": {
+        "fields": {
+          "Title": "Anvisio onboarding event",
+          "StartTime": "2026-06-01T15:00:00-07:00",
+          "EndTime": "2026-06-01T15:30:00-07:00",
+          "Description": "Event created by the Anvisio onboarding run.",
+          "Location": "Remote"
+        },
+        "calendar_id": "primary"
+      },
+      "expected_data": { "created": true }
+    },
+    {
+      "name": "create_event - oauth_api - created - auto",
+      "action": "create_event",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "created",
+      "inputs": {
+        "fields": {
+          "Title": "Anvisio onboarding event",
+          "StartTime": "2026-06-01T15:00:00-07:00",
+          "EndTime": "2026-06-01T15:30:00-07:00",
+          "Description": "Event created by the Anvisio onboarding run.",
+          "Location": "Remote"
+        },
+        "calendar_id": "primary"
+      },
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "create_event - mcp - created - auto",
+      "action": "create_event",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "created",
+      "inputs": {
+        "fields": {
+          "Title": "Anvisio onboarding event",
+          "StartTime": "2026-06-01T15:00:00-07:00",
+          "EndTime": "2026-06-01T15:30:00-07:00",
+          "Description": "Event created by the Anvisio onboarding run.",
+          "Location": "Remote"
+        },
+        "calendar_id": "primary"
+      },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "update_event - browser - ready_to_update - auto",
+      "action": "update_event",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "ready_to_update",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": {
+        "event_id": "{{fixtures.target.id}}",
+        "fields": {
+          "StartTime": "2026-06-01T16:00:00-07:00",
+          "EndTime": "2026-06-01T16:30:00-07:00"
+        },
+        "calendar_id": "primary"
+      }
+    },
+    {
+      "name": "update_event - browser - updated - auto-save",
+      "action": "update_event",
+      "flavor": "browser",
+      "variant": "auto-save",
+      "expected_outcome": "updated",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": {
+        "event_id": "{{fixtures.target.id}}",
+        "fields": {
+          "StartTime": "2026-06-01T16:00:00-07:00",
+          "EndTime": "2026-06-01T16:30:00-07:00"
+        },
+        "calendar_id": "primary"
+      },
+      "expected_data": { "updated": true }
+    },
+    {
+      "name": "update_event - oauth_api - updated - auto",
+      "action": "update_event",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "updated",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": {
+        "event_id": "{{fixtures.target.id}}",
+        "fields": {
+          "StartTime": "2026-06-01T16:00:00-07:00",
+          "EndTime": "2026-06-01T16:30:00-07:00"
+        },
+        "calendar_id": "primary"
+      },
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "update_event - mcp - updated - auto",
+      "action": "update_event",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "updated",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": {
+        "event_id": "{{fixtures.target.id}}",
+        "fields": {
+          "StartTime": "2026-06-01T16:00:00-07:00",
+          "EndTime": "2026-06-01T16:30:00-07:00"
+        },
+        "calendar_id": "primary"
+      },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "delete_event - browser - ready_to_delete - auto",
+      "action": "delete_event",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "ready_to_delete",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" }
+    },
+    {
+      "name": "delete_event - browser - deleted - auto-save",
+      "action": "delete_event",
+      "flavor": "browser",
+      "variant": "auto-save",
+      "expected_outcome": "deleted",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" },
+      "expected_data": { "deleted": true }
+    },
+    {
+      "name": "delete_event - oauth_api - deleted - auto",
+      "action": "delete_event",
+      "flavor": "oauth_api",
+      "variant": "auto",
+      "expected_outcome": "deleted",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" },
+      "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
+    },
+    {
+      "name": "delete_event - mcp - deleted - auto",
+      "action": "delete_event",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "deleted",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    },
+    {
+      "name": "respond_to_event - browser - ready_to_respond - auto",
+      "action": "respond_to_event",
+      "flavor": "browser",
+      "variant": "auto",
+      "expected_outcome": "ready_to_respond",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "seed_state": { "is_invitation": true },
+      "inputs": { "event_id": "{{fixtures.target.id}}", "response": "accepted", "calendar_id": "primary" }
+    },
+    {
+      "name": "respond_to_event - browser - responded - auto-save",
+      "action": "respond_to_event",
+      "flavor": "browser",
+      "variant": "auto-save",
+      "expected_outcome": "responded",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "seed_state": { "is_invitation": true },
+      "inputs": { "event_id": "{{fixtures.target.id}}", "response": "accepted", "calendar_id": "primary" },
+      "expected_data": { "responded": true }
+    },
+    {
+      "name": "respond_to_event - mcp - responded - auto",
+      "action": "respond_to_event",
+      "flavor": "mcp",
+      "variant": "auto",
+      "expected_outcome": "responded",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "seed_state": { "is_invitation": true },
+      "inputs": { "event_id": "{{fixtures.target.id}}", "response": "accepted", "calendar_id": "primary" },
+      "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
+    }
+  ]
+}

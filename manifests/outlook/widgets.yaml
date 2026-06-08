@@ -1,17 +1,44 @@
 _meta:
   name: manifests/outlook/widgets.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Outlook on the Web widget library. Single widget today: outlook.search (typeahead_search archetype) parameterized for the global search input. Authored 2026-05-17 to verify the trusted-CDP press_key fix.
+    Outlook on the Web (outlook.live.com) widget library. Inline (no
+    shared widget-library extends yet — extract one once outlook +
+    outlook-calendar share archetypes). Every widget inherits an
+    archetype from widget-libraries/archetype-templates.yaml; selectors
+    were live-grounded against a signed-in outlook.live.com tab
+    2026-06-01.
 
-defaults_by_type: {}
+    OWA landmark model (data-app-section):
+      Ribbon | NavigationPane | MessageList | MailReadCompose |
+      ConversationContainer | NotificationPane
+    Reading pane = ConversationContainer; compose/reply = MailReadCompose.
+
+    Note on outlook.search: OWA search does NOT route to a /search URL
+    (live-probed 2026-06-01: the URL only drops /inbox/), so the
+    typeahead_search archetype's url_matches verify can't gate it. We use
+    typeahead_chip instead (type + Enter + verify selector_appears) with
+    the 'Exit search' button as the search-mode marker. Semantic smell
+    (chip != search) tracked as a follow-up: a dedicated
+    typeahead_search_button archetype if a second vendor needs it.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new authoring. 10 widgets for the search/read/send critical path (search, compose_button, compose_to/subject/body, send_button, discard_button, conv_subject/from/body). Replaces the 0.1.0 skeleton's single hybrid outlook.search (archetype + custom fill — the shape gmail 3.1.0 flagged as silently non-expanding). reply/archive widgets land in the expand pass."
+
+# Per-field widget pointers (Message/Conversation schemas) carry the
+# resolution; defaults_by_type is the type-level fallback for fill_fields.
+defaults_by_type:
+  text: outlook.compose_subject
+  email: outlook.compose_to
+  rich_text: outlook.compose_body
 
 widgets:
+
+  # ─── Global search ────────────────────────────────────────────────
   outlook.search:
-    archetype: typeahead_search
+    archetype: typeahead_chip
     selectors:
       trigger:
         - input[aria-label='Search for email, meetings, files and more.']
@@ -19,28 +46,107 @@ widgets:
       input:
         - input[aria-label='Search for email, meetings, files and more.']
         - input#topSearchInput
-    fill:
-      - id: open_search
-        type: click
-        args:
-          selector:
-            - input[aria-label='Search for email, meetings, files and more.']
-            - input#topSearchInput
-      - id: type_query
-        type: type_sequentially
-        args:
-          selector:
-            - input[aria-label='Search for email, meetings, files and more.']
-            - input#topSearchInput
-          value: "{{value}}"
-          delay_ms: 30
-      - id: submit_search
-        type: press_key
-        args:
-          key: Enter
-          selector:
-            - input[aria-label='Search for email, meetings, files and more.']
-        verify:
-          type: selector_appears
-          selector: "button[aria-label='Exit search']"
-          timeout_ms: 8000
+      verify_target:
+        - button[aria-label='Exit search']
+
+  # ─── Compose: open ────────────────────────────────────────────────
+  outlook.compose_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - button[aria-label='New mail']
+      verify_target:
+        - input[aria-label='Subject']
+        - div[aria-label='Message body']
+
+  # ─── Compose: fields ──────────────────────────────────────────────
+  outlook.compose_to:
+    archetype: typeahead_chip
+    # OWA To is a PeopleKit picker div (not an input). Enter commits the
+    # chip (typeahead_chip default submit_key). verify_target is the
+    # committed recipient pill — selector refined during harden (placeholder
+    # ties to {{value}}, the address just typed).
+    selectors:
+      trigger:
+        - div[aria-label='To']
+      input:
+        - div[aria-label='To']
+      verify_target:
+        - "[data-app-section='MailReadCompose'] [role='option'][title*='{{value}}']"
+        - "[data-app-section='MailReadCompose'] button[aria-label*='{{value}}']"
+
+  outlook.compose_subject:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - input[aria-label='Subject']
+      read_target:
+        - input[aria-label='Subject']
+
+  outlook.compose_body:
+    archetype: contenteditable_input
+    selectors:
+      fill_target:
+        - "[data-app-section='MailReadCompose'] div[aria-label='Message body']"
+        - div[aria-label='Message body'][contenteditable='true']
+      read_target:
+        - "[data-app-section='MailReadCompose'] div[aria-label='Message body']"
+
+  # ─── Compose: commit / abandon ────────────────────────────────────
+  outlook.send_button:
+    archetype: click_dismisses
+    irreversible: true
+    # Verify the Send button disappears (compose closed). The POSITIVE L4
+    # commit proof (the "Sent"-class snackbar) lives on the send_email
+    # atom's outcome per Rule A — a bare disappear is Trap 2 alone.
+    selectors:
+      trigger:
+        - button[aria-label='Send']
+      verify_target:
+        - button[aria-label='Send']
+
+  outlook.discard_button:
+    archetype: click_dismisses
+    selectors:
+      trigger:
+        - button[aria-label='Discard']
+      verify_target:
+        - button[aria-label='Discard']
+
+  # ─── Conversation read (ConversationContainer) ────────────────────
+  outlook.conv_subject:
+    archetype: read_attribute
+    # HARDENED 2026-06-01: read the subject from the `title` ATTRIBUTE of the
+    # subject span in MailReadCompose — NOT read_text on the L3 heading.
+    # The heading's innerText is polluted on calendar-invite emails (it wraps
+    # the whole invite card → a multi-line time-grid blob); the span[title]
+    # holds the clean subject string for both invites and normal mail.
+    # MailReadCompose (read/compose pane wrapper), not ConversationContainer
+    # (whose L3 headings are [empty, from, date] — no subject).
+    selectors:
+      read_target:
+        - "[data-app-section='MailReadCompose'] span[title]"
+    overrides:
+      attribute: title
+
+  outlook.conv_from:
+    archetype: read_attribute
+    # HARDENED 2026-06-01: the reading-pane sender is a LivePersonaCard chip
+    # (span[data-lpc-hover-target-id]) whose aria-label IS the email — NOT a
+    # span[title*='@'] (that was the inbox-LIST row shape). attribute=aria-label.
+    # Follow-up: sender-vs-recipient disambiguation for multi-party threads
+    # (first chip = sender for normal mail; self-addressed invites are ambiguous).
+    selectors:
+      read_target:
+        - "[data-app-section='ConversationContainer'] span[data-lpc-hover-target-id][aria-label*='@']"
+    overrides:
+      attribute: aria-label
+
+  outlook.conv_body:
+    archetype: read_text
+    # Body renders inline in the main doc for simple messages (probed
+    # 2026-06-01); rich/remote-content bodies may use an iframe — harden
+    # confirms the live selector.
+    selectors:
+      read_target:
+        - "[data-app-section='ConversationContainer'] div[aria-label='Message body']"

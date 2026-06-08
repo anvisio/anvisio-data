@@ -1,0 +1,55 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: daily-brief
+  version: '1.0.0'
+  title: Today's calendar brief
+  summary: |
+    List the day's events, judge which ones need preparation, and
+    synthesize a short brief the user can act on before the day starts.
+    Read-only — the "what's on my calendar today?" pattern.
+
+do:
+  - events:
+      label: Listing today's events
+      call: google-calendar.atom.list_events
+      with:
+        # $input.date is the picker's resolved date (YYYY-MM-DD, today by
+        # default). The day window is constructed in a fixed timezone
+        # offset for now; an explicit timezone input is a follow-up.
+        time_min: '${ $input.date }T00:00:00-07:00'
+        time_max: '${ $input.date }T23:59:59-07:00'
+        calendar_id: primary
+
+  - perEvent:
+      label: Reviewing each event
+      for:
+        each: event
+        in: '${ .events.events }'
+        item_label: '${ $event.summary }'
+      do:
+        - prep:
+            judge: |
+              An event NEEDS PREP when the user likely has to do
+              something before it — an external meeting, an interview, a
+              presentation, a 1:1 with an agenda. It is ROUTINE when it
+              is a recurring standup, a focus block, a hold, or a
+              personal item. Classify this event.
+            options: [needs_prep, routine]
+            with:
+              title:     '${ $event.summary }'
+              start:     '${ $event.start.dateTime }'
+              attendees: '${ $event.attendees }'
+
+  - brief:
+      label: Writing the brief
+      synthesize: |
+        Compose a short morning brief of today's calendar:
+        (1) the count of events and the first / last event times,
+        (2) the events flagged needs_prep, each with a one-line note on
+            what to prepare,
+        (3) the longest free gap in the day.
+        Keep it under 90 words, first-person voice for a standup.
+      with:
+        events:  '${ .events.events }'
+        triaged: '${ .perEvent }'

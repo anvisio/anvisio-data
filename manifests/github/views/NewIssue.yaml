@@ -1,0 +1,35 @@
+_meta:
+  name: manifests/github/views/NewIssue.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    New issue form (github.com/{owner}/{repo}/issues/new). After the
+    template picker if the repo has issue templates; URL lands on
+    the form once a template is chosen.
+
+name: NewIssue
+
+entry:
+  url: "https://github.com/{owner}/{repo}/issues/new"
+landmark_probe:
+  selector: "input[name='issue[title]'], input[aria-label='Title']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/issues/new"
+  - type: selector_appears
+    selector: "input[name='issue[title]']"
+    timeout_ms: 12000
+placeholders:
+  owner:
+    type: text
+    sample: anvisio-dev
+  repo:
+    type: text
+    sample: sample-project
+widgets:
+  - github.new_issue_title_input
+  - github.new_issue_body_textarea
+  - github.submit_new_issue_button

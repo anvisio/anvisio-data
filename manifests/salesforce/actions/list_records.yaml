@@ -16,7 +16,7 @@ _meta:
 
 description: Open an object's list view.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: false
 depends_on_view: any
 inputs:

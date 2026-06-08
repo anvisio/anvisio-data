@@ -1,16 +1,30 @@
 _meta:
   name: manifests/gmail/actions/move_email.yaml
-  version: 0.3.0
+  version: 0.9.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-27
   description: |
-    move_email atom — relocate a thread to a different label/folder.
+    move_email atom: relocate a thread to a different label/folder.
     Spec 70: `browser` flavor uses the Move-to menu typeahead; `mcp`
-    flavor calls gmail.modify_email — remove INBOX + add the
-    destination label id.
+    flavor calls gmail.modify_email: remove INBOX + add the
+    destination label id; `oauth_api` flavor calls Gmail REST
+    users.threads.modify directly.
+
+    Same label-name-vs-id caveat as apply_label: browser flavor
+    accepts a human-friendly destination name (typed into Move-to);
+    MCP + oauth_api need the label id (e.g. `Label_<n>` or system
+    constants like `TRASH`/`SPAM`). Callers resolve via
+    list_email_labels when needed.
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.9.0 (2026-06-08): CANONICAL ACTION FORM v71. tab_mode: current; result.outcome replaces the `moved` boolean; browser via signals: map + when:/not: — `moved` = when:[moved] (the snackbar, which names the destination); `abandoned` = when:[menu_closed] not:[moved] (the Move-to typeahead closed without the snackbar; grace-guarded; HITL-only). ready_to_move dropped. mcp/oauth drop the literal moved flag. Mirrors apply_label; behaviour-preserving."
+    - "0.8.1 (2026-05-30): `moved` outcome signal upgraded from `selector_appears` to `transient_appears` on the snackbar — MutationObserver latch survives auto-dismiss + is pre-armed for spec-72 commit-delta detection. Same upgrade across all gmail snackbar outcomes; see archive_email 0.8.1."
+    - "0.8.0 (2026-05-28): browser flavor moved from the top TOOLBAR Move-to button to the right-click CONTEXT MENU 'Move to►' submenu (template = apply_label 0.9.0), `depends_on_view: Inbox → any`. Same C-rest rationale as archive_email 0.8.0 (toolbar absent in search). The context-menu 'Move to►' submenu opens the SAME Move-to typeahead the toolbar button did, so gmail.move_menu_search is reused — but its input selector was dead-drifted (`placeholder='Move to:'`) and is fixed in widget 3.12.0 to `aria-label='Move-to menu open'` (confirmed live this session; also fixes the ready_to_move outcome selector). row_checkbox pre-select dropped; submenu disambiguated by aria-haspopup='true' + must_contain_text 'Move to' (excludes the direct 'Move to inbox' item, which has no haspopup)."
+    - "0.7.0 (2026-05-27): add `runs_in_home_tab: true`. Move-to is a toolbar action + in-place dropdown on the inbox row; same opt-in pattern as the sibling label/archive/delete atoms."
+    - "0.6.0 (2026-05-27): replace browser flavor `moved` outcome from scoped `selector_disappears tr.zA:has(...)` to POSITIVE snackbar — `selector_appears [role='alert']` with `must_contain_text: 'Conversation moved to \"<destination>\".'`. The snackbar text INCLUDES the destination label name in quotes, so this also proves the right destination was picked (vs just 'moved somewhere'). Live-probed 2026-05-27 via MCP CDP-trusted click. Same pattern as archive_email + delete_email 0.6.0."
+    - "0.5.0 (2026-05-25): add oauth_api flavor — POST /gmail/v1/users/me/threads/{thread_id}/modify with body {addLabelIds: ['{{inputs.destination}}'], removeLabelIds: ['INBOX']}. Uses runtime body-templating fix (commit 97f1a933). Mirrors archive_email's INBOX removal + adds the destination label."
+    - "0.4.0 (2026-05-24): add schema-typed result.thread per v70 signature parity rule. browser echoes thread.Id from input; mcp extracts from modify_email response.message_id."
+    - "0.3.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker (Phase 3)."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
@@ -21,7 +35,12 @@ description: >
   label id (caller resolves the human name → id via list_email_labels first).
 object: Thread
 commits_changes: true
-depends_on_view: Inbox
+# Gmail's Move-to is an in-place right-click context-menu submenu on the
+# row in whatever list is current. Same C-rest rationale as
+# archive_email 0.8.0: run on home tab + depends_on_view: any (no
+# force-nav). contextmenu selector scoped to div[role='main'] (gmail.md #6).
+tab_mode: current
+depends_on_view: any
 mcp_tool: gmail.modify_email
 inputs:
   thread_id:
@@ -32,24 +51,54 @@ inputs:
     required: true
     description: Label or folder name (e.g., 'Spam', 'Trash', or a custom label)
 result:
-  moved: boolean
+  # v71: outcome = the winning terminal's action ("moved" | "abandoned").
+  outcome: text
+  thread:
+    schema: Thread
 flavors:
   browser:
     requires_auth: session_cookie
-    label: Select row + Move-to menu; pick destination when commit:true
+    label: Right-click row → Move to► submenu; pick destination when commit:true
+    # v71 signals model: `moved` = the snackbar (names the destination);
+    # `abandoned` = the Move-to typeahead closed without it (grace-guarded).
+    signals:
+      moved:
+        type: transient_appears
+        selector: "[role='alert']"
+        must_contain_text: 'Conversation moved to "{{inputs.destination}}".'
+        timeout_ms: 6000
+      menu_closed:
+        type: selector_disappears
+        selector: "div[role='menu'] input[aria-label='Move-to menu open']"
     recipe:
-      - id: select_row
-        type: use_widget
+      # Open Gmail's right-click context menu on the row (same path as
+      # apply_label 0.9.0). Works in all list views; scoped to
+      # div[role='main'] (gmail.md #6).
+      - id: open_contextmenu_on_row
+        type: contextmenu
         args:
-          widget: gmail.row_checkbox
-          op: invoke
-          inputs:
-            thread_id: "{{inputs.thread_id}}"
-      - id: open_move_menu
-        type: use_widget
+          selector: "div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])"
+        verify:
+          type: selector_appears
+          selector: "[role='menu'] [role='menuitem'][aria-haspopup='true']"
+          timeout_ms: 4000
+      # Click the "Move to" submenu. Two menuitems carry
+      # aria-haspopup='true' ('Move to►' + 'Label as►'); must_contain_text
+      # 'Move to' disambiguates. The direct 'Move to inbox' item has NO
+      # haspopup, so the haspopup scope excludes it. Opens the same
+      # Move-to typeahead the dead toolbar path used.
+      - id: open_move_to_submenu
+        type: click
         args:
-          widget: gmail.toolbar_move_button
-          op: invoke
+          selector: "[role='menuitem'][aria-haspopup='true']"
+          must_contain_text: "Move to"
+        verify:
+          type: selector_appears
+          selector: "div[role='menu'] input[aria-label='Move-to menu open']"
+          timeout_ms: 4000
+      # Pick the destination via the typeahead widget (reused; input
+      # selector fixed in widget 3.12.0). Move-to commits immediately on
+      # the menuitem click + closes the menu (no Escape, unlike Label-as).
       - id: pick_destination
         type: use_widget
         commit: true
@@ -59,17 +108,17 @@ flavors:
           inputs:
             value: "{{inputs.destination}}"
     outcomes:
-      - action: ready_to_move
-        signal:
-          type: selector_appears
-          selector: div[role='menu'] input[placeholder='Move to:']
       - action: moved
-        signal:
-          type: selector_disappears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+        when: [moved]
         extract:
-          moved:
-            literal: true
+          thread:
+            Id:
+              from_input: thread_id
+      - action: abandoned
+        # The Move-to typeahead closed with no `moved` snackbar — the user
+        # cancelled. Grace-guarded so a real move's snackbar wins. HITL-only.
+        when: [menu_closed]
+        not: [moved]
   mcp:
     requires_auth: mcp_server
     label: Move via gmail.modify_email MCP tool
@@ -86,5 +135,22 @@ flavors:
           url_pattern: "*/mcp/*"
           status: 200
         extract:
-          moved:
-            literal: true
+          thread:
+            Id:
+              from_api_response: ".message_id"
+  oauth_api:
+    requires_auth: oauth_token
+    label: Move thread via Gmail REST users.threads.modify (remove INBOX + add destination)
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/threads/{{inputs.thread_id}}/modify
+      body:
+        addLabelIds: ["{{inputs.destination}}"]
+        removeLabelIds: ["INBOX"]
+    outcomes:
+      - action: moved
+        extract:
+          thread:
+            Id:
+              from_input: thread_id

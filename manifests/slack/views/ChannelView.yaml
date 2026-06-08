@@ -1,0 +1,38 @@
+_meta:
+  name: manifests/slack/views/ChannelView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Channel / DM view (app.slack.com/client/{workspaceId}/{channelId}).
+    Anchor for read + post + thread-open. Same shape regardless of
+    whether the id is a channel (C...), DM (D...), group DM (G...),
+    or multi-party im (M...).
+
+name: ChannelView
+
+entry:
+  url: "https://app.slack.com/client/{workspace_id}/{channel_id}"
+landmark_probe:
+  selector: "[role='textbox'][aria-label*='Message']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/client/[A-Z0-9]+/[CDGM][A-Z0-9]+"
+  - type: selector_appears
+    selector: "[role='textbox'][aria-label*='Message']"
+    timeout_ms: 12000
+placeholders:
+  workspace_id:
+    type: text
+    sample: "T0AMCC1EXRV"
+  channel_id:
+    type: text
+    sample: "C0AMQCYHKE1"
+widgets:
+  - slack.global_search
+  - slack.quick_switcher
+  - slack.channel_composer
+  - slack.send_message_button
+  - slack.open_thread_button

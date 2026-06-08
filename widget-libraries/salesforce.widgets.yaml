@@ -1,7 +1,7 @@
 _meta:
   name: widget-libraries/salesforce.widgets.yaml
-  version: 4.0.0
-  cdn_schema_version: 60.4.1
+  version: 4.4.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
@@ -35,6 +35,10 @@ _meta:
   archetypes_used: [text_input, picklist_select, typeahead_lookup, click_reveals, click_dismisses, click_navigates, click_toggles, typeahead_search]
 
   changelog:
+    - "4.4.0 (2026-05-30): salesforce.text gains an `input[placeholder='{{field_label}}']` fallback selector to handle SF's COMPOUND-FIELD sub-inputs. Contact / Lead / Person Account group Salutation + FirstName + LastName under a single `records-record-layout-item[field-label='Name']` wrapper — the per-sub-field selectors (records-record-layout-item by field_label, input[name=]) all miss because there's no per-sub-field wrapper AND the sub-inputs carry camelCase lowercase `name='lastName'`/`firstName'` instead of the schema's `LastName`/`FirstName`. Placeholder attr matches the schema label (live-probed 2026-05-30, cd2k dev org). Same fallback unblocks compound Address sub-fields."
+    - "4.3.0 (2026-05-30): add salesforce.number widget for currency/number/percent fields. SF's Amount / Probability inputs are `<input type='text' role='spinbutton' inputmode='decimal'>` with an immediate display-formatter (typed `50000` → `$50,000.00`); the default text_input archetype's strict-value verify times out because no input shape survives the formatter. New widget reuses text_input + sets `overrides.verify_value_contains: \"\"` (requires the archetype-templates 1.3.0 add of that override knob). Routes number / currency / percent in defaults_by_type to salesforce.number; salesforce.text continues to handle text/textarea/id."
+    - "4.2.0 (2026-05-29): spec 72 hardening (live-probed on a dev org). delete_confirm_button: drop the stale `button.slds-button_brand` fallback — the live confirm button is `slds-button_neutral` (so a neutral-class fallback would ambiguously match Cancel); the `button[title='Delete']` primary is reliable and confirmed. save_button: rewrite the comment — its `selector_disappears SaveEdit` verify is the L3 click-landed gate, NOT the L4 commit proof; the commit signal now lives in the create/update/delete atoms as the spec-72 toaster ladder (transient_appears .toastMessage), which fires regardless of the welcome-redirect landing."
+    - "4.1.0 (2026-05-22): add salesforce.stage_picklist — the Opportunity Stage picklist is wrapped in an sfa-input-stage-name custom element and lacks the generic picklist's records-record-layout-item field-label anchor. Same picklist_select archetype, Stage-specific trigger; wired via a per-field widget: ref on Opportunity.StageName. Closes the StageName widget gap. cdn_schema_version 60.4.1 → 70.0.0 (widget shape unchanged by spec 70)."
     - "4.0.0 (2026-05-16): rename `lightning.<widget>` → `salesforce.<widget>` throughout + file rename `widget-libraries/lightning.widgets.yaml` → `widget-libraries/salesforce.widgets.yaml`. The harness/SaaS axis was overhead for a single-harness SaaS (every Lightning org uses the same library — no SF Classic library exists). The harness pattern can be re-introduced via a sibling library file if SF ever splits its runtime."
     - "3.0.0 (2026-05-16): MAJOR rewrite to archetype-driven shape. 13 widgets converted from v2.0.0's per-widget recipes (~440 lines) to { archetype, selectors, overrides } (~150 lines). The recipe bodies were structurally identical modulo selectors — duplication eliminated. Phase 1 follow-up of the four-cleanup refactor."
     - "2.0.0 (2026-05-16): wholesale replacement of theoretical v1.0.0 seed with live-tested widgets from the 2026-05-15 SF CRUD 8/8 run. 13 widgets, selectors anchored on records-record-layout-item[field-label=…]."
@@ -44,7 +48,9 @@ defaults_by_type:
   id: salesforce.text
   text: salesforce.text
   textarea: salesforce.text
-  number: salesforce.text
+  number: salesforce.number
+  currency: salesforce.number
+  percent: salesforce.number
   picklist: salesforce.picklist
   date: salesforce.date_input
   boolean: salesforce.toggle
@@ -53,6 +59,15 @@ widgets:
 
   # ─── Field inputs ──────────────────────────────────────────────────
 
+  # `input[placeholder='{{field_label}}']` is the COMPOUND-FIELD fallback.
+  # SF Contact / Lead / Person Account group Salutation + FirstName + LastName
+  # under a single `records-record-layout-item[field-label='Name']` wrapper,
+  # so the per-sub-field selectors above miss: there's no
+  # `records-record-layout-item[field-label='Last Name']` wrapper, AND the
+  # sub-inputs carry `name='lastName'`/`firstName'` (camelCase, lowercase
+  # first letter) instead of `name='LastName'`/`FirstName'`. They DO carry
+  # `placeholder='Last Name'`/`'First Name'` matching the schema label
+  # — that's the discriminator. Same applies to compound Address sub-fields.
   salesforce.text:
     archetype: text_input
     selectors:
@@ -61,10 +76,35 @@ widgets:
         - records-record-layout-item[field-label='{{field_label}}'] textarea
         - input[name='{{field_name}}']
         - textarea[name='{{field_name}}']
+        - input[placeholder='{{field_label}}']
       read_target:
         - records-record-layout-item[field-label='{{field_label}}'] input
         - records-record-layout-item[field-label='{{field_label}}'] textarea
         - input[name='{{field_name}}']
+        - input[placeholder='{{field_label}}']
+
+  # Currency / number / percent inputs on SF Lightning are
+  # `<input type='text' role='spinbutton' inputmode='decimal'>` with an
+  # immediate display-formatter: typed "50000" becomes "$50,000.00"
+  # (live-probed 2026-05-30 in the cd2k dev org). Every input shape
+  # tried — "50000", "50,000", "$50,000.00", "50000.00", "50.5" —
+  # round-trips through the same formatter, so the default text_input
+  # `contains: "{{value}}"` verify times out at 3s even though the form
+  # serializes the typed number correctly on Save. This widget reuses
+  # the text_input archetype with the strict-value verify disabled
+  # (verify_value_contains: "" always-matches once the input element
+  # is found, which is the meaningful confirmation the fill ran).
+  salesforce.number:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - records-record-layout-item[field-label='{{field_label}}'] input
+        - input[name='{{field_name}}']
+      read_target:
+        - records-record-layout-item[field-label='{{field_label}}'] input
+        - input[name='{{field_name}}']
+    overrides:
+      verify_value_contains: ""
 
   salesforce.picklist:
     archetype: picklist_select
@@ -79,6 +119,25 @@ widgets:
         - "[role='option'][data-value='{{value}}']"
         - lightning-base-combobox-item[title='{{value}}']
       verify_target: records-record-layout-item[field-label='{{field_label}}'] button[role='combobox']
+
+  # Opportunity Stage is special: the picklist is wrapped in an
+  # `sfa-input-stage-name` custom element (it drives the closed-stage
+  # sales-path UI), so it lacks the `records-record-layout-item`
+  # field-label anchor the generic picklist keys on. Same archetype,
+  # Stage-specific trigger; wired via a per-field `widget:` ref on
+  # Opportunity.StageName.
+  salesforce.stage_picklist:
+    archetype: picklist_select
+    selectors:
+      trigger:
+        - sfa-input-stage-name button[role='combobox']
+        - "[data-target-selection-name$='.{{field_name}}'] button[role='combobox']"
+        - records-record-layout-item[field-label='{{field_label}}'] button[role='combobox']
+      option:
+        - lightning-base-combobox-item[data-value='{{value}}']
+        - "[role='option'][data-value='{{value}}']"
+        - lightning-base-combobox-item[title='{{value}}']
+      verify_target: sfa-input-stage-name button[role='combobox']
 
   salesforce.lookup:
     archetype: typeahead_lookup
@@ -117,11 +176,16 @@ widgets:
 
   # ─── Modal action buttons ──────────────────────────────────────────
 
-  # Verify via selector_disappears (NOT url_matches): SF often routes
-  # deeplinked edit modals to the org welcome app after save, not to
-  # /lightning/r/<id>/view — modal-close is the only signal guaranteed
-  # across deeplink loads + welcome-redirect fallbacks.
-  # See feedback_sf_welcome_redirect_after_save.md.
+  # The `selector_disappears SaveEdit` verify below is the L3 CLICK-LANDED
+  # gate (the click dismissed the Save button), NOT the L4 commit proof.
+  # The L4 commit signal lives in the create/update/delete atoms as the
+  # spec-72 toaster ladder (transient_appears .toastMessage 'was
+  # created/saved/deleted'), which fires regardless of whether Save lands on
+  # /view or the org welcome page — both welcome-redirect-robust AND not a
+  # Trap-2 fake-success. (Supersedes feedback_sf_welcome_redirect_after_save's
+  # 'the disappear is the only guaranteed signal' rationale; the toaster is
+  # guaranteed too, and the welcome redirect itself is now fixed in
+  # RecordEditModal.entry.url via backgroundContext.)
   salesforce.save_button:
     archetype: click_dismisses
     irreversible: true
@@ -189,13 +253,16 @@ widgets:
 
   # ─── Delete confirmation ───────────────────────────────────────────
 
+  # Live-confirmed 2026-05-29: the confirm button is
+  # `div[role='dialog'] button[title='Delete']` (class slds-button_neutral,
+  # NOT slds-button_brand). Only the title selector — a `slds-button_neutral`
+  # fallback would ambiguously match the dialog's Cancel button too.
   salesforce.delete_confirm_button:
     archetype: click_navigates
     irreversible: true
     selectors:
       trigger:
         - div[role='dialog'] button[title='Delete']
-        - div[role='dialog'] button.slds-button_brand
     overrides:
       url_pattern: /lightning/o/.+/(list|home)
 

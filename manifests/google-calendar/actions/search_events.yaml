@@ -1,0 +1,148 @@
+_meta:
+  name: manifests/google-calendar/actions/search_events.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-28
+  description: |
+    search_events atom: find events by free-text query. The session_api
+    flavor calls gapi.client.calendar.events.list with `q` from the
+    calendar tab's MAIN world (session-based, no OAuth: see
+    reference_google_workspace_api_paths); the browser flavor drives the
+    calendar search bar and lands on /r/search (events:null); the
+    oauth_api + mcp flavors return matched events as structured data.
+    Reads prefer session_api > oauth_api > mcp > browser per spec 70 §7.
+  changelog:
+    - "0.3.0 (2026-05-28): add session_api flavor (gapi events.list with q), live-verified on cd2k's account (200). This is the no-OAuth read path — googleapis.com (oauth_api) 403s on a session cookie. NOTE: session_api omits time_min/time_max because gapi events.list rejects empty-string time bounds and the recipe can't conditionally include them (live-confirmed 2026-05-28); time-windowed search via session_api is a follow-up. oauth_api/mcp still honor the window."
+    - "0.2.0 (2026-05-24): add schema-typed result.events list<Event> per v70 signature parity rule. oauth_api populates from .items; mcp from .events; browser nullable (URL change only). Drop result.count which no flavor populated."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.search-events."
+
+description: >
+  Find events whose title, description, location, or attendees match a
+  free-text query. The browser flavor types the query into the calendar
+  search bar and verifies the tab lands on /r/search; the oauth_api and
+  mcp flavors return the matched events as structured data.
+object: Event
+commits_changes: false
+depends_on_view: CalendarGrid
+mcp_tool: google-calendar.search-events
+inputs:
+  query:
+    type: text
+    required: true
+    description: Free-text search query.
+  time_min:
+    type: text
+    description: Optional window start, ISO 8601.
+  time_max:
+    type: text
+    description: Optional window end, ISO 8601.
+result:
+  searched: boolean
+  events:
+    schema: Event
+    cardinality: list
+    nullable: true
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Type the query into the calendar search bar
+    recipe:
+      - id: search
+        type: use_widget
+        args:
+          widget: google-calendar.search_input
+          op: fill
+          inputs:
+            value: "{{inputs.query}}"
+    outcomes:
+      - action: searched
+        signal:
+          type: url_matches
+          pattern: "/r/search"
+        extract:
+          searched:
+            literal: true
+          events:
+            literal: null
+  session_api:
+    requires_auth: session_cookie
+    label: Search events via gapi.client.calendar.events.list with q (MAIN-world session)
+    recipe:
+      - id: gapi_search
+        type: call_platform_api
+        args:
+          api_def:
+            kind: gapi
+            library: calendar
+            version: v3
+            method_path: events.list
+            # platform-api wraps the gapi response as { status, result };
+            # navigate to result.items so the step value is the array.
+            extract_path: result.items
+          args:
+            # No calendar_id input on search_events — default to primary
+            # (matches the oauth_api flavor's /calendars/primary/events).
+            calendarId: primary
+            q: "{{inputs.query}}"
+            # time_min/time_max intentionally OMITTED: gapi events.list
+            # rejects empty-string time bounds (live-confirmed 2026-05-28)
+            # and the recipe can't conditionally include them. q-only
+            # searches across all time. oauth_api/mcp honor the window.
+            singleEvents: true
+            orderBy: startTime
+    outcomes:
+      - action: searched
+        # The gapi call runs entirely inside call_platform_api: no
+        # post-recipe DOM/URL transition, so url_matches resolves on the
+        # first poll; extract then reads the already-extracted items array.
+        signal:
+          type: url_matches
+          pattern: "calendar\\.google\\.com"
+          timeout_ms: 10000
+        extract:
+          events:
+            from_step: gapi_search
+          searched:
+            literal: true
+  oauth_api:
+    requires_auth: oauth_token
+    label: Search events via the Calendar API (events.list with q)
+    request:
+      provider: google
+      method: GET
+      url: https://www.googleapis.com/calendar/v3/calendars/primary/events
+      query:
+        q: "{{inputs.query}}"
+        timeMin: "{{inputs.time_min}}"
+        timeMax: "{{inputs.time_max}}"
+        singleEvents: true
+        orderBy: startTime
+    outcomes:
+      - action: searched
+        extract:
+          events:
+            from_api_response: true
+            path: items
+          searched:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: Search events via the google-calendar search-events MCP tool
+    server: google-calendar
+    tool: search-events
+    inputs_map:
+      query: "{{inputs.query}}"
+      timeMin: "{{inputs.time_min}}"
+      timeMax: "{{inputs.time_max}}"
+    outcomes:
+      - action: searched
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          events:
+            from_api_response: ".events"
+          searched:
+            literal: true

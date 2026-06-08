@@ -1,0 +1,153 @@
+_meta:
+  name: manifests/github/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    GitHub widget primitives, archetype-driven. Inline definitions
+    (no library yet: when a second per-tenant variant surfaces this
+    moves to widget-libraries/github.widgets.yaml).
+
+    Source: live-inspected selectors from
+    planning/tech_design/integrations/platform-notes/dom-selectors-github.md
+    (2026-03-21) + the GitHub web app's stable role/aria patterns.
+
+    Coverage: the global affordances + the issue-create / issue-edit
+    widgets that the atom actions need. Sidebar pickers (Assignees,
+    Labels, Milestones, Projects) are deferred: they need a 2-step
+    composite (open picker + select option + verify) that the current
+    archetypes don't model cleanly; heal-time will author them.
+
+  archetypes_used: [text_input, contenteditable_input, click_reveals, click_navigates, click_toggles]
+
+widgets:
+
+  # ─── Global affordances (top nav) ─────────────────────────────────
+  github.global_search_input:
+    archetype: text_input
+    selectors:
+      target:
+        - "input[name='q'][role='combobox']"
+        - "input[data-target='qbsearch-input.inputButtonText']"
+      verify_target: "[role='listbox'], [data-testid='search-result']"
+    overrides:
+      submit_key: Enter
+      verify_timeout_ms: 4000
+
+  github.new_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "header a[href='/new']"
+        - "a[aria-label='Create new'][role='button']"
+        - "summary[aria-label='Create new...']"
+      verify_target: "[role='menu'], form[action='/repositories']"
+
+  # ─── New-issue form (/{owner}/{repo}/issues/new) ───────────────────
+  github.new_issue_title_input:
+    archetype: text_input
+    selectors:
+      target:
+        - "input[name='issue[title]']"
+        - "input[aria-label='Title']"
+        - "input[placeholder='Title']"
+      verify_target: "input[name='issue[title]']"
+    overrides:
+      verify_timeout_ms: 3000
+
+  github.new_issue_body_textarea:
+    archetype: text_input
+    selectors:
+      target:
+        - "textarea[name='issue[body]']"
+        - "textarea[aria-label='Markdown value']"
+      verify_target: "textarea[name='issue[body]']"
+
+  github.submit_new_issue_button:
+    archetype: click_navigates
+    selectors:
+      trigger:
+        - "button[type='submit'][data-disable-with*='Creating']"
+        - "button[type='submit']:has-text('Submit new issue')"
+        - "button[type='submit']:has-text('Create')"
+      verify_target_url_contains: "/issues/"
+    overrides:
+      verify_timeout_ms: 10000
+
+  # ─── Issue view (/{owner}/{repo}/issues/{n}) ────────────────────────
+  github.issue_comment_textarea:
+    archetype: text_input
+    selectors:
+      target:
+        - "textarea[aria-label='Add a comment']"
+        - "textarea[name='comment[body]']"
+      verify_target: "textarea[aria-label='Add a comment']"
+
+  github.submit_issue_comment_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[type='submit']:has-text('Comment')"
+      verify_target: ".timeline-comment, [data-testid='issue-comment']"
+    overrides:
+      verify_timeout_ms: 6000
+
+  github.close_issue_button:
+    archetype: click_toggles
+    selectors:
+      trigger:
+        - "button:has-text('Close issue')"
+      verify_target: "[data-testid='issue-state']:has-text('Closed'), [class*='State']:has-text('Closed')"
+    overrides:
+      verify_timeout_ms: 5000
+
+  github.reopen_issue_button:
+    archetype: click_toggles
+    selectors:
+      trigger:
+        - "button:has-text('Reopen issue')"
+      verify_target: "[data-testid='issue-state']:has-text('Open'), [class*='State']:has-text('Open')"
+    overrides:
+      verify_timeout_ms: 5000
+
+  github.edit_issue_title_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[aria-label='Edit issue title']"
+      verify_target: "input[aria-label='Title']"
+
+  # ─── Pull-request view (/{owner}/{repo}/pull/{n}) ──────────────────
+  github.merge_pull_request_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button:has-text('Merge pull request')"
+        - "button:has-text('Squash and merge')"
+        - "button:has-text('Rebase and merge')"
+      verify_target: "button:has-text('Confirm merge'), button:has-text('Confirm squash and merge')"
+    overrides:
+      verify_timeout_ms: 5000
+
+  github.confirm_merge_button:
+    archetype: click_navigates
+    selectors:
+      trigger:
+        - "button:has-text('Confirm merge')"
+        - "button:has-text('Confirm squash and merge')"
+        - "button:has-text('Confirm rebase and merge')"
+      verify_target_url_contains: "/pull/"
+    overrides:
+      verify_timeout_ms: 15000
+
+  # ─── Repo nav / record-card link ───────────────────────────────────
+  github.repo_card_link:
+    archetype: click_navigates
+    selectors:
+      trigger:
+        - "a[data-hovercard-type='repository']"
+        - "h3 a[href^='/']"
+      verify_target_url_contains: "github.com/"
+    overrides:
+      verify_timeout_ms: 6000

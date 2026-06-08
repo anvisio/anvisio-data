@@ -1,0 +1,160 @@
+_meta:
+  name: manifests/slack/app_model.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Semantic-layer model for Slack. Catalogs the screens of the Slack
+    web SPA, the affordances available on each, current known-dead
+    paths, and the transitions between screens. Consumed by propose /
+    heal / Claude when authoring or auditing atoms. The runtime ignores
+    this file.
+
+    Coverage is uneven by design and HONEST about it: this file is
+    derived from the manifest (views/, widgets.yaml, actions/*.yaml)
+    NOT from a live DOM-hardening session. Slack has not been driven
+    against a real signed-in tab as of 2026-06-01, so every screen here
+    carries status:undocumented and the affordance entries describe
+    what the manifest declares, not what was probed. The selector tables
+    live in widgets.yaml (single source of truth); this file only names
+    the SEMANTIC role of each screen + affordance + transition. When the
+    first live hardening session runs (see slack.md "Known gaps"),
+    promote the probed screens to status:documented and fill the
+    distinctives + any newly-discovered known_dead_paths.
+
+    Format-spec: planning/tech_design/integrations/INTEGRATION_FORMAT.md
+    (Surface 1, app_model.yaml section).
+  changelog:
+    - "0.1.0 (2026-06-01): initial seed authored from the manifest tree
+       (views/WorkspaceHome + ChannelView + ThreadView, widgets.yaml,
+       the 6 actions). All screens status:undocumented — no live probe
+       yet. Screens/transitions derived from the view URL grammar
+       (app.slack.com/client/{workspace_id}/{channel_id}[/thread/...]).
+       Affordances reference the widgets.yaml primitives by name (do not
+       restate selectors). known_dead_paths is [] — nothing disproven
+       yet because nothing has been driven live; apis.yaml entries are
+       all confidence:low / verified_at:null. See slack.md."
+
+# ─── Screens ──────────────────────────────────────────────────────
+# Slack is a single-page app at app.slack.com. Navigation is path-based
+# and workspace-scoped: /client/{workspace_id}/{channel_id}, where the
+# channel_id prefix encodes the conversation kind (C=channel, D=DM,
+# G=group DM, M=multi-party im — see schemas/Channel.yaml). Each screen
+# below maps to a views/*.yaml landmark; the message composer is the
+# only "write" surface (Slack is a communication tool, not a CRUD tool,
+# so there are no inline-edit field screens).
+
+screens:
+  WorkspaceHome:
+    view: WorkspaceHome
+    url_pattern: "https://app.slack.com/client/{workspace_id}"  # no channel segment; see views/WorkspaceHome.yaml verify pattern "/client/[A-Z0-9]+/?$"
+    purpose: "Workspace landing with no conversation selected. Slack typically redirects this to the user's last-viewed channel, so it is more a transient entry point than a stable destination."
+    distinctives:
+      - "Landmark is the top-nav search input (always present), NOT the message composer — the composer only mounts once a channel is selected post-redirect. See views/WorkspaceHome.yaml (the 0.2.0 changelog records the composer being a false positive on the home URL)."
+      - "url_matches is anchored to end-of-path so WorkspaceHome and ChannelView are mutually exclusive (ChannelView adds a /[CDGM]... channel segment)."
+    affordance_widgets: [slack.global_search, slack.quick_switcher, slack.channel_sidebar_item, slack.dm_sidebar_item]   # selectors in widgets.yaml
+    status: undocumented   # not yet live-probed (2026-06-01)
+
+  ChannelView:
+    view: ChannelView
+    url_pattern: "https://app.slack.com/client/{workspace_id}/{channel_id}"  # channel_id ∈ C|D|G|M prefix
+    purpose: "A single channel or DM open, showing its message history with the composer at the bottom. The anchor screen for read_channel + post_message + thread-open. Same shape regardless of conversation kind (channel / DM / group DM / multi-party im)."
+    distinctives:
+      - "Landmark probe is the message composer (`[role='textbox'][aria-label*='Message']`, see views/ChannelView.yaml). This is the one screen where the write affordance lives."
+      - "URL verify pattern `/client/[A-Z0-9]+/[CDGM][A-Z0-9]+` discriminates a selected conversation from the bare WorkspaceHome URL."
+      - "The composer (slack.channel_composer) is a contenteditable, not an <input> — see widgets.yaml archetype contenteditable_input."
+    affordance_widgets: [slack.global_search, slack.quick_switcher, slack.channel_composer, slack.send_message_button, slack.open_thread_button]   # selectors in widgets.yaml
+    status: undocumented   # not yet live-probed (2026-06-01)
+
+  ThreadView:
+    view: ThreadView
+    url_pattern: "https://app.slack.com/client/{workspace_id}/{channel_id}/thread/{channel_id}-{thread_ts}"
+    purpose: "A thread expanded in the right-hand panel. Opened from a ChannelView via the per-message Reply-in-thread affordance. Carries its own composer (slack.thread_composer) distinct from the channel composer."
+    distinctives:
+      - "Thread URL is the channel URL plus `/thread/{channel_id}-{ts}` (the parent message ts joined to the channel id). Landmark is the threads panel (`[data-qa='threads_view'], [aria-label='Thread']`, see views/ThreadView.yaml)."
+      - "WRITE-DISAMBIGUATION HAZARD (declared in actions/post_message.yaml, NOT yet live-confirmed): when a thread is open, Slack exposes BOTH the channel composer AND the thread composer in the DOM simultaneously. This is why post_message's browser flavor handles only top-level channel posts; thread replies (thread_ts set) route through the mcp / oauth_api flavors, which take channel+thread_ts cleanly. Treat this as the documented reason the browser path is channel-only, and as the first thing to verify when a live thread-reply browser flavor is ever attempted."
+    affordance_widgets: [slack.thread_composer, slack.send_message_button]   # selectors in widgets.yaml
+    status: undocumented   # not yet live-probed (2026-06-01)
+
+# ─── Affordances ──────────────────────────────────────────────────
+# Per-screen interactive elements. Each references a widget by name —
+# selectors live in widgets.yaml (single source of truth). Behaviors
+# below are derived from the action recipes + view definitions, NOT
+# from a live probe; treat them as the manifest's INTENT until a
+# hardening session confirms them.
+
+affordances:
+  WorkspaceHome:
+    navigation:
+      - { affordance: "Global search", widget: slack.global_search, behavior: "Opens the workspace search modal; submit_key Enter. Entry point for search_messages when driven via DOM (the action's session_api / oauth_api flavors hit /api/search.messages directly rather than this input)." }
+      - { affordance: "Quick switcher", widget: slack.quick_switcher, behavior: "Reveals the channel/DM switcher dialog (Cmd/Ctrl-K equivalent). Not yet exercised by any atom." }
+      - { affordance: "Channel sidebar item", widget: slack.channel_sidebar_item, behavior: "Clicking a sidebar channel navigates to its ChannelView (verify_target_url_contains '/client/'). A DOM alternative to open_channel's URL-navigate recipe." }
+      - { affordance: "DM sidebar item", widget: slack.dm_sidebar_item, behavior: "Clicking a sidebar DM navigates to that conversation's ChannelView." }
+
+  ChannelView:
+    read:
+      - { affordance: "Message history", widget: null, behavior: "The message pane is read via the API (read_channel uses session_api/oauth_api/mcp against conversations.history, not a DOM scrape). No read-widget is authored — Slack reads lean on the API per spec 70 §7." }
+    write:
+      - { affordance: "Channel composer", widget: slack.channel_composer, behavior: "Contenteditable message box at the bottom of the channel. post_message's browser flavor fills it (op: fill)." }
+      - { affordance: "Send", widget: slack.send_message_button, behavior: "Sends the composed message. post_message's browser flavor invokes it as the commit step (commit:true) under the user-clicks-Send launch contract. L4 in the action is the chat.postMessage XHR (see slack.md L4 section), NOT a DOM verify." }
+    navigation:
+      - { affordance: "Open thread", widget: slack.open_thread_button, behavior: "Opens the right-panel ThreadView for a message (transition ChannelView -> ThreadView). Not yet exercised by any atom (thread replies route through the API)." }
+      - { affordance: "Global search", widget: slack.global_search, behavior: "Same as on WorkspaceHome — present in the top nav on every screen." }
+      - { affordance: "Quick switcher", widget: slack.quick_switcher, behavior: "Same as on WorkspaceHome." }
+
+  ThreadView:
+    write:
+      - { affordance: "Thread composer", widget: slack.thread_composer, behavior: "Contenteditable reply box scoped to the open thread panel. Authored as a widget but NOT used by any atom yet — post_message routes thread replies through mcp/oauth_api to avoid the dual-composer disambiguation hazard (see ThreadView screen distinctives)." }
+      - { affordance: "Send", widget: slack.send_message_button, behavior: "Shared with ChannelView (same widget). In a thread, sends the thread reply." }
+
+# ─── Known-dead paths ─────────────────────────────────────────────
+# Paths proven dead / suspected-dead / research-only. EMPTY for Slack:
+# nothing has been disproven because nothing has been driven against a
+# live tab yet (all apis.yaml entries are confidence:low /
+# verified_at:null; widgets.yaml selectors are unverified). The first
+# DOM-hardening session is expected to populate this — e.g. a drifted
+# data-qa attribute, a stale aria-label, or a network-signal pattern
+# that matches zero traffic. Until then, recording fabricated dead
+# paths would itself be the anti-pattern this file guards against.
+known_dead_paths: []
+
+# ─── Transitions ──────────────────────────────────────────────────
+# Screen-to-screen edges. Derived from the view URL grammar + the
+# widget navigation affordances + the action recipes. The URL-navigate
+# edges (open_channel, post_message's nav_channel step) are
+# manifest-confirmed; the click-driven edges (sidebar item, open thread)
+# are declared by widgets.yaml but not yet live-confirmed.
+
+transitions:
+  - { from: WorkspaceHome, to: ChannelView, via: "Slack auto-redirect to last-viewed channel (the home URL is transient)" }
+  - { from: WorkspaceHome, to: ChannelView, via: "click a sidebar channel/DM (slack.channel_sidebar_item / slack.dm_sidebar_item) — verify_target_url_contains '/client/'" }
+  - { from: WorkspaceHome, to: ChannelView, via: "quick switcher (slack.quick_switcher) → pick a conversation" }
+  - { from: any, to: ChannelView, via: "navigate to https://app.slack.com/client/{workspace_id}/{channel_id} (open_channel browser flavor; post_message browser flavor's nav_channel step)" }
+  - { from: ChannelView, to: ThreadView, via: "click Reply-in-thread on a message (slack.open_thread_button) — opens the right panel; URL gains /thread/{channel_id}-{ts}" }
+  - { from: ThreadView, to: ChannelView, via: "close the thread panel (Esc / close button) — URL drops the /thread/ segment" }
+
+# ─── Atoms cross-reference ────────────────────────────────────────
+# Which atoms exercise which screen / affordance. Helps propose see
+# precedent + helps the user audit "if I change widget X, what breaks?".
+# Derived from the actions/*.yaml files; keep in sync by hand for now.
+# NOTE: the read/list atoms (list_channels, list_users, read_channel,
+# search_messages) are API-first (session_api/oauth_api/mcp) and touch
+# NO widget — they are listed against the screen they conceptually read,
+# not against an affordance. open_channel + post_message are the only
+# atoms with a browser recipe that drives DOM affordances.
+atoms_using:
+  WorkspaceHome.slack.channel_sidebar_item: []   # widget authored; no atom drives it (open_channel navigates by URL instead)
+  WorkspaceHome.slack.dm_sidebar_item: []        # widget authored; no atom drives it
+  WorkspaceHome.slack.quick_switcher: []         # widget authored; no atom drives it
+  ChannelView.slack.channel_composer: [post_message]        # browser flavor fill_composer step
+  ChannelView.slack.send_message_button: [post_message]     # browser flavor send step (commit:true)
+  ChannelView.slack.open_thread_button: []       # widget authored; no atom drives it (thread replies via API)
+  ChannelView.slack.global_search: []            # widget authored; search_messages hits /api/search.messages directly
+  ThreadView.slack.thread_composer: []           # widget authored; no atom drives it (post_message routes thread_ts via API)
+  # Screen-conceptual reads (API-first, no widget):
+  ChannelView.read_history: [read_channel]                  # conversations.history via session_api/oauth_api/mcp
+  Workspace.list_channels: [list_channels]                  # conversations.list
+  Workspace.list_users: [list_users]                        # users.list
+  Workspace.search_messages: [search_messages]              # search.messages (mcp prefers the Real-Time Search API)
+  Navigation.open_channel: [open_channel]                   # browser-only nav primitive (no mcp_tool)

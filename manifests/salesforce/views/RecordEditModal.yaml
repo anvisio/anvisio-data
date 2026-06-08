@@ -1,24 +1,26 @@
 _meta:
   name: manifests/salesforce/views/RecordEditModal.yaml
-  version: 1.0.0
-  cdn_schema_version: 60.4.2
+  version: 1.2.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
-    RecordEditModal view — record edit modal opened from a record view. URL deeplink /lightning/r/{object_type}/{record_id}/edit (Shape A per propose v7.5).
+    RecordEditModal view — record edit modal opened from a record view. URL deeplink /lightning/r/{object_type}/{record_id}/edit (Shape A per propose v7.5), with ?count=1&backgroundContext=<enc /view> so post-save returns to the record view (NOT the org Welcome page).
   changelog:
+    - "1.2.0 (2026-05-30): verify anchors on `div[role='dialog'][aria-label^='Edit ']` + `button[name='SaveEdit']` instead of `records-record-layout-item`. Same shape as RecordNewModal 1.1.0 — top-DOM landmark resolves faster than the shadow-nested wrapper; SaveEdit confirms interactivity."
+    - "1.1.0 (2026-05-29): C2 — bake ?count=1&backgroundContext=<urlenc /view> into entry.url. Live-probed 2026-05-29: the raw /edit deeplink (even with count=1) post-save-redirects to /lightning/n/devedapp__Welcome; backgroundContext returns to /r/{id}/view. A sf_edit_url transform (transform-interpreter.ts) already did this for the wizard/notes path, but the v70 view-entry navigates entry.url raw — so the path is fixed here in data. cdn_schema_version 60.4.2 → 70.0.0 (drift cleanup)."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 name: RecordEditModal
 
 entry:
-  url: "{instance.origin}/lightning/r/{object_type}/{record_id}/edit"
+  url: "{instance.origin}/lightning/r/{object_type}/{record_id}/edit?count=1&backgroundContext=%2Flightning%2Fr%2F{object_type}%2F{record_id}%2Fview"
 landmark_probe:
-  selector: records-record-layout-item, div[role='dialog'][aria-label^='Edit ']
+  selector: div[role='dialog'][aria-label^='Edit '], records-record-layout-item
   timeout_ms: 15000
 verify:
   - type: selector_appears
-    selector: records-record-layout-item
+    selector: div[role='dialog'][aria-label^='Edit ']
     timeout_ms: 12000
   - type: selector_appears
     selector: button[name='SaveEdit']

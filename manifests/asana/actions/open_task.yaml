@@ -1,0 +1,39 @@
+_meta:
+  name: manifests/asana/actions/open_task.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    open_task atom: navigate to a task detail. Browser-only;
+    read-only navigation primitive.
+
+description: Open an Asana task detail page.
+object: task
+object_types: [Task]
+commits_changes: false
+depends_on_view: any
+inputs:
+  project_id: { type: text, required: false, default: "0", description: "Project gid; '0' opens from My Tasks context." }
+  task_gid:   { type: text, required: true, sample: "1213754599099000" }
+result:
+  opened: boolean
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Navigate to the task detail URL
+    recipe:
+      - id: nav_task
+        type: navigate
+        args:
+          url: "https://app.asana.com/0/{{inputs.project_id}}/{{inputs.task_gid}}"
+    outcomes:
+      - action: opened
+        signal:
+          type: url_matches
+          pattern: "/0/[0-9]+/[0-9]+"
+          timeout_ms: 10000
+        extract:
+          opened:
+            literal: true

@@ -1,0 +1,121 @@
+_meta:
+  name: manifests/asana/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana widget primitives. Inline (no library extends yet).
+
+    Coverage: global affordances + task-list / task-pane interactions
+    the atom actions need. Per-custom-field widgets (Priority,
+    Status, Assignee picker, due-date picker) are deferred: they
+    need label-scoped selectors that heal-time learning will author
+    from the project's custom-field metadata.
+
+    Source: dom-selectors-asana.md (2026-03-21) + the Asana web
+    SPA's stable role/data-testid patterns.
+
+  archetypes_used: [text_input, contenteditable_input, click_reveals, click_navigates]
+
+widgets:
+
+  # ─── Global affordances ────────────────────────────────────────────
+  asana.global_search:
+    archetype: text_input
+    selectors:
+      target:
+        - "input[aria-label*='Search']"
+        - "[data-testid='topbar-search'] input"
+      verify_target: "[role='dialog'][aria-label*='Search'], [data-testid='search-typeahead']"
+    overrides:
+      submit_key: Enter
+      verify_timeout_ms: 4000
+
+  asana.quick_add:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[aria-label='Quick add']"
+        - "[data-testid='quick-add-button']"
+      verify_target: "[role='dialog'][aria-label*='Create new']"
+
+  # ─── Project list / board ──────────────────────────────────────────
+  asana.add_task_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[aria-label*='Add task']"
+        - "[data-testid='add-task'] button"
+        - "button:has-text('Add task')"
+      verify_target: "[role='row'][data-testid='task-row-editing'], input[aria-label*='Task name']"
+    overrides:
+      verify_timeout_ms: 4000
+
+  asana.task_name_input:
+    archetype: text_input
+    selectors:
+      target:
+        - "input[aria-label*='Task name']"
+        - "[data-testid='task-row-editing'] input"
+        - "[role='row'][data-testid='task-row-editing'] [contenteditable='true']"
+      verify_target: "input[aria-label*='Task name'], [contenteditable='true']"
+    overrides:
+      submit_key: Enter
+      verify_timeout_ms: 3000
+
+  asana.task_row_link:
+    archetype: click_navigates
+    selectors:
+      trigger:
+        - "[role='row'] [class*='TaskName'] a"
+        - "[role='row'] [data-testid='task-row-name']"
+      verify_target_url_contains: "/0/"
+    overrides:
+      verify_timeout_ms: 6000
+
+  # ─── Task detail right-side panel ─────────────────────────────────
+  asana.task_pane_name:
+    archetype: contenteditable_input
+    selectors:
+      target:
+        - "[class*='TaskPane'] h1, [class*='TaskPane'] [contenteditable='true'][aria-label*='Title']"
+        - "[data-testid='task-detail-name']"
+      verify_target: "[class*='TaskPane'] h1, [data-testid='task-detail-name']"
+
+  asana.task_pane_description:
+    archetype: contenteditable_input
+    selectors:
+      target:
+        - "[class*='TaskPane'] [contenteditable='true'][aria-label*='Description']"
+        - "[data-testid='task-description-editor'] [contenteditable='true']"
+      verify_target: "[class*='TaskPane'] [contenteditable='true'][aria-label*='Description']"
+
+  asana.complete_task_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[aria-label*='Mark complete']"
+        - "[data-testid='task-pane-complete']"
+      verify_target: "button[aria-label*='Mark incomplete'], button[aria-label*='Completed']"
+    overrides:
+      verify_timeout_ms: 5000
+
+  # ─── Task comment ──────────────────────────────────────────────────
+  asana.task_comment_input:
+    archetype: contenteditable_input
+    selectors:
+      target:
+        - "[class*='TaskPane'] [contenteditable='true'][aria-label*='comment']"
+        - "[data-testid='task-comment-input'] [contenteditable='true']"
+      verify_target: "[class*='TaskPane'] [contenteditable='true'][aria-label*='comment']"
+
+  asana.submit_comment_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[data-testid='task-comment-submit']"
+        - "button[aria-label='Send comment']"
+      verify_target: "[data-testid='task-story'], [class*='Story']"
+    overrides:
+      verify_timeout_ms: 5000

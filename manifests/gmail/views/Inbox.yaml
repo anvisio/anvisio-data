@@ -1,27 +1,32 @@
 _meta:
   name: manifests/gmail/views/Inbox.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
-    Inbox view — primary mailbox at /mail/u/0/#inbox. Launchpad for
+    Inbox view — primary mailbox at /mail/u/N/#inbox. Launchpad for
     compose; operating surface for archive/delete/star/label/move on
     selected rows. URL-deeplink entry, Phase 4 validated.
   changelog:
+    - "0.2.0 (2026-05-25): u/0 → u/{account_index} so atoms operate on the user's signed-in mailbox instead of always the default account (carries the ThreadView 0.4.0 fix to the singleton consumers — apply_label, archive_email, delete_email, mark_read_unread, move_email, star_email all depends_on_view: Inbox). Add explicit `verify` entry on the row-list table — the previously-authored Primary-tab selector relied on Gmail's categorized-inbox feature being ON, which is OFF on stock setups (live-verified against the user's account 2026-05-25; div[role='tab'][aria-label='Primary'] returned 0). The chosen selector `div[role='main'] table.F.cf.zt` is the row-grid table inside main — present on Inbox (count: 2) and ABSENT on ThreadView (count: 0), so the runtime's already-on-view short-circuit won't false-positive on a #inbox/<id> thread. Inbox is a singleton (no per-call input), so verify is shape-only by design (see [[feedback-view-verify-strict-mode-open-question]] for the open question on strict input-aware-only mode)."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
 name: Inbox
-description: Primary mailbox view at /mail/u/0/#inbox showing the conversation
+description: Primary mailbox view at /mail/u/N/#inbox showing the conversation
   list. Used as the launchpad for compose and as the operating surface for
   archive/delete/star/label/move on selected rows.
 entry:
-  url: https://mail.google.com/mail/u/0/#inbox
+  url: https://mail.google.com/mail/u/{account_index}/#inbox
+verify:
+  - type: selector_appears
+    selector: div[role='main'] table.F.cf.zt
+    timeout_ms: 8000
 url_patterns:
-  - https://mail.google.com/mail/u/0/#inbox
-  - https://mail.google.com/mail/u/0/#inbox/.*
+  - https://mail.google.com/mail/u/\d+/#inbox
+  - https://mail.google.com/mail/u/\d+/#inbox/.*
 identifying_selectors:
-  - div[role='tab'][aria-selected='true'][aria-label='Primary']
+  - div[role='main'] table.F.cf.zt
   - table.F.cf.zt tr.zA
   - div[role='button'].T-I-KE.L3
 widgets:

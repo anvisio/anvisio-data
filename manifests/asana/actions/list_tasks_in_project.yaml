@@ -1,0 +1,106 @@
+_meta:
+  name: manifests/asana/actions/list_tasks_in_project.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    list_tasks_in_project atom: fetch tasks in one project,
+    optionally filtered to a section.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.tasks: list<Task> per v70 signature parity rule. Flat extracts on .data already populate the list whole; mcp + oauth_api gain next_offset extraction for parity with session_api."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: List tasks in an Asana project.
+object: "{{inputs.project_gid}}"
+object_types: [Task]
+commits_changes: false
+depends_on_view: any
+mcp_tool: asana.list_tasks_in_project
+inputs:
+  project_gid:     { type: text, required: true, sample: "1213754599092608" }
+  section_gid:     { type: text, required: false, description: "Filter to one section" }
+  completed_since: { type: text, required: false, description: "ISO8601 cutoff; use 'now' to exclude completed" }
+  limit:           { type: integer, required: false, default: 50, maximum: 100 }
+  offset:          { type: text, required: false, default: "" }
+  opt_fields:      { type: text, required: false, default: "name,assignee.name,due_on,completed,memberships.section.name,custom_fields" }
+result:
+  tasks:
+    schema: Task
+    cardinality: list
+  next_offset:
+    type: text
+    nullable: true
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: SPA GET /projects/{gid}/tasks
+    recipe:
+      - id: api_call
+        type: call_platform_api
+        args:
+          api_def:
+            kind: asana_session_api
+            endpoint: "https://app.asana.com/api/1.0/projects/{{inputs.project_gid}}/tasks?limit={{inputs.limit}}&offset={{inputs.offset}}&opt_fields={{inputs.opt_fields}}"
+            method: GET
+            extract_path: ""
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "app.asana.com/api/1.0/projects/*/tasks*"
+          status: 200
+          timeout_ms: 10000
+        extract:
+          tasks:
+            from_step: api_call
+            path: data
+          next_offset:
+            from_step: api_call
+            path: next_page.offset
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Asana MCP list_tasks_in_project
+    server: asana
+    tool: list_tasks_in_project
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          tasks:
+            from_api_response: true
+            path: data
+          next_offset:
+            from_api_response: true
+            path: next_page.offset
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST GET /projects/{gid}/tasks
+    request:
+      method: GET
+      url: "https://app.asana.com/api/1.0/projects/{{inputs.project_gid}}/tasks"
+      query:
+        section_gid:     "{{inputs.section_gid}}"
+        completed_since: "{{inputs.completed_since}}"
+        limit:           "{{inputs.limit}}"
+        offset:           "{{inputs.offset}}"
+        opt_fields:      "{{inputs.opt_fields}}"
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "asana.com/api/1.0/projects/*/tasks"
+          status: 200
+        extract:
+          tasks:
+            from_api_response: true
+            path: data
+          next_offset:
+            from_api_response: true
+            path: next_page.offset

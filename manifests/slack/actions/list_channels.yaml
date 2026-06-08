@@ -1,0 +1,103 @@
+_meta:
+  name: manifests/slack/actions/list_channels.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    list_channels atom: fetch the channels the user can see.
+    Read; spec 70 §7 priority is session_api > mcp > oauth_api.
+    session_api works on the existing Slack tab's session cookie.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.channels: list<Channel> per v70 signature parity rule. mcp + oauth_api now also populate next_cursor from response_metadata.next_cursor (which Slack returns on conversations.list)."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: List Slack channels visible to the user.
+object: channels
+object_types: [Channel]
+commits_changes: false
+depends_on_view: any
+mcp_tool: slack.list_channels
+inputs:
+  workspace:        { type: text, required: true, description: "Workspace subdomain (e.g. 'anvisio')", sample: anvisio }
+  types:            { type: text, required: false, default: "public_channel,private_channel" }
+  exclude_archived: { type: text, required: false, default: "true" }
+  limit:            { type: integer, required: false, default: 100, maximum: 1000 }
+  cursor:           { type: text, required: false, default: "" }
+result:
+  channels:
+    schema: Channel
+    cardinality: list
+  next_cursor:
+    type: text
+    nullable: true
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: Workspace /api/conversations.list (xoxc cookie)
+    recipe:
+      - id: api_call
+        type: call_platform_api
+        args:
+          api_def:
+            kind: slack_session_api
+            endpoint: "https://{{inputs.workspace}}.slack.com/api/conversations.list?types={{inputs.types}}&exclude_archived={{inputs.exclude_archived}}&limit={{inputs.limit}}&cursor={{inputs.cursor}}"
+            method: GET
+            extract_path: ""
+    outcomes:
+      - action: listed
+        signal:
+          type: url_matches
+          pattern: "slack\\.com"
+          timeout_ms: 10000
+        extract:
+          channels:
+            from_step: api_call
+            path: channels
+          next_cursor:
+            from_step: api_call
+            path: response_metadata.next_cursor
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Slack MCP list_channels
+    server: slack
+    tool: list_channels
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          channels:
+            from_api_response: true
+            path: channels
+          next_cursor:
+            from_api_response: true
+            path: response_metadata.next_cursor
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public Web API /conversations.list
+    request:
+      method: GET
+      url: "https://slack.com/api/conversations.list"
+      query:
+        types:  "{{inputs.types}}"
+        limit:  "{{inputs.limit}}"
+        cursor: "{{inputs.cursor}}"
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "slack.com/api/conversations.list"
+          status: 200
+        extract:
+          channels:
+            from_api_response: true
+            path: channels
+          next_cursor:
+            from_api_response: true
+            path: response_metadata.next_cursor

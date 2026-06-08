@@ -1,0 +1,33 @@
+_meta:
+  name: manifests/asana/views/MyTasks.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    My Tasks view (app.asana.com/0/{userId}/list). The personal
+    task list: organized by Recently Assigned / Today / Upcoming /
+    Later. Same widget surface as ProjectList.
+
+name: MyTasks
+
+entry:
+  url: "https://app.asana.com/0/{user_id}/list"
+landmark_probe:
+  selector: "[role='grid'], [role='table']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/0/[0-9]+/list"
+  - type: selector_appears
+    selector: "[role='grid'], [role='table']"
+    timeout_ms: 12000
+placeholders:
+  user_id:
+    type: text
+    sample: "1213743270865200"
+widgets:
+  - asana.global_search
+  - asana.quick_add
+  - asana.add_task_button
+  - asana.task_row_link

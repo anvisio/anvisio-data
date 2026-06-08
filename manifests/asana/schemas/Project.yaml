@@ -1,0 +1,96 @@
+_meta:
+  name: manifests/asana/schemas/Project.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana Project property schema (shape from /api/1.0/projects/{gid}).
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[gid] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Project
+object_type_id: project
+mcp_object_type: project
+primary_key: [gid]
+
+properties:
+  gid:
+    label: Project ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    sample: "1213754599092608"
+  name:
+    label: Name
+    type: string
+    field_type: text
+    required: true
+    sample: "Product Development"
+  owner:
+    label: Owner
+    type: object
+    field_type: select
+  team:
+    label: Team
+    type: object
+    field_type: select
+    description: 'Only set when the project lives under a team (org tier).'
+  workspace:
+    label: Workspace
+    type: object
+    field_type: text
+    read_only: true
+  notes:
+    label: Description
+    type: string
+    field_type: textarea
+  archived:
+    label: Archived
+    type: bool
+    field_type: booleancheckbox
+  public:
+    label: Public to Workspace
+    type: bool
+    field_type: booleancheckbox
+  color:
+    label: Color
+    type: string
+    field_type: select
+    description: 'Asana color palette name (e.g. "light-blue", "dark-pink").'
+  default_view:
+    label: Default View
+    type: enumeration
+    field_type: select
+    options:
+      - { value: list,     label: List }
+      - { value: board,    label: Board }
+      - { value: timeline, label: Timeline }
+      - { value: calendar, label: Calendar }
+      - { value: gantt,    label: Gantt (Premium) }
+  custom_field_settings:
+    label: Custom Field Definitions
+    type: array
+    field_type: select
+    description: "Array of project-scope custom fields (the schema for Task.custom_fields)."
+  permalink_url:
+    label: URL
+    type: string
+    field_type: text
+    read_only: true
+  created_at:
+    label: Created At
+    type: datetime
+    field_type: date
+    read_only: true
+  modified_at:
+    label: Modified At
+    type: datetime
+    field_type: date
+    read_only: true
+
+associations:
+  - { name: tasks,    object_type_id: task,    description: "Tasks in this project" }
+  - { name: sections, object_type_id: section, description: "Section groupings (board columns / list headers)" }

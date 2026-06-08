@@ -1,0 +1,34 @@
+_meta:
+  name: manifests/hubspot/views/Dashboard.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot landing dashboard (/user-guide/{portalId} or /reports-dashboard/).
+    Catch-all "any" view used as a starting point for the global
+    search affordance. Not strictly required by atom actions today
+    but referenced as a default landmark in onboarding flows.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Dashboard
+
+entry:
+  url: "{instance.origin}/user-guide/{portal_id}"
+landmark_probe:
+  selector: "input[aria-label*='Find']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/user-guide/[0-9]+"
+  - type: selector_appears
+    selector: "input[aria-label*='Find']"
+    timeout_ms: 10000
+placeholders:
+  portal_id:
+    type: text
+    sample: "245597800"
+widgets:
+  - hubspot.global_search_input
+  - hubspot.create_new_button

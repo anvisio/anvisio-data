@@ -1,0 +1,136 @@
+_meta:
+  name: manifests/slack/actions/post_message.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    post_message atom: send a message to a channel, DM, or thread.
+    commits_changes:true so spec 70 §7 prefers browser (the user-
+    clicks-Send launch contract); mcp / oauth_api cover headless.
+
+    Browser flavor only fills the channel composer. Thread replies
+    (thread_ts set) require mcp or oauth_api: the browser path would
+    need an open_thread step + filling the right-panel composer, and
+    Slack's DOM exposes both composers simultaneously when a thread
+    is open, so disambiguating in DOM is brittle. The headless paths
+    handle thread_ts cleanly via the API.
+
+    workspace_id is required because the SPA URL is workspace-scoped.
+    mcp / oauth_api flavors ignore it (channel id alone identifies
+    the conversation).
+  changelog:
+    - "0.3.0 (2026-05-24): adopt schema-typed result.message: Message per v70 signature parity rule. PK is composite (channel, ts) — channel from input, ts from chat.postMessage response (.ts) across all three flavors. Browser flavor now also populates ts (was missing, leaving the primitive ts result key unsurfaced)."
+    - "0.2.0 (2026-05-23): make workspace_id required (browser flavor
+       needs it for the URL); drop ternary widget selector (template
+       engine doesn't render ternaries); browser flavor now restricted
+       to channel composer (thread replies route through mcp /
+       oauth_api); switch browser-flavor signal to the chat.postMessage
+       XHR so we observe the actual send instead of a passive message
+       pane selector; expose attachments + unfurl_links + unfurl_media
+       inputs that the MCP catalog supports."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Post a message to a Slack channel, DM, or thread.
+object: "{{inputs.channel}}"
+object_types: [Message]
+commits_changes: true
+depends_on_view: ChannelView
+mcp_tool: slack.post_message
+inputs:
+  workspace_id:    { type: text, required: true,  description: "Workspace T... id; browser flavor needs it for the SPA URL." }
+  channel:         { type: text, required: true,  description: "Channel / DM id." }
+  text:            { type: text, required: true,  description: "Plain text (or mrkdwn)." }
+  thread_ts:       { type: text, required: false, description: "Parent message ts for thread reply. Browser flavor ignores this; routes through mcp / oauth_api." }
+  blocks:          { type: list<object>, required: false, description: "Block Kit blocks (alternative to text)." }
+  attachments:     { type: list<object>, required: false, description: "Legacy message attachments." }
+  unfurl_links:    { type: text, required: false, description: "'true' | 'false'; default true." }
+  unfurl_media:    { type: text, required: false, description: "'true' | 'false'; default true." }
+result:
+  message:
+    schema: Message
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open channel + type into composer (user clicks Send on commit:true)
+    recipe:
+      - id: nav_channel
+        type: navigate
+        args:
+          url: "https://app.slack.com/client/{{inputs.workspace_id}}/{{inputs.channel}}"
+      - id: fill_composer
+        type: use_widget
+        args:
+          widget: slack.channel_composer
+          op: fill
+          value: "{{inputs.text}}"
+      - id: send
+        type: use_widget
+        args:
+          widget: slack.send_message_button
+          op: invoke
+        commit: true
+    outcomes:
+      - action: posted
+        signal:
+          type: network_response
+          url_pattern: "slack.com/api/chat.postMessage"
+          status: 200
+          timeout_ms: 8000
+        extract:
+          message:
+            channel:
+              from_input: channel
+            ts:
+              from_api_response: true
+              path: ts
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Slack MCP post_message
+    server: slack
+    tool: post_message
+    outcomes:
+      - action: posted
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          message:
+            channel:
+              from_api_response: true
+              path: channel
+            ts:
+              from_api_response: true
+              path: ts
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public Web API /chat.postMessage
+    request:
+      method: POST
+      url: "https://slack.com/api/chat.postMessage"
+      body:
+        channel:      "{{inputs.channel}}"
+        text:         "{{inputs.text}}"
+        thread_ts:    "{{inputs.thread_ts}}"
+        blocks:       "{{inputs.blocks}}"
+        attachments:  "{{inputs.attachments}}"
+        unfurl_links: "{{inputs.unfurl_links}}"
+        unfurl_media: "{{inputs.unfurl_media}}"
+    outcomes:
+      - action: posted
+        signal:
+          type: network_response
+          url_pattern: "slack.com/api/chat.postMessage"
+          status: 200
+        extract:
+          message:
+            channel:
+              from_api_response: true
+              path: channel
+            ts:
+              from_api_response: true
+              path: ts

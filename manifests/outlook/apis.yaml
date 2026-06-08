@@ -1,10 +1,19 @@
 _meta:
   name: manifests/outlook/apis.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Outlook on the Web API surface. owa.live.com session-cookie endpoints (no public REST). Used by call_platform_api at runtime to verify backend assumptions; mostly DOM-driven today.
+    Outlook server-side API endpoints. Empty for the browser-DOM-first
+    integration — OWA interactions run via the cookie-authed
+    outlook.live.com page. A future oauth_api flavor would call Microsoft
+    Graph mail endpoints (GET/POST https://graph.microsoft.com/v1.0/me/
+    messages, /me/messages/{id}, /me/sendMail), but consumer outlook.live.com
+    (MSA) accounts have limited Graph support vs enterprise M365 (Azure AD),
+    so the browser flavor is the shipping path. When Graph lands here it
+    must carry confidence: low + verified_at: null until live-verified.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new. Browser-DOM-first — apis empty by design; Graph endpoints documented in the description as the oauth_api follow-up."
 
 apis: {}

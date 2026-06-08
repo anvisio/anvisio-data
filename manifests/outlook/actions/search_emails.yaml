@@ -1,0 +1,82 @@
+_meta:
+  name: manifests/outlook/actions/search_emails.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    search_emails atom: find conversations matching a query and return
+    their conversation ids (data-convid). Read-only.
+
+    Browser flavor types the query into the global search box (outlook.search
+    widget), waits for search mode + results in the message listbox, scrapes
+    each row's data-convid. Output is conversation_ids: list<id> — each id is
+    what read_email accepts (matches the MessageView entry's row selector).
+
+    Live-grounded 2026-06-01: results render into the SAME
+    div[role='listbox'][aria-label^='Message list'] as the inbox (OWA
+    replaces the list in place — NO detached inbox cache, unlike gmail), so
+    the scrape scope is that listbox and the search-mode gate
+    (button[aria-label='Exit search']) keeps us off the pre-search inbox.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new (replaces the 0.1.0 skeleton search_email that only set searched:boolean and scraped NO results). Returns conversation_ids scoped to the live results listbox. KNOWN HARDEN ITEMS (#1): (a) the all: gate may still race the inbox→results repaint; (b) a zero-result search needs an empty-state `any:` branch so it returns [] instead of timing out → heal (Rule E) — both verified against live searches in Phase 4."
+
+object: Conversation
+commits_changes: false
+depends_on_view: Inbox
+mcp_tool: outlook.search_emails
+inputs:
+  query:
+    type: text
+    required: true
+    sample: pilot
+  maxResults:
+    type: integer
+    required: false
+    description: Caps the scraped id list (browser slices via limit_input).
+result:
+  searched: boolean
+  conversation_ids: list<id>
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Type query into the search box; wait for results in the message list
+    recipe:
+      - id: run_search
+        type: use_widget
+        args:
+          widget: outlook.search
+          op: fill
+          inputs:
+            value: "{{inputs.query}}"
+    outcomes:
+      - action: searched
+        # HARDENED 2026-06-01 (live, against outlook.live.com): a race-safe,
+        # empty-safe gate. all:: search mode is active (Exit-search button —
+        # never on the pre-search inbox, so it gates off the inbox→results
+        # repaint), AND any:: EITHER ≥1 result row rendered OR the empty-state
+        # ("We didn't find anything.", live-probed) appeared. The empty branch
+        # makes a zero-result query return conversation_ids: [] cleanly
+        # instead of timing out → heal (Rule E). Nested any-in-all is
+        # supported (outcome-watcher recurses).
+        signal:
+          all:
+            - type: selector_appears
+              selector: "button[aria-label='Exit search']"
+              timeout_ms: 8000
+            - any:
+                - type: selector_appears
+                  selector: "div[role='listbox'][aria-label^='Message list'] div[role='option'][data-convid]"
+                  timeout_ms: 8000
+                - type: selector_appears
+                  selector: "[data-app-section='MessageList']"
+                  must_contain_text: "We didn't find anything"
+                  timeout_ms: 8000
+        extract:
+          searched:
+            literal: true
+          conversation_ids:
+            from_selector_all:
+              - "div[role='listbox'][aria-label^='Message list'] div[role='option'][data-convid]"
+            attr: data-convid
+            limit_input: maxResults

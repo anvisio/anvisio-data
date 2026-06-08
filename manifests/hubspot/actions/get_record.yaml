@@ -1,0 +1,139 @@
+_meta:
+  name: manifests/hubspot/actions/get_record.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    get_record atom — fetch one CRM record by id with a chosen
+    property set + optional associations. Read-only; same transport
+    priority as search_records (session_api > mcp > oauth_api >
+    browser).
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.record: schema_union<Contact, Company, Deal, Ticket> per v70 signature parity rule. session_api swaps the unimplemented `from_hubspot_record` source for `from_step` (returns raw gql_get; HubSpot flattener can be reauthored later). Browser flavor extracts record.hs_object_id from input (was literal:{} — schema-incompatible)."
+    - "0.1.0 (2026-05-23): initial seed. session_api shape inferred
+       from the crmObjectsSearch live-verify; needs a record-view
+       page-load capture to confirm `crmObject(id, type)` field
+       name."
+
+description: >
+  Fetch a single HubSpot record by id, returning the requested
+  property values + optional associations.
+object: "{{inputs.object_type}}"
+object_types: [Contact, Company, Deal, Ticket]
+commits_changes: false
+depends_on_view: any
+mcp_tool: hubspot.get_crm_objects
+inputs:
+  portal_id:
+    type: text
+    required: true
+    sample: "245597800"
+  object_type_id:
+    type: text
+    required: true
+    sample: "0-3"
+  record_id:
+    type: text
+    required: true
+    sample: "316988725990"
+  properties:
+    type: list<text>
+    required: true
+    description: Property names to return.
+    sample: [dealname, amount, dealstage, closedate]
+  associations:
+    type: list<text>
+    required: false
+    default: []
+    description: Association object-type slugs to include (e.g. ["contacts", "companies"]).
+result:
+  record:
+    schema_union: [Contact, Company, Deal, Ticket]
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: SPA GraphQL crmObject (session cookie + CSRF)
+    recipe:
+      - id: gql_get
+        type: call_platform_api
+        args:
+          api_def:
+            kind: hubspot_graphql
+            endpoint: "{instance.origin}/api/graphql/crm?portalId={{inputs.portal_id}}"
+            operation_name: CrmObjectGet
+            extract_path: data.crmObject
+          args:
+            id: "{{inputs.record_id}}"
+            objectTypeId: "{{inputs.object_type_id}}"
+            properties: "{{inputs.properties}}"
+    outcomes:
+      - action: fetched
+        signal:
+          type: url_matches
+          pattern: "hubspot\\.com"
+          timeout_ms: 10000
+        extract:
+          record:
+            from_step: gql_get
+            path: ""
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official HubSpot MCP get_crm_objects (batch of one)
+    server: hubspot
+    tool: get_crm_objects
+    outcomes:
+      - action: fetched
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          record:
+            from_api_response: true
+            path: results[0]
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST GET /crm/v3/objects/{type}/{id}
+    request:
+      method: GET
+      url: "https://api.hubapi.com/crm/v3/objects/{{inputs.object_type}}/{{inputs.record_id}}"
+      query:
+        properties: "{{inputs.properties}}"
+        associations: "{{inputs.associations}}"
+    outcomes:
+      - action: fetched
+        signal:
+          type: network_response
+          url_pattern: "api.hubapi.com/crm/v3/objects/*/*"
+          status: 200
+        extract:
+          record:
+            from_api_response: true
+            path: ""
+
+  browser:
+    requires_auth: session_cookie
+    label: Open the record view + landmark the highlight card
+    recipe:
+      - id: nav_record
+        type: navigate
+        args:
+          url: "{instance.origin}/contacts/{{inputs.portal_id}}/record/{{inputs.object_type_id}}/{{inputs.record_id}}"
+      - id: wait_card
+        type: wait_for_element
+        args:
+          selector: "h2"
+          timeout_ms: 10000
+    outcomes:
+      - action: fetched
+        signal:
+          type: selector_appears
+          selector: "h2"
+        extract:
+          record:
+            hs_object_id:
+              from_input: record_id

@@ -1,0 +1,179 @@
+_meta:
+  name: manifests/google-calendar/actions/create_event.yaml
+  version: 0.6.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    create_event atom: create a calendar event. The browser flavor fills
+    the event editor and, on commit, clicks Save; the oauth_api + mcp
+    flavors create the event directly. commits_changes:true, so transport
+    priority is browser > oauth_api > mcp per spec 70 §7: the user sees
+    the event appear in their own calendar.
+  changelog:
+    - "0.6.0 (2026-05-29): spec 72 R1 — add browser `abandon_signal` (selector_disappears Title): in commit:false HITL, the editor closing without an 'Event saved' toast is a DISCARD; the runner races it against the commit outcome with a grace window so a discard resolves as cancelled promptly instead of hanging until Skip/timeout."
+    - "0.5.0 (2026-05-28): spec 72 — browser `created` L4 is now the consequence ladder, replacing the bare `selector_disappears input[aria-label='Title']` (a Trap 2 fake-success that reported created on a DISCARD). LIVE-PROBED the toast: it is 'Event saved' (NOT 'Event created') in a goog-lr-* [aria-live='polite'] announcer (NOT [role='alert']). New signal: all:[transient_appears [aria-live='polite'] must_contain 'Event saved', selector_disappears title]. Discard now correctly reports not-committed."
+    - "0.4.0 (2026-05-28): document Recurrence + the RRULE format in the fields-object description so the /agent tool-use LLM (which sees the object-level description, schema-generator.ts) knows to pass an RRULE — it was surfaced but undocumented (bare string)."
+    - "0.3.0 (2026-05-28): browser outcome signals switched to the FULL editor's title (input[aria-label='Title'], was 'Add title') now that the EventEditor entry clicks 'More options'. Recurring events are created by passing fields.Recurrence (an RRULE) — fill_fields drives the event_recurrence widget's Custom dialog. Recurring create via oauth_api/mcp is NOT yet wired (the oauth body needs conditional recurrence+timeZone; MCP create-event has no recurrence param) — see google-calendar.md."
+    - "0.2.0 (2026-05-24): add schema-typed result.event (nullable) per v70 signature parity rule. oauth_api + mcp populate event.{Id, HtmlLink, Title}; browser stubs literal:null (Save-disappears DOM signal doesn't surface the event id)."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.create-event."
+
+description: >
+  Create a calendar event with a title, start, and end (optionally a
+  description, location, and guest list). The browser flavor fills the
+  event editor and, on commit, clicks Save; preview mode fills the editor
+  and stops so the user can review and click Save themselves. The oauth_api
+  and mcp flavors create the event in one call.
+object: Event
+commits_changes: true
+depends_on_view: EventEditor
+mcp_tool: google-calendar.create-event
+inputs:
+  fields:
+    type: object
+    required: true
+    description: |
+      Subset of Event fields. Required: Title, StartTime, EndTime (ISO 8601).
+      Optional: Description, Location, Attendees, ColorId, Recurrence.
+      Recurrence is an RFC 5545 RRULE string — e.g.
+      "RRULE:FREQ=WEEKLY;BYDAY=TU,TH;COUNT=6" or
+      "RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20260815" — omit it for a
+      single (non-recurring) event.
+  calendar_id:
+    type: text
+    description: Target calendar id. Defaults to the primary calendar.
+result:
+  created: boolean
+  event_id: text
+  html_link: text
+  event:
+    schema: Event
+    nullable: true
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Fill the event editor; click Save when commit:true
+    # Spec 72 R1: in commit:false HITL preview, the user leaving the editor
+    # (Title input gone — Cancel/Escape navigates /r/eventedit -> grid) without
+    # a success toast is a DISCARD. The runner races this against the commit
+    # outcome with a grace window (a real Save also closes the editor, a beat
+    # before "Event saved" latches), so a discard resolves as `cancelled`
+    # promptly instead of hanging. Kept out of outcomes: on purpose.
+    abandon_signal:
+      type: selector_disappears
+      selector: input[aria-label='Title']
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          object: Event
+          from: "{{inputs.fields}}"
+      - id: save
+        type: use_widget
+        commit: true
+        args:
+          widget: google-calendar.event_save
+          op: invoke
+    outcomes:
+      - action: ready_to_create
+        signal:
+          type: element_value_equals
+          selector: input[aria-label='Title']
+          value: "{{inputs.fields.Title}}"
+      # Spec 72 L4 consequence ladder. Rung 1 (positive): the backend's
+      # success toaster — live-probed 2026-05-28 as the text "Event saved"
+      # (NOT "Event created") in a goog-lr-* [aria-live='polite'] announcer
+      # (NOT [role='alert']). Rung 2 (corroborating): the editor's Title
+      # input disappears (Save navigates editor -> grid). Composed with all:
+      # so a DISCARD — editor closes (rung 2) but NO toaster (rung 1) —
+      # correctly reports NOT committed (was a Trap 2 fake-success).
+      # NOTE: no per-rung timeout_ms — the rungs inherit the caller budget
+      # (30s in commit mode, 10min in the spec-71 HITL/preview wait). An
+      # explicit signal.timeout_ms OVERRIDES that budget (signal-watcher
+      # precedence), which capped the HITL wait to 8s and cancelled before
+      # the user could click Save — caught live 2026-05-29.
+      - action: created
+        signal:
+          all:
+            - type: transient_appears
+              selector: "[aria-live='polite']"
+              must_contain_text: "Event saved"
+            - type: selector_disappears
+              selector: input[aria-label='Title']
+        extract:
+          created:
+            literal: true
+          event_id:
+            literal: null
+          html_link:
+            literal: null
+          event:
+            literal: null
+  oauth_api:
+    requires_auth: oauth_token
+    label: Create the event via the Calendar API (events.insert)
+    request:
+      provider: google
+      method: POST
+      url: https://www.googleapis.com/calendar/v3/calendars/{{inputs.calendar_id}}/events
+      body:
+        summary: "{{inputs.fields.Title}}"
+        start:
+          dateTime: "{{inputs.fields.StartTime}}"
+        end:
+          dateTime: "{{inputs.fields.EndTime}}"
+        description: "{{inputs.fields.Description}}"
+        location: "{{inputs.fields.Location}}"
+    outcomes:
+      - action: created
+        extract:
+          event_id:
+            from_api_response: true
+            path: id
+          html_link:
+            from_api_response: true
+            path: htmlLink
+          created:
+            literal: true
+          event:
+            Id:
+              from_api_response: true
+              path: id
+            Title:
+              from_input: fields.Title
+            HtmlLink:
+              from_api_response: true
+              path: htmlLink
+  mcp:
+    requires_auth: mcp_server
+    label: Create the event via the google-calendar create-event MCP tool
+    server: google-calendar
+    tool: create-event
+    inputs_map:
+      title: "{{inputs.fields.Title}}"
+      startTime: "{{inputs.fields.StartTime}}"
+      endTime: "{{inputs.fields.EndTime}}"
+      description: "{{inputs.fields.Description}}"
+      location: "{{inputs.fields.Location}}"
+      attendees: "{{inputs.fields.Attendees}}"
+      calendarId: "{{inputs.calendar_id}}"
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          event_id:
+            from_api_response: ".eventId"
+          html_link:
+            from_api_response: ".htmlLink"
+          created:
+            literal: true
+          event:
+            Id:
+              from_api_response: ".eventId"
+            Title:
+              from_input: fields.Title
+            HtmlLink:
+              from_api_response: ".htmlLink"

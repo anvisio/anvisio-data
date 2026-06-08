@@ -1,7 +1,7 @@
 _meta:
   name: widget-libraries/archetype-templates.yaml
-  version: 1.2.0
-  cdn_schema_version: 60.4.2
+  version: 1.6.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
@@ -51,6 +51,9 @@ _meta:
     tested against the final shape once.
 
   changelog:
+    - "1.6.0 (2026-05-31): typeahead_chip commit step default submit_key Tab → Enter. Tab can NEVER commit a recipient/guest chip via synthetic dispatch: a synthetic Tab event does not trigger the browser's native focus-move (default actions only fire for trusted events), so neither the focus-blur commit nor any keyCode-9 handler runs. Enter is an explicit JS keydown handler on every PeopleKit picker (gmail compose To/Cc/Bcc + reply, calendar Guests, outlook-calendar attendees), so it commits the typed value directly. Live-proven 2026-05-31 in a controlled A/B against real gmail + calendar tabs: Tab (±keyCode) → no chip on either; Enter → chip on both (gmail additionally requires the keyCode fix landed in chrome-step-driver pressKeyInPage the same day). This ALSO makes calendar robust to a stale widget-library cache: a cached event_guests that predates its 0.7.0 `submit_key: Enter` override now falls back to the Enter default instead of the dead Tab. The two consumers that explicitly set submit_key are unaffected (none set Tab); the default only changed."
+    - "1.5.0 (2026-05-30): click_reveals gains optional `expand_selector` override + an `expand_if_collapsed` post-step. After the reveal verifies, a second click fires on the expand selector IFF it matches a visible element (via the click step's new `optional: true` arg — no match resolves to ok+skipped, not error). Used by Gmail's compose_button to handle Gmail restoring compose in minimized state from leftover drafts: the To/Subject/Body inputs are present but zero-dimension, so the next typeahead_chip / text_input fill times out at focus_input. With this override the compose_button widget clicks Maximize after the reveal verify, restoring full-screen compose before any field fills run. Zero impact on widgets that don't set expand_selector."
+    - "1.4.0 (2026-05-30): typeahead_chip recipe appends a `dismiss_popover` (type: blur_focus) step after the commit. The chip already committed (verify proved it) but the suggestion popover lingers because focus stays on the input — user sees a stuck `typed-value + open-dropdown` UI even though the recipe succeeded (live-confirmed 2026-05-30 on Calendar Guests + Gmail compose To). blur_focus is a new primitive that blurs document.activeElement + fires body mousedown/mouseup/click — same pattern fillText's commit_value branch uses to dismiss Calendar's date/time pickers. Pure visual cleanup; can't un-commit anything."
     - "1.2.0 (2026-05-16): adds typeahead_chip archetype — focus + type + press_key + verify selector_appears. Covers email composer recipient pickers (gmail compose To/Cc/Bcc, reply To) where the commit is Tab/Enter and the verify is a chip / next-field appearing instead of value reflection. Identified during gmail.widgets.yaml v3.0.0 conversion (4 widgets share this shape). 12 archetypes total."
     - "1.1.0 (2026-05-16): rename underscore-prefixed file to drop the convention drift (`_archetype-templates.yaml` → `archetype-templates.yaml`). No content change; only file rename + self-name fix in _meta. The underscore signaled `meta vs data` but no other file in widget-libraries/ used the prefix — purely cosmetic inconsistency."
     - "1.0.0 (2026-05-16): initial 10-archetype catalog covering every widget pattern observed in the live-tested salesforce + gmail libraries. text_input, contenteditable_input, picklist_select, typeahead_lookup, click_reveals, click_dismisses, click_navigates, click_toggles, read_text, read_attribute."
@@ -63,6 +66,17 @@ archetypes:
       whose value is reflected on the element's value attribute. Fill
       writes the value via native_set + verifies element_value_equals;
       read pulls the value attribute.
+
+      Overrides:
+      - `verify_timeout_ms` (default 3000) — verify poll budget.
+      - `verify_value_contains` (default "{{value}}") — the substring
+        the post-fill verify checks for in the element's value. For
+        inputs whose framework reformats the value on input (currency
+        spinbuttons that turn "50000" → "$50,000.00", percent fields,
+        masked phone/date inputs), the typed string won't survive the
+        formatter so the default check times out. Set to "" to skip
+        the strict-value check (still asserts the element was found,
+        i.e. the selector matched + the fill_text primitive ran).
     ops:
       fill:
         required_selectors: [fill_target]
@@ -75,7 +89,7 @@ archetypes:
             verify:
               type: element_value_equals
               selector: $selectors.fill_target
-              contains: "{{value}}"
+              contains: $overrides.verify_value_contains ?? "{{value}}"
               timeout_ms: $overrides.verify_timeout_ms ?? 3000
       read:
         required_selectors: [read_target]
@@ -116,6 +130,89 @@ archetypes:
             type: read_text
             args:
               selector: $selectors.read_target
+
+  datetime_split:
+    description: |
+      A datetime rendered as TWO separate inputs — a date field and a time
+      field (Google Calendar's event editor: 'Start date' + 'Start time').
+      Fill takes ONE ISO 8601 datetime ({{value}}) and writes the
+      locale-formatted date into date_target and the time into time_target,
+      committing each with Enter (these combobox/date inputs don't register
+      the typed value on `input` alone). NOTE: in Calendar, setting the start
+      auto-shifts the end to preserve duration, so the schema must list the
+      start datetime field before the end one (fill_fields fills in schema
+      order). read returns date_target's display value only — the browser
+      flavor's datetime read is partial; prefer the session_api/gapi read.
+    ops:
+      fill:
+        required_selectors: [date_target, time_target]
+        recipe:
+          - id: fill_date
+            type: fill_text
+            args:
+              selector: $selectors.date_target
+              value: "{{value}}"
+              value_format: locale_date
+              commit_value: true
+          - id: fill_time
+            type: fill_text
+            args:
+              selector: $selectors.time_target
+              value: "{{value}}"
+              value_format: locale_time
+              commit_value: true
+      read:
+        required_selectors: [date_target]
+        recipe:
+          - id: read_date
+            type: read_attribute
+            args:
+              selector: $selectors.date_target
+              attribute: value
+
+  recurrence_picker:
+    description: |
+      A recurrence rule rendered as a Recurrence combobox + its "Custom
+      recurrence" dialog (Google Calendar's event editor). fill takes ONE
+      RFC 5545 RRULE string ({{value}}, e.g.
+      "RRULE:FREQ=WEEKLY;BYDAY=TU,TH;COUNT=6") and drives the dialog via the
+      set_recurrence primitive — the recipe DSL can't parse an RRULE or loop
+      the weekday toggles, so the parsing + DOM reconciliation live in the
+      runtime. An empty / non-recurring value is a no-op, so an optional
+      Recurrence schema field can flow through fill_fields unconditionally.
+      No read op — recurrence is read via the session_api (gapi) flavor, not
+      the DOM. weekday_button is a TEMPLATE selector containing {day}, which
+      set_recurrence expands per weekday name (Monday..Sunday).
+    ops:
+      fill:
+        required_selectors:
+          - recurrence_combobox
+          - custom_option
+          - frequency_combobox
+          - interval_input
+          - weekday_button
+          - end_never_radio
+          - end_on_radio
+          - end_on_date_input
+          - end_after_radio
+          - end_after_count_input
+          - done_button
+        recipe:
+          - id: set_recurrence
+            type: set_recurrence
+            args:
+              rrule: "{{value}}"
+              recurrence_combobox: $selectors.recurrence_combobox
+              custom_option: $selectors.custom_option
+              frequency_combobox: $selectors.frequency_combobox
+              interval_input: $selectors.interval_input
+              weekday_button: $selectors.weekday_button
+              end_never_radio: $selectors.end_never_radio
+              end_on_radio: $selectors.end_on_radio
+              end_on_date_input: $selectors.end_on_date_input
+              end_after_radio: $selectors.end_after_radio
+              end_after_count_input: $selectors.end_after_count_input
+              done_button: $selectors.done_button
 
   picklist_select:
     description: |
@@ -172,14 +269,20 @@ archetypes:
   typeahead_chip:
     description: |
       Recipient picker — click trigger to focus or reveal the input,
-      type query, press a commit key (default Tab), verify a result
+      type query, press a commit key (default Enter), verify a result
       chip / next-field appears. Common in email composers (To / Cc /
       Bcc inputs in gmail compose + reply; "Add attendee" pickers in
       calendar event editors).
 
       Distinct from typeahead_lookup: this commits via keystroke
-      (Tab/Enter) AND verifies by selector_appears (a chip or the
-      next focused field) instead of click-result + value reflection.
+      (Enter) AND verifies by selector_appears (a chip or the next
+      focused field) instead of click-result + value reflection.
+
+      submit_key defaults to Enter (NOT Tab): a synthetic Tab event
+      can't trigger the browser's native focus-move, so it never
+      commits a chip; Enter is an explicit JS handler on every
+      PeopleKit picker. Override only if a specific picker commits on
+      a different key.
     ops:
       fill:
         required_selectors: [trigger, input, verify_target]
@@ -197,11 +300,22 @@ archetypes:
           - id: commit
             type: press_key
             args:
-              key: $overrides.submit_key ?? "Tab"
+              key: $overrides.submit_key ?? "Enter"
             verify:
               type: selector_appears
               selector: $selectors.verify_target
               timeout_ms: $overrides.verify_timeout_ms ?? 4000
+          # Dismiss the suggestion popover so the user doesn't see a
+          # "stuck" typed-value + open-dropdown UI even though the chip
+          # committed. Calendar Guests + Gmail compose To/Cc/Bcc both
+          # keep the autocomplete overlay mounted after the commit key
+          # because focus stays on the input. blur_focus blurs the
+          # active element + fires a body-click sequence; the chip is
+          # already in the DOM (verify above proved it) so this can't
+          # un-commit anything — pure visual cleanup. Wired 2026-05-30
+          # from the sales_call_notes UX pass.
+          - id: dismiss_popover
+            type: blur_focus
 
   typeahead_search:
     description: |
@@ -239,7 +353,21 @@ archetypes:
       Click the trigger; verify a target element APPEARS. Modal opens,
       menu reveals, dialog appears, edit-page loads (SaveEdit button
       appears), Compose dialog appears. The most common interactive
-      affordance.
+      affordance. Optional `trigger_text` override disambiguates the click
+      by visible text (must_contain_text) — needed when the trigger has no
+      stable attribute, only a text label (e.g. Google Calendar's Create /
+      More options buttons, which carry no aria-label). Empty default = no
+      text filter (backward-compatible with every existing widget).
+
+      Optional `expand_selector` override: after the reveal verifies, a
+      second click fires on this selector IFF it matches a visible element
+      (the click step's `optional: true` arg lets it no-op cleanly when
+      already-expanded means the affordance is absent). Used by Gmail's
+      compose_button to click Maximize when Gmail opens compose in
+      minimized state (inherited from leftover drafts) — without it the
+      To/Subject/Body inputs render with zero dimensions and the next
+      typeahead_chip / text_input fill times out at focus_input.
+      Wired 2026-05-30.
     ops:
       invoke:
         required_selectors: [trigger, verify_target]
@@ -248,10 +376,21 @@ archetypes:
             type: click
             args:
               selector: $selectors.trigger
+              must_contain_text: $overrides.trigger_text ?? ""
             verify:
               type: selector_appears
               selector: $selectors.verify_target
               timeout_ms: $overrides.verify_timeout_ms ?? 8000
+          # Conditional expand — only emits a meaningful selector when
+          # the widget set $overrides.expand_selector. When unset the
+          # selector resolves to "" → optional click no-ops; when set
+          # but no element matches (already expanded) → optional click
+          # no-ops. Either way, zero impact on widgets that don't opt in.
+          - id: expand_if_collapsed
+            type: click
+            args:
+              selector: $overrides.expand_selector ?? ""
+              optional: true
 
   click_dismisses:
     description: |

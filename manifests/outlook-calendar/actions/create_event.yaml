@@ -1,48 +1,181 @@
 _meta:
   name: manifests/outlook-calendar/actions/create_event.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Open the New event editor + fill title (caller closes). v0 ships
-    only the editor-open + fill path; actual Save (which sends invites
-    / creates the event) deferred to a separate dom_submit flavor.
+    create_event atom: create a calendar event. Browser flavor fills the FULL
+    event editor (New event -> More options) and clicks Save; oauth_api + mcp
+    create it directly via Graph. commits_changes:true (browser > oauth_api >
+    mcp per spec 70 §7 — the user watches the event appear in their calendar).
 
-description: Open the New event editor, type a title.
+    Adapted from google-calendar's create_event (same paradigm, same
+    datetime_split aria-labels — live-confirmed 2026-06-01). OWA-specific:
+    (1) the discrete date/time inputs are revealed by clicking the datetime
+    summary (the reveal_datetime recipe step); (2) the abandon signal is a
+    POSITIVE "Discard event" dialog (stronger than gcal's editor-close).
+
+    HARDEN ITEMS (flagged, Phase 4 — all-in-on-datetime live pass): the
+    reveal_datetime summary-button selector + the event_save aria-label are
+    best-effort (no clean attribute probed yet); the `created` commit signal
+    is editor-close + abandon_signal (no OWA save-toaster confirmed — confirm
+    or switch to an event-appears-on-grid positive rung during harden).
+  changelog:
+    - "1.0.0 (2026-06-01): net-new (replaces the commits_changes:false editor-open stub). datetime_split fill (proven), spec-72 abandon_signal on the 'discard this event' dialog (proven), + oauth_api/mcp Graph flavors (create-calendar-event returns 201+id+webLink, so they populate event_id/html_link; browser stubs them null)."
+
 object: Event
-commits_changes: false
-depends_on_view: Calendar
+object_types: [Event]
+commits_changes: true
+depends_on_view: EventEditor
+mcp_tool: outlook-calendar.create_event
 inputs:
-  title:
-    type: text
+  fields:
+    type: object
     required: true
-    sample: Anvisio test event
+    description: |
+      Subset of Event fields. Required: Title, StartTime, EndTime (ISO 8601).
+      Optional: Location, Attendees, Description.
+  calendar_id:
+    type: text
+    description: Target calendar id (oauth/mcp). Defaults to the primary calendar.
 result:
-  ready_to_create: boolean
+  created: boolean
+  event_id: text
+  html_link: text
+  event:
+    schema: Event
+    nullable: true
 flavors:
-  dom:
+  browser:
     requires_auth: session_cookie
-    label: Open editor, type title, verify editor surfaced.
+    label: Fill the event editor; click Save when commit:true
+    # Spec 72 abandon detection: closing a FILLED editor pops a "Discard event
+    # — discard this event?" dialog (live-confirmed 2026-06-01) and keeps the
+    # editor open until OK, so the commit signal fires only on a real Save.
+    # grace_ms:0 — the commit signal IS the editor-close (nothing lands after).
+    abandon_signal:
+      type: selector_appears
+      selector: "[role='dialog']"
+      must_contain_text: "discard this event"
+      grace_ms: 0
     recipe:
-      - id: open_editor
-        type: use_widget
+      # Reveal the discrete date/time inputs (collapsed behind the datetime
+      # summary). HARDENED 2026-06-01: the summary is the lone
+      # div[role='button'][aria-expanded] in Form_Content (unique, live-probed);
+      # clicking it flips aria-expanded -> true and exposes Start date/time.
+      - id: reveal_datetime
+        type: click
         args:
-          widget: outlook-calendar.new_event_button
-          op: invoke
-      - id: fill_title
-        type: use_widget
+          selector: "[data-app-section='Form_Content'] div[role='button'][aria-expanded='false']"
+          optional: true
+      - id: fill
+        type: fill_fields
         args:
-          widget: outlook-calendar.event_title
-          op: fill
-          inputs:
-            value: "{{inputs.title}}"
+          object: Event
+          from: "{{inputs.fields}}"
+      # HARDENED 2026-06-01: Save is a text-only <button> (NO aria-label/title;
+      # innerText is an icon glyph + "Save"), so it's driven by must_contain_text,
+      # not a selector. (The skeleton's button[aria-label*='Save'] was dead.)
+      - id: save
+        type: click
+        commit: true
+        args:
+          selector: "[role='dialog'] button"
+          must_contain_text: "Save"
     outcomes:
       - action: ready_to_create
         signal:
-          type: selector_appears
+          type: element_value_equals
           selector: input[placeholder='Add title']
-          timeout_ms: 6000
+          value: "{{inputs.fields.Title}}"
+      - action: created
+        # HARDENED 2026-06-01 (live, proven end-to-end): commit = the new event
+        # APPEARS on the grid (the positive Rule-A delta — a discard never creates
+        # it), corroborated by the editor closing. Drove fill+Save → event on grid
+        # (eventOnGrid:true) + editor closed. No per-rung timeout_ms (inherits the
+        # caller budget — ~30s auto / HITL window); the abandon_signal above catches
+        # the "discard this event" dialog so a discard reports NOT committed.
+        signal:
+          all:
+            - type: selector_appears
+              selector: "[data-app-section='calendar-view-0'] div[role='button'][aria-label*='{{inputs.fields.Title}}']"
+            - type: selector_disappears
+              selector: input[placeholder='Add title']
         extract:
-          ready_to_create:
+          created:
             literal: true
+          # Browser can't read the created id off the grid; oauth/mcp do (201+body).
+          event_id:
+            literal: null
+          html_link:
+            literal: null
+          event:
+            literal: null
+  oauth_api:
+    requires_auth: oauth_token
+    label: Create the event via Microsoft Graph (POST /me/events)
+    request:
+      provider: microsoft
+      method: POST
+      url: https://graph.microsoft.com/v1.0/me/events
+      body:
+        subject: "{{inputs.fields.Title}}"
+        start:
+          dateTime: "{{inputs.fields.StartTime}}"
+          timeZone: "UTC"
+        end:
+          dateTime: "{{inputs.fields.EndTime}}"
+          timeZone: "UTC"
+        location:
+          displayName: "{{inputs.fields.Location}}"
+    outcomes:
+      - action: created
+        # VERIFIED: POST /me/events → 201 Created WITH the Event body (id, webLink).
+        extract:
+          created:
+            literal: true
+          event_id:
+            from_api_response: true
+            path: id
+          html_link:
+            from_api_response: true
+            path: webLink
+          event:
+            Id:
+              from_api_response: true
+              path: id
+            Title:
+              from_input: fields.Title
+            WebLink:
+              from_api_response: true
+              path: webLink
+  mcp:
+    requires_auth: mcp_server
+    label: Create the event via the create-calendar-event MCP tool
+    server: ms-365
+    tool: create-calendar-event
+    inputs_map:
+      subject: "{{inputs.fields.Title}}"
+      start: "{{inputs.fields.StartTime}}"
+      end: "{{inputs.fields.EndTime}}"
+      location: "{{inputs.fields.Location}}"
+      attendees: "{{inputs.fields.Attendees}}"
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          created:
+            literal: true
+          event_id:
+            from_api_response: ".id"
+          html_link:
+            from_api_response: ".webLink"
+          event:
+            Id:
+              from_api_response: ".id"
+            Title:
+              from_input: fields.Title

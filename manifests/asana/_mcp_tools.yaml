@@ -1,0 +1,212 @@
+_meta:
+  name: manifests/asana/_mcp_tools.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana MCP tool catalog. The official Asana MCP V2 server is at
+    https://mcp.asana.com/v2/mcp. (The older /sse beta endpoint is
+    deprecated and shuts down 2026-05-11.)
+
+    30+ tools across project tracking, status updates, task
+    creation, comments. This catalog covers the ~12 daily-driver
+    tools the Anvisio atom actions reference; the full tool surface
+    is enumerated by `tools/list` at the MCP endpoint.
+
+    Auth: OAuth 2.1 / PKCE. Tool execution is gated by the user's
+    workspace + project permissions.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. 12 core tools: tasks +
+       projects + sections + users + workspaces."
+
+server:
+  name: asana-mcp
+  source_url: https://developers.asana.com/docs/mcp-server
+  remote_url: https://mcp.asana.com/v2/mcp
+  transport: http
+  auth: oauth2_pkce
+  fetched_at: 2026-05-23T00:00:00Z
+
+tools:
+
+  # ── Tasks (the bread-and-butter) ───────────────────────────────────
+  - name: search_tasks
+    description: Search tasks across the user's workspaces using Asana's typeahead + filter syntax.
+    input_schema:
+      type: object
+      required: [workspace, query]
+      properties:
+        workspace:    { type: string, description: Workspace gid }
+        query:        { type: string, description: Free-text plus filters (assignee, project, completed, due_before, etc.) }
+        resource_type: { type: string, enum: [task] }
+        limit:        { type: integer, maximum: 100, default: 50 }
+    output_schema:
+      type: object
+      properties:
+        data: { type: array, items: { type: object } }
+
+  - name: get_task
+    description: Fetch a single task with custom fields, assignee, projects, and parent / subtasks.
+    input_schema:
+      type: object
+      required: [task_gid]
+      properties:
+        task_gid:    { type: string }
+        opt_fields:  { type: string, description: Comma-list of fields to include in the response }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object }
+
+  - name: list_tasks_in_project
+    description: List tasks in a project, optionally filtered by section / completed flag.
+    input_schema:
+      type: object
+      required: [project_gid]
+      properties:
+        project_gid:        { type: string }
+        section_gid:        { type: string }
+        completed_since:    { type: string, description: ISO8601 cutoff }
+        opt_fields:         { type: string }
+        limit:              { type: integer, maximum: 100, default: 50 }
+        offset:             { type: string, description: cursor from previous response }
+    output_schema:
+      type: object
+      properties:
+        data:      { type: array, items: { type: object } }
+        next_page: { type: object, properties: { offset: { type: string }, uri: { type: string } } }
+
+  - name: create_task
+    description: Create a new task in one or more projects.
+    input_schema:
+      type: object
+      required: [name]
+      properties:
+        name:           { type: string }
+        notes:          { type: string }
+        html_notes:     { type: string }
+        assignee:       { type: string, description: User gid or "me" }
+        due_on:         { type: string, description: "YYYY-MM-DD" }
+        due_at:         { type: string, description: ISO8601 datetime }
+        projects:       { type: array, items: { type: string }, description: Project gids; first one is the "primary" project }
+        workspace:      { type: string, description: Workspace gid (required when projects is empty) }
+        parent:         { type: string, description: Parent task gid for creating a subtask }
+        custom_fields:  { type: object, description: "{ custom_field_gid: value }" }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object, properties: { gid: { type: string }, permalink_url: { type: string } } }
+
+  - name: update_task
+    description: Update a task (rename, complete, change assignee, update custom fields).
+    input_schema:
+      type: object
+      required: [task_gid]
+      properties:
+        task_gid:       { type: string }
+        name:           { type: string }
+        notes:          { type: string }
+        html_notes:     { type: string }
+        assignee:       { type: string, description: User gid or "me" or null to unassign }
+        completed:      { type: boolean }
+        due_on:         { type: string }
+        due_at:         { type: string }
+        custom_fields:  { type: object }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object }
+
+  - name: delete_task
+    description: Move a task to trash (recoverable for 30 days).
+    input_schema:
+      type: object
+      required: [task_gid]
+      properties:
+        task_gid: { type: string }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object, description: empty on success }
+
+  - name: add_task_comment
+    description: Add a story (comment) to a task.
+    input_schema:
+      type: object
+      required: [task_gid, text]
+      properties:
+        task_gid:  { type: string }
+        text:      { type: string }
+        html_text: { type: string, description: HTML-formatted comment }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object, properties: { gid: { type: string } } }
+
+  - name: move_task_to_section
+    description: Move a task to a specific section within a project (or change its position).
+    input_schema:
+      type: object
+      required: [section_gid, task_gid]
+      properties:
+        section_gid: { type: string }
+        task_gid:    { type: string }
+        insert_before: { type: string, description: Sibling task gid to insert before }
+        insert_after:  { type: string }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object }
+
+  # ── Projects ────────────────────────────────────────────────────────
+  - name: list_projects
+    description: List projects in a workspace, optionally filtered to a team.
+    input_schema:
+      type: object
+      required: [workspace]
+      properties:
+        workspace: { type: string }
+        team:      { type: string }
+        archived:  { type: boolean, default: false }
+        limit:     { type: integer, maximum: 100, default: 50 }
+        offset:    { type: string }
+    output_schema:
+      type: object
+      properties:
+        data:      { type: array, items: { type: object } }
+        next_page: { type: object }
+
+  - name: get_project
+    description: Fetch a project's metadata (name, owner, color, default view, custom-field settings).
+    input_schema:
+      type: object
+      required: [project_gid]
+      properties:
+        project_gid: { type: string }
+        opt_fields:  { type: string }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object }
+
+  - name: list_sections
+    description: List the sections in a project (the board columns / list groupings).
+    input_schema:
+      type: object
+      required: [project_gid]
+      properties:
+        project_gid: { type: string }
+    output_schema:
+      type: object
+      properties:
+        data: { type: array, items: { type: object, properties: { gid: { type: string }, name: { type: string } } } }
+
+  # ── User / workspace context ───────────────────────────────────────
+  - name: get_me
+    description: Authenticated user's profile + workspaces.
+    input_schema: { type: object }
+    output_schema:
+      type: object
+      properties:
+        data: { type: object, properties: { gid: { type: string }, name: { type: string }, email: { type: string }, workspaces: { type: array } } }

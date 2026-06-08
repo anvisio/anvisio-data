@@ -1,21 +1,32 @@
 _meta:
   name: manifests/outlook-calendar/views/Calendar.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Calendar grid view (default week). URL pattern covers week/day/month/workweek. Anchor for the 'New event' affordance.
+    Calendar grid view (default week) at outlook.live.com/calendar/view/*.
+    Anchor for the 'New event' affordance (Home ribbon) and the event grid.
+    NOTE: events render on the grid as div[role='button'] blocks positioned by
+    time, sharing markup with empty time-slots — a browser read (list_events)
+    must filter carefully (see list_events; the oauth_api/Graph read is cleaner).
+  changelog:
+    - "1.0.0 (2026-06-01): net-new for v70 (replaces the 60.4.2 skeleton). url_patterns single-escaped; grid identifying selector retained."
 
 name: Calendar
-description: Calendar grid view (default week).
+description: Calendar grid view (default week) — hosts the 'New event' button
+  and the event grid.
 entry:
   url: https://outlook.live.com/calendar/view/week
+verify:
+  - type: selector_appears
+    selector: button[aria-label='New event']
+    timeout_ms: 10000
 url_patterns:
-  - https://outlook\\.live\\.com/calendar/view/(week|day|month|workweek)
-  - https://outlook\\.live\\.com/calendar/
+  - https://outlook\.live\.com/calendar/view/(week|day|month|workweek)
+  - https://outlook\.live\.com/calendar/?$
 identifying_selectors:
   - button[aria-label='New event']
-  - "[role='grid']"
+  - "[data-app-section='calendar-view-0']"
 widgets:
   - outlook-calendar.new_event_button

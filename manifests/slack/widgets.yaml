@@ -1,0 +1,97 @@
+_meta:
+  name: manifests/slack/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Slack widget primitives. Coverage focused on the global affordances
+    (search, channel switch) + composer (the only "write" affordance in
+    Slack's UI). Slack is a communication tool, not a CRUD tool: there
+    are no inline-edit field widgets to author.
+
+    Source: dom-selectors-slack.md inspection notes + the role/aria
+    structure of the current Slack web SPA.
+
+  archetypes_used: [text_input, contenteditable_input, click_navigates, click_reveals]
+
+widgets:
+
+  # ─── Global affordances ────────────────────────────────────────────
+  slack.global_search:
+    archetype: text_input
+    selectors:
+      target:
+        - "input[aria-label='Search']"
+        - "[data-qa='top_nav_search'] input"
+      verify_target: "[role='dialog'][aria-label*='Search'], [data-qa='search-modal']"
+    overrides:
+      submit_key: Enter
+      verify_timeout_ms: 4000
+
+  slack.quick_switcher:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[aria-label*='Switch channels'], button[aria-label*='quick switcher']"
+        - "[data-qa='channel_switcher']"
+      verify_target: "[role='dialog'][aria-label*='switcher'], input[placeholder*='channel']"
+
+  # ─── Sidebar navigation ────────────────────────────────────────────
+  slack.channel_sidebar_item:
+    archetype: click_navigates
+    selectors:
+      trigger:
+        - "[role='treeitem'][aria-label*='channel']"
+        - "[data-qa='channel_sidebar_name_button']"
+      verify_target_url_contains: "/client/"
+    overrides:
+      verify_timeout_ms: 6000
+
+  slack.dm_sidebar_item:
+    archetype: click_navigates
+    selectors:
+      trigger:
+        - "[role='treeitem'][aria-label*='direct message']"
+        - "[data-qa^='channel_sidebar_im']"
+      verify_target_url_contains: "/client/"
+
+  # ─── Channel composer (the one "write" affordance) ─────────────────
+  slack.channel_composer:
+    archetype: contenteditable_input
+    selectors:
+      target:
+        - "[role='textbox'][aria-label*='Message']"
+        - "[data-qa='message_input'] [contenteditable='true']"
+      verify_target: "[role='textbox'][aria-label*='Message']"
+    overrides:
+      verify_timeout_ms: 3000
+
+  slack.send_message_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[data-qa='texty_send_button']"
+        - "button[aria-label='Send now']"
+      verify_target: "[data-qa='message_pane'] [role='document'][aria-roledescription='message']"
+    overrides:
+      verify_timeout_ms: 6000
+
+  # ─── Thread open (right panel) ─────────────────────────────────────
+  slack.open_thread_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[data-qa='message_thread_button']"
+        - "button[aria-label='Reply in thread']"
+      verify_target: "[data-qa='threads_view'], [aria-label='Thread']"
+    overrides:
+      verify_timeout_ms: 4000
+
+  slack.thread_composer:
+    archetype: contenteditable_input
+    selectors:
+      target:
+        - "[data-qa='threads_view'] [role='textbox']"
+        - "[aria-label='Thread'] [contenteditable='true']"
+      verify_target: "[data-qa='threads_view'] [role='textbox']"

@@ -1,0 +1,117 @@
+_meta:
+  name: manifests/google-calendar/actions/list_calendars.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-28
+  description: |
+    list_calendars atom: return the calendars on the user's calendar
+    list. The session_api flavor calls gapi.client.calendar.calendarList.list
+    from the calendar tab's MAIN world (session-based, no OAuth); the
+    browser flavor confirms the calendar-list sidebar rendered (calendars
+    null); the oauth_api + mcp flavors return structured calendar data.
+    Reads prefer session_api > oauth_api > mcp > browser per spec 70 §7.
+    Used to resolve a calendar_id before create_event / list_events.
+  changelog:
+    - "0.3.0 (2026-05-28): add session_api flavor (gapi calendarList.list). Live-verified on cd2k's account (200, 2 calendars). The no-OAuth read path — googleapis.com (oauth_api) 403s on a session cookie."
+    - "0.2.0 (2026-05-24): add schema-typed result.calendars list<Calendar> per v70 signature parity rule. oauth_api populates from .items; mcp from .calendars; browser is nullable (sidebar DOM not structurally surfaced)."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.list-calendars."
+
+description: >
+  List the calendars on the user's calendar list — their primary calendar,
+  secondary calendars, and subscribed calendars (id, summary, access role,
+  time zone). The browser flavor confirms the sidebar list rendered; the
+  oauth_api and mcp flavors return the calendars as structured data.
+object: Calendar
+commits_changes: false
+depends_on_view: CalendarGrid
+mcp_tool: google-calendar.list-calendars
+inputs: {}
+result:
+  listed: boolean
+  calendars:
+    schema: Calendar
+    cardinality: list
+    nullable: true
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Confirm the calendar-list sidebar rendered
+    recipe:
+      - id: goto_grid
+        type: navigate
+        args:
+          url: https://calendar.google.com/calendar/u/0/r/week
+      - id: wait_sidebar
+        type: wait_for_element
+        args:
+          selector:
+            - "[aria-label='My calendars']"
+            - "[role='list'][aria-label*='calendars' i]"
+          timeout_ms: 10000
+    outcomes:
+      - action: listed
+        signal:
+          type: selector_appears
+          selector: "[aria-label='My calendars'], [role='list'][aria-label*='calendars' i]"
+        extract:
+          listed:
+            literal: true
+          calendars:
+            literal: null
+  session_api:
+    requires_auth: session_cookie
+    label: List calendars via gapi.client.calendar.calendarList.list (MAIN-world session)
+    recipe:
+      - id: gapi_list_cals
+        type: call_platform_api
+        args:
+          api_def:
+            kind: gapi
+            library: calendar
+            version: v3
+            method_path: calendarList.list
+            extract_path: result.items
+          args: {}
+    outcomes:
+      - action: listed
+        signal:
+          type: url_matches
+          pattern: "calendar\\.google\\.com"
+          timeout_ms: 10000
+        extract:
+          calendars:
+            from_step: gapi_list_cals
+          listed:
+            literal: true
+  oauth_api:
+    requires_auth: oauth_token
+    label: List calendars via the Calendar API (calendarList.list)
+    request:
+      provider: google
+      method: GET
+      url: https://www.googleapis.com/calendar/v3/users/me/calendarList
+    outcomes:
+      - action: listed
+        extract:
+          calendars:
+            from_api_response: true
+            path: items
+          listed:
+            literal: true
+  mcp:
+    requires_auth: mcp_server
+    label: List calendars via the google-calendar list-calendars MCP tool
+    server: google-calendar
+    tool: list-calendars
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          calendars:
+            from_api_response: ".calendars"
+          listed:
+            literal: true

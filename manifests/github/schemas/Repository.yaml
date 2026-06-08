@@ -1,0 +1,121 @@
+_meta:
+  name: manifests/github/schemas/Repository.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    GitHub Repository property schema (REST shape from
+    /repos/{owner}/{repo}).
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[full_name] per v70 INTEGRATION_FORMAT signature parity rule. full_name (owner/name) is the canonical globally-unique repo identifier."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Repository
+object_type_id: repository
+mcp_object_type: repository
+primary_key: [full_name]
+
+properties:
+  name:
+    label: Name
+    type: string
+    field_type: text
+    required: true
+  full_name:
+    label: Full Name
+    type: string
+    field_type: text
+    description: "{owner}/{name}"
+    sample: anvisio-dev/sample-project
+  owner:
+    label: Owner
+    type: object
+    field_type: select
+    description: "{ login, id, type=User|Organization, html_url }"
+  description:
+    label: Description
+    type: string
+    field_type: textarea
+  private:
+    label: Private
+    type: bool
+    field_type: booleancheckbox
+  fork:
+    label: Fork
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  default_branch:
+    label: Default Branch
+    type: string
+    field_type: text
+    description: Usually 'main'.
+  language:
+    label: Primary Language
+    type: string
+    field_type: text
+    read_only: true
+  stargazers_count:
+    label: Stars
+    type: number
+    field_type: number
+    read_only: true
+  watchers_count:
+    label: Watchers
+    type: number
+    field_type: number
+    read_only: true
+  forks_count:
+    label: Forks
+    type: number
+    field_type: number
+    read_only: true
+  open_issues_count:
+    label: Open Issue Count
+    type: number
+    field_type: number
+    read_only: true
+    description: Includes PRs (PRs are issues at the REST layer).
+  topics:
+    label: Topics
+    type: array
+    field_type: select
+  archived:
+    label: Archived
+    type: bool
+    field_type: booleancheckbox
+  visibility:
+    label: Visibility
+    type: enumeration
+    field_type: select
+    options:
+      - { value: public,   label: Public }
+      - { value: private,  label: Private }
+      - { value: internal, label: Internal (Enterprise only) }
+  created_at:
+    label: Created At
+    type: datetime
+    field_type: date
+    read_only: true
+  updated_at:
+    label: Updated At
+    type: datetime
+    field_type: date
+    read_only: true
+  pushed_at:
+    label: Last Push
+    type: datetime
+    field_type: date
+    read_only: true
+  html_url:
+    label: URL
+    type: string
+    field_type: text
+    read_only: true
+
+associations:
+  - { name: issues,         object_type_id: issue }
+  - { name: pull_requests,  object_type_id: pull_request }
+  - { name: branches,       object_type_id: branch }
+  - { name: workflows,      object_type_id: workflow }

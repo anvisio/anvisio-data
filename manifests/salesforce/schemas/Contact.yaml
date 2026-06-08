@@ -1,0 +1,99 @@
+_meta:
+  name: manifests/salesforce/schemas/Contact.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-24
+  description: |
+    Contact schema: standard SF Contact fields trimmed from the live
+    org's RecordUiController.getObjectInfo describe (2026-05-24). Used
+    by create_record / update_record when object_type=Contact.
+  changelog:
+    - "0.1.0 (2026-05-24): initial schema authored from live SF describe (orgfarm dev edition). Trimmed to ~15 user-facing fields out of the 68 standard fields. Mailing-address pair kept; Other-address pair dropped."
+
+description: |
+  A Salesforce Contact. Key prefix 003.
+  Required: LastName.
+  Person record, typically linked to an Account. Live-probed.
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    label: Contact ID
+    primary: true
+    readonly: true
+  LastName:
+    type: text
+    label: Last Name
+    required: true
+  FirstName:
+    type: text
+    label: First Name
+    optional: true
+  Salutation:
+    type: picklist
+    label: Salutation
+    optional: true
+  AccountId:
+    type: id
+    label: Account ID
+    optional: true
+    ref: Account.Id
+  Email:
+    type: text
+    label: Email
+    optional: true
+  Phone:
+    type: text
+    label: Business Phone
+    optional: true
+  MobilePhone:
+    type: text
+    label: Mobile Phone
+    optional: true
+  Title:
+    type: text
+    label: Title
+    optional: true
+  Department:
+    type: text
+    label: Department
+    optional: true
+  LeadSource:
+    type: picklist
+    label: Lead Source
+    optional: true
+  ReportsToId:
+    type: id
+    label: Reports To
+    optional: true
+    ref: Contact.Id
+  MailingStreet:
+    type: textarea
+    label: Mailing Street
+    optional: true
+  MailingCity:
+    type: text
+    label: Mailing City
+    optional: true
+  MailingState:
+    type: text
+    label: Mailing State/Province
+    optional: true
+  MailingPostalCode:
+    type: text
+    label: Mailing Zip/Postal Code
+    optional: true
+  MailingCountry:
+    type: text
+    label: Mailing Country
+    optional: true
+  Description:
+    type: textarea
+    label: Description
+    optional: true
+  OwnerId:
+    type: id
+    label: Owner ID
+    optional: true
+    ref: User.Id

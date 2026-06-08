@@ -1,0 +1,46 @@
+_meta:
+  name: manifests/hubspot/views/BoardView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Kanban board view (/contacts/{portalId}/objects/{objectTypeId}/views/{viewId}/board).
+    Deals-only by default but available for any object type with a
+    pipeline. Each column = a pipeline stage (see
+    apis.yaml/pipelines_get). Cards link to RecordView via
+    hubspot.record_card_link.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. Verified live 2026-05-23
+       against portal 245597800 default deals pipeline (7 stages:
+       Appointment Scheduled / Qualified To Buy / Presentation
+       Scheduled / Decision Maker Bought-In / Contract Sent /
+       Closed Won / Closed Lost)."
+
+name: BoardView
+
+entry:
+  url: "{instance.origin}/contacts/{portal_id}/objects/{object_type_id}/views/{view_id}/board"
+landmark_probe:
+  selector: "[data-test-id='board-column'], [data-test-id='deal-card']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/objects/[0-9]+-[0-9]+/views/[A-Za-z0-9_-]+/board"
+  - type: selector_appears
+    selector: "[data-test-id='board-column']"
+    timeout_ms: 12000
+placeholders:
+  portal_id:
+    type: text
+    sample: "245597800"
+  object_type_id:
+    type: text
+    sample: "0-3"
+  view_id:
+    type: text
+    sample: "all"
+widgets:
+  - hubspot.list_search_input
+  - hubspot.board_add_deal_button
+  - hubspot.record_card_link

@@ -1,0 +1,142 @@
+_meta:
+  name: manifests/hubspot/schemas/Contact.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot Contact (objectTypeId 0-1) curated property schema. The
+    daily-driver subset for write flows (notes / triage / dedupe) +
+    common read fields. Lifecycle Stage option set is the
+    HubSpot-default; per-portal customizations enumerated by
+    apis.yaml/properties_groups.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[hs_object_id] per v70 INTEGRATION_FORMAT signature parity rule. hs_object_id is the canonical HubSpot identifier (the REST top-level `id` maps to it)."
+    - "0.1.0 (2026-05-23): initial seed from dom-selectors-hubspot.md
+       (2026-03-21) + the HubSpot Contact properties doc."
+
+name: Contact
+object_type_id: "0-1"
+mcp_object_type: contacts
+primary_key: [hs_object_id]
+
+properties:
+
+  # ── Identity ───────────────────────────────────────────────────────
+  firstname:
+    label: First Name
+    type: string
+    field_type: text
+    sample: Brian
+  lastname:
+    label: Last Name
+    type: string
+    field_type: text
+    sample: Halligan
+  email:
+    label: Email
+    type: string
+    field_type: text
+    description: Primary email; HubSpot enforces uniqueness per portal.
+    sample: bh@hubspot.com
+  phone:
+    label: Phone Number
+    type: string
+    field_type: text
+    sample: "+1 617 555 0100"
+  mobilephone:
+    label: Mobile Phone Number
+    type: string
+    field_type: text
+  jobtitle:
+    label: Job Title
+    type: string
+    field_type: text
+
+  # ── Address ────────────────────────────────────────────────────────
+  company:
+    label: Company Name
+    type: string
+    field_type: text
+    description: Free-text company label; for the association use the Companies link.
+  address:
+    label: Street Address
+    type: string
+    field_type: textarea
+  city:
+    label: City
+    type: string
+    field_type: text
+  state:
+    label: State/Region
+    type: string
+    field_type: text
+  zip:
+    label: Postal Code
+    type: string
+    field_type: text
+  country:
+    label: Country/Region
+    type: string
+    field_type: text
+
+  # ── Lifecycle / lead state ─────────────────────────────────────────
+  lifecyclestage:
+    label: Lifecycle Stage
+    type: enumeration
+    field_type: radio
+    options:
+      - { value: subscriber,            label: Subscriber }
+      - { value: lead,                  label: Lead }
+      - { value: marketingqualifiedlead, label: Marketing Qualified Lead }
+      - { value: salesqualifiedlead,    label: Sales Qualified Lead }
+      - { value: opportunity,           label: Opportunity }
+      - { value: customer,              label: Customer }
+      - { value: evangelist,            label: Evangelist }
+      - { value: other,                 label: Other }
+  hs_lead_status:
+    label: Lead Status
+    type: enumeration
+    field_type: select
+    options:
+      - { value: NEW,             label: New }
+      - { value: OPEN,            label: Open }
+      - { value: IN_PROGRESS,     label: In Progress }
+      - { value: OPEN_DEAL,       label: Open Deal }
+      - { value: UNQUALIFIED,     label: Unqualified }
+      - { value: ATTEMPTED_TO_CONTACT, label: Attempted to Contact }
+      - { value: CONNECTED,       label: Connected }
+      - { value: BAD_TIMING,      label: Bad Timing }
+
+  # ── Ownership ──────────────────────────────────────────────────────
+  hubspot_owner_id:
+    label: Contact Owner
+    type: string
+    field_type: select
+
+  # ── Computed / read-only ────────────────────────────────────────────
+  hs_object_id:
+    label: Contact ID
+    type: number
+    field_type: number
+    read_only: true
+  createdate:
+    label: Create Date
+    type: datetime
+    field_type: date
+    read_only: true
+  lastmodifieddate:
+    label: Last Modified Date
+    type: datetime
+    field_type: date
+    read_only: true
+  hs_lastcontacted:
+    label: Last Contacted
+    type: datetime
+    field_type: date
+    read_only: true
+
+associations:
+  - { name: companies, object_type_id: "0-2" }
+  - { name: deals,     object_type_id: "0-3" }
+  - { name: tickets,   object_type_id: "0-5" }

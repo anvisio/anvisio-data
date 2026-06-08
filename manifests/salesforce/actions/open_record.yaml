@@ -7,7 +7,7 @@ _meta:
   description: |
     open_record atom — deeplink-navigate to a record's detail page.
     Spec 70: browser-only flavor (no MCP equivalent — MCP servers
-    don't drive navigation). Used by compositions that need to land on
+    don't drive navigation). Used by blueprints that need to land on
     RecordView before calling update_record / delete_record.
   changelog:
     - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when. Live-verified recipe + sample carry over from v1.0.0."
@@ -15,7 +15,7 @@ _meta:
 
 description: Navigate to a record's detail page by object_type + record_id.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: false
 depends_on_view: any
 inputs:

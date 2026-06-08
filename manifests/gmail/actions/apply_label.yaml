@@ -1,27 +1,66 @@
 _meta:
   name: manifests/gmail/actions/apply_label.yaml
-  version: 0.3.0
+  version: 0.10.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-27
   description: |
-    apply_label atom — apply a Gmail label to a specific thread. Spec
-    70: `browser` flavor for the list-view toolbar UI + `mcp` flavor
-    backed by gmail.modify_email (addLabelIds). Writes prefer
-    browser > mcp per spec 70 §7.
+    apply_label atom: apply a Gmail label to a specific thread. Spec
+    70: `browser` flavor via the right-click context menu's Label-as►
+    submenu, `mcp` flavor backed by gmail.modify_email (addLabelIds),
+    `oauth_api` flavor for direct REST. Writes prefer browser > mcp
+    per spec 70 §7.
+
+    NOTE: the `label` input is the label NAME for the browser flavor
+    (typed into the Label-as typeahead); MCP + oauth_api want the
+    label ID (Gmail's `Label_<n>` for user labels, or system
+    constants like `INBOX`/`STARRED`). Callers should resolve name →
+    id via list_email_labels first when routing to MCP / OAuth
+    flavors, OR pass an id directly. This mismatch is pre-existing
+    (MCP flavor 0.4.0+ already required ids); documented here for
+    completeness.
+
+    Browser-flavor architecture note (2026-05-26): the OLD path via
+    the toolbar Labels button is DEAD — Gmail removed the toolbar
+    Labels button in 2025. The current path is right-click on the
+    row → context menu → "Label as►" submenu (same typeahead, same
+    label_menu_search widget). Required a new `contextmenu` step type
+    in the runtime and a `must_contain_text` filter on the click step
+    (for picking the "Label as" menuitem from the contextmenu where
+    aria-label/text-content is the only stable disambiguator). See
+    [[project-gmail-browser-flavor-audit-2026-05-25]] Finding 1 +
+    bundled-manifests/gmail/app_model.yaml Inbox.context_menu.
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.10.0 (2026-06-08): CANONICAL ACTION FORM v71. tab_mode: current (was runs_in_home_tab); result.outcome (auto from the winning action) replaces the `applied` boolean; browser resolves over a named signals: map via when:/not: — `applied` = when:[applied] (the snackbar); `abandoned` = when:[menu_closed] not:[applied] (the Label-as typeahead closed without the snackbar; grace-guarded so a real apply wins, since the menu disappears on BOTH apply AND cancel — Trap 2, the snackbar is the honest commit proof). ready_to_apply dropped. mcp/oauth drop the literal applied flag. Behaviour-preserving."
+    - "0.9.1 (2026-05-30): `applied` outcome signal upgraded from `selector_appears` to `transient_appears` on the snackbar — MutationObserver latch survives auto-dismiss + is pre-armed for spec-72 commit-delta detection. Same upgrade across all gmail snackbar outcomes; see archive_email 0.8.1."
+    - "0.9.0 (2026-05-28): browser flavor no longer force-navigates to Inbox. `depends_on_view: Inbox` → `any`, and the contextmenu row selector scoped to `div[role='main']`. ROOT CAUSE (live /agent smoke 2026-05-28): the agent searched `from:sadie bamboohr` (search RESULTS, not inbox), then apply_label's pre-nav force-navigated the home tab to #inbox — where the Sadie threads don't exist → `contextmenu: no selector matched` → heal → heal MISDIAGNOSED 'thread doesn't exist' from a gapi `users.threads.get` 400 (a red herring) → burned ~$12 and looped. The threads DO exist; they're search results, not inbox rows. Same Inbox-thrash class as the read_email fix. With `depends_on_view: any` the atom acts on the row in the CURRENT list (search / label / inbox); `div[role='main']` scoping avoids Gmail's detached inbox cache (gmail.md gotcha #6). Live-verified 2026-05-28: right-click on a search-result row opens the full context menu incl. 'Label as►' (39 items) and targets the correct row. NOTE: siblings (archive_email / delete_email / move_email / star_email / mark_read_unread) share the `depends_on_view: Inbox` pattern — same fix pending."
+    - "0.8.0 (2026-05-27): replace browser flavor `applied` outcome from `selector_disappears div[role='menu'] input[aria-label='Label-as menu open']` to POSITIVE snackbar match — `selector_appears [role='alert']` with `must_contain_text: 'Conversation added to \"<label>\".'`. The prior selector_disappears was the same L4 trap as create_label 0.1.0: the typeahead menu disappears whether the apply committed OR was cancelled OR Esc closed without commit, so the runtime reported `applied=true` on cancels. Live-probed positive signal 2026-05-27: Gmail emits a snackbar with the literal text `Conversation added to \"<label>\".` (plus an Undo button) within ~500ms of a real successful apply. Now the atom's belief is HONEST — only matches when the real side effect actually fired. See /debug-atom skill Trap 2 (`selector_disappears` as L4 commit proof) — same lesson, same fix as create_label 0.2.0."
+    - "0.7.0 (2026-05-27): add `runs_in_home_tab: true`. Gmail's Label-as context menu is an in-place affordance on the inbox row (right-click → submenu), not a separate edit-URL flow. Opening a fresh edit tab via spec 71 §3.3 just throws away the user's loaded inbox state for no benefit and adds load-time latency that let the Closure-throttling bug surface. Runtime gate at chrome-blueprint-runner.ts honors this opt-out (wantsOwnTab = commits_changes && browser && !runs_in_home_tab)."
+    - "0.6.0 (2026-05-26): browser flavor rewritten for modern Gmail. The toolbar Labels button was removed circa 2025; recipe now uses the right-click context menu → 'Label as►' submenu (which opens the SAME typeahead, so label_menu_search widget is reused post the 3.6.0 selector fix). Recipe steps: open_contextmenu_on_row (new `contextmenu` step type) → open_label_as_submenu (click with new `must_contain_text:'Label as'` arg to disambiguate from 'Move to' which shares role+aria) → pick_label (use_widget label_menu_search fill). row_checkbox select step DROPPED — contextmenu doesn't require pre-selection (right-clicks any row directly). Outcomes retargeted to the new aria-label-based selectors."
+    - "0.5.0 (2026-05-25): add oauth_api flavor — POST /gmail/v1/users/me/threads/{thread_id}/modify with body {addLabelIds: ['{{inputs.label}}']}. Uses the runtime body-templating fix (commit 97f1a933 — pre-fix the template would have shipped literally). Label-id-vs-name semantics documented in atom description (pre-existing concern, not introduced by this commit)."
+    - "0.4.0 (2026-05-24): add schema-typed result.thread per v70 signature parity rule. Both flavors populate thread.Id (browser echoes from input; mcp extracts from gmail.modify_email response.message_id which IS the thread_id given the input mapping)."
+    - "0.3.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker on the label-pick step (Phase 3)."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Apply a Gmail label to a specific thread. Browser flavor selects the row from
-  Inbox, opens the Labels menu, types the label name, and picks the match. MCP
-  flavor calls gmail.modify_email with addLabelIds to attach the label without
-  driving the UI.
+  Apply a Gmail label to a specific thread. Browser flavor right-clicks the row
+  to open the context menu, hovers "Label as►" to expand the typeahead submenu,
+  types the label name, and picks the match. MCP flavor calls gmail.modify_email
+  with addLabelIds to attach the label without driving the UI.
 object: Thread
 commits_changes: true
-depends_on_view: Inbox
+# Gmail's Label-as context menu is an in-place affordance on the row
+# in WHATEVER list is current (search results / label / inbox) — no
+# separate edit URL. Run in the user's home tab (the right-click
+# happens on the already-rendered row), instead of spawning a fresh
+# tab. depends_on_view: any → NO force-nav: the caller (e.g. the
+# /agent loop) is on the search results when it labels a search hit;
+# forcing #inbox threw that away and the thread wasn't there
+# (2026-05-28 read-loop). The contextmenu selector is scoped to
+# div[role='main'] so it can't match Gmail's detached inbox cache.
+tab_mode: current
+depends_on_view: any
 mcp_tool: gmail.modify_email
 inputs:
   thread_id:
@@ -31,24 +70,65 @@ inputs:
     type: text
     required: true
 result:
-  applied: boolean
+  # v71: outcome = the winning terminal's action ("applied" | "abandoned").
+  outcome: text
+  thread:
+    schema: Thread
 flavors:
   browser:
     requires_auth: session_cookie
-    label: Select row + Labels menu; pick label when commit:true
+    label: Right-click row → Label as► submenu; pick label when commit:true
+    # v71 signals model: `applied` = the positive snackbar; `abandoned` = the
+    # Label-as typeahead closed without it (grace-guarded so a real apply's
+    # snackbar wins — the menu disappears on BOTH apply AND cancel, Trap 2, so
+    # the snackbar is the honest commit proof, the disappear is the residual).
+    signals:
+      applied:
+        type: transient_appears
+        selector: "[role='alert']"
+        must_contain_text: 'Conversation added to "{{inputs.label}}".'
+        timeout_ms: 6000
+      menu_closed:
+        type: selector_disappears
+        selector: "div[role='menu'] input[aria-label='Label-as menu open']"
     recipe:
-      - id: select_row
-        type: use_widget
+      # Open Gmail's right-click context menu directly on the row.
+      # No checkbox pre-selection needed — contextmenu attaches to the
+      # row clicked, regardless of selection state. Verifies a menu
+      # with submenu-indicating menuitems appeared (aria-haspopup='true'
+      # is present on both 'Move to' and 'Label as' rows in modern Gmail).
+      - id: open_contextmenu_on_row
+        type: contextmenu
         args:
-          widget: gmail.row_checkbox
-          op: invoke
-          inputs:
-            thread_id: "{{inputs.thread_id}}"
-      - id: open_labels_menu
-        type: use_widget
+          # Scoped to div[role='main'] — Gmail keeps the previous list
+          # (inbox) as a DETACHED tr.zA cache OUTSIDE main; an unscoped
+          # match could right-click a hidden detached row (gmail.md #6).
+          selector: "div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])"
+        verify:
+          type: selector_appears
+          selector: "[role='menu'] [role='menuitem'][aria-haspopup='true']"
+          timeout_ms: 4000
+
+      # Click the "Label as" menuitem. Two menuitems carry
+      # aria-haspopup='true' in the contextmenu ('Move to' + 'Label as'),
+      # and ids like `:94a` are ephemeral — so must_contain_text is the
+      # only stable disambiguator. Clicking opens the submenu (Gmail
+      # also opens it on hover, but click works identically).
+      - id: open_label_as_submenu
+        type: click
         args:
-          widget: gmail.toolbar_labels_button
-          op: invoke
+          selector: "[role='menuitem'][aria-haspopup='true']"
+          must_contain_text: "Label as"
+        verify:
+          type: selector_appears
+          selector: "div[role='menu'] input[aria-label='Label-as menu open']"
+          timeout_ms: 4000
+
+      # Pick the label via the typeahead widget. label_menu_search's
+      # fill op handles type → click matching menuitemcheckbox →
+      # verify menu close. This is the same widget the old (dead)
+      # toolbar-Labels-button path used; the post-3.6.0 widget targets
+      # the modern aria-label selectors.
       - id: pick_label
         type: use_widget
         commit: true
@@ -58,17 +138,18 @@ flavors:
           inputs:
             value: "{{inputs.label}}"
     outcomes:
-      - action: ready_to_apply
-        signal:
-          type: selector_appears
-          selector: div[role='menu'] input[placeholder='Label as:']
       - action: applied
-        signal:
-          type: selector_appears
-          selector: div.b8.UC div.vh
+        when: [applied]
         extract:
-          applied:
-            literal: true
+          thread:
+            Id:
+              from_input: thread_id
+      - action: abandoned
+        # The typeahead closed with no `applied` snackbar — the user reviewed
+        # and cancelled (Esc / click-away). The `not:` guard holds a grace
+        # window so a real apply's snackbar wins. HITL-only.
+        when: [menu_closed]
+        not: [applied]
   mcp:
     requires_auth: mcp_server
     label: Add label via gmail.modify_email MCP tool
@@ -84,5 +165,21 @@ flavors:
           url_pattern: "*/mcp/*"
           status: 200
         extract:
-          applied:
-            literal: true
+          thread:
+            Id:
+              from_api_response: ".message_id"
+  oauth_api:
+    requires_auth: oauth_token
+    label: Apply label via Gmail REST users.threads.modify
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/threads/{{inputs.thread_id}}/modify
+      body:
+        addLabelIds: ["{{inputs.label}}"]
+    outcomes:
+      - action: applied
+        extract:
+          thread:
+            Id:
+              from_input: thread_id

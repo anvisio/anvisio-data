@@ -1,41 +1,108 @@
 _meta:
   name: manifests/gmail/views/ThreadView.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.7.1
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
     ThreadView — opened email conversation. Hosts read affordances
     (subject, from, body), per-message actions, reply/forward triggers.
-    Entry chains via Inbox + first-row click; Phase 4 validated.
   changelog:
+    - "0.7.1 (2026-05-28): scope the entry row-click (await_row + open_thread) to `div[role='main']`. Gmail keeps the previous list (e.g. inbox) as a DETACHED `tr.zA` cache OUTSIDE main (live chrome-devtools probe 2026-05-28: 52 rows in DOM, only 2 in main, 50 detached); an unscoped row match could resolve a hidden detached row and the click would target an off-DOM element. Main holds only the live results. Both scoped row-clicks verified to open their thread against the live search page."
+    - "0.7.0 (2026-05-29): entry shape C (depends_on_view: Inbox + row-click) → current-view recipe-only (row-click in WHATEVER list is loaded, NO nav) + scroll_into_view on the click. Pairs with read_email 0.8.0's `reads_in_fresh_tab: true`: the browser read now opens a fresh tab cloned from the home tab's current #search/#inbox/#label list, so the target row is already rendered there; this entry clicks it without force-navigating to Inbox. Fixes the read_email Inbox-thrash bug (2026-05-29 follow-up #2) — the 0.6.0 force-nav to Inbox discarded the caller's search-results context AND failed with `click: no selector matched` for threads below the first rendered inbox page. Requires runtime: the new `{recipe}` current-view entry shape in executeViewEntry + `scroll_into_view` on the click step (both 2026-05-29). The 0.6.0 deeplink-is-unroutable finding still holds — only a row CLICK opens a thread; this change is purely about WHICH list the click runs in (the caller's current list, not a forced Inbox). The entry recipe leads with a wait_for_element on the target row (15s) — the fresh cloned tab is still booting Gmail + running the #search when the entry fires, and the old depends_on_view: Inbox shape got that render wait implicitly from Inbox's verify; without it the click polled an empty list and timed out, spiraling the /agent loop into retries (first live smoke 2026-05-29)."
+    - "0.6.0 (2026-05-28): entry shape A (URL deeplink) → C (row-click). Live-disproved the 0.5.0 claim: `#all/<16-hex-thread-id>` does NOT open a thread cold — neither hash-nav NOR full reload renders h2.hP (verified 3 ways on chanu's account via chrome-devtools). The 16-hex data-legacy-thread-id is a SELECTOR-match id, not URL-routable; Gmail only mints a routable permalink (#inbox/QgrcJH…) on a row CLICK. So entry now navs to Inbox + clicks the row whose data-legacy-thread-id matches {{inputs.messageId}} (span.bog subject). Gmail translates the id + rewrites the URL itself; the verify selector confirms the right thread. Surfaced by the first /agent tool-use loop smoke (read_email cold-open) 2026-05-28 — read_email had no tester, so the broken cold-open deeplink had never been exercised (blueprints always opened the thread via a prior step, short-circuiting pre-nav). Requires runtime change: entry recipes now receive action inputs (runEntryRecipe). Limitation: thread must be in the Inbox list; out-of-inbox threads use the oauth_api flavor."
+    - "0.5.0 (2026-05-26): entry.url path #inbox → #all. Superseded by 0.6.0."
+    - "0.4.1 (2026-05-25): url_patterns u/0 → u/\\d+ (pattern parity with the entry.url fix from 0.4.0). View-level url_patterns have no runtime consumer today, but the stale u/0 would mislead future heal/match logic that reads them. Same sweep as the other 5 gmail views landing this commit."
+    - "0.4.0 (2026-05-25): verify becomes per-instance via {messageId} substitution. Runtime now substitutes action inputs into view.verify selectors (see chrome-runtime.ts substituteViewPlaceholders + tryWaitForVerify subContext, 2026-05-25). The selector targets the h2.hP whose data-legacy-thread-id matches the caller's messageId — proving we opened the RIGHT thread, not just A thread. The dead url_matches entry is gone (extractViewVerifySelectors only pulled selector_appears entries; the url_matches line never ran). Atoms that depend_on_view: ThreadView no longer need their own per-thread wait_for_element step — view verify carries it. Generalizes to every SaaS where the URL is unstable post-nav but a DOM attribute encodes the instance id. Also: entry.url's hardcoded u/0 → u/{account_index} so we navigate the user's actual signed-in mailbox, not always the default account."
+    - "0.3.0 (2026-05-24): revert the attempt to pin verify via '#inbox/{messageId}'. patternToRegex treats {name} as a catch-all capture group, not a value substitution, so the pinned pattern is functionally equivalent to '#inbox/.+' and still matches any prior thread URL. Gmail also rewrites the URL post-nav (#inbox/<short> -> #inbox/%23thread-f:<long>), so URL-based per-thread verify can't work at the view layer at all. The per-thread wait moved INTO read_email's browser recipe (where {{inputs.messageId}} IS substituted) — see read_email v0.6.0. (Superseded by 0.4.0 above — the runtime now substitutes single-brace {messageId} into selectors, not the regex pattern.)"
+    - "0.2.0 (2026-05-24): swap Shape C entry (depends_on_view Inbox + click first row) for Shape A URL deeplink #inbox/{messageId}. The prior 'click first row' recipe ignored the calling action's messageId input and always opened the first inbox thread; from triage_inbox's per-message loop it failed because no row selector targeted the specific message. Gmail's #inbox/<id> fragment opens the thread directly. Matches the canonical placeholder-URL pattern (see SF RecordView, asana ProjectBoard, etc.) per [[feedback-url-hierarchy-first]]."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
 name: ThreadView
 description: Opened email conversation showing message contents and reply
   controls. Hosts read affordances (subject, from, body), per-message actions
-  (archive, delete, star, mark unread), and reply/forward triggers. Entry opens
-  the FIRST conversation row (no thread_id parameter at validation time);
-  production wizards may seek a specific row before invoking actions on this
-  view.
+  (archive, delete, star, mark unread), and reply/forward triggers. Reached
+  via URL deeplink — the caller passes messageId (the Gmail thread id) on
+  the action's inputs; runtime substitutes it into the entry URL AND the
+  verify selector for per-instance proof.
 entry:
-  depends_on_view: Inbox
+  # Current-view shape (0.7.0): open the thread by CLICKING its row in
+  # WHATEVER list is currently loaded — NO force-nav to a fixed view.
+  # read_email's browser flavor (`reads_in_fresh_tab: true`) opens a fresh
+  # tab cloned from the home tab's current #search / #inbox / #label list,
+  # so the target row is already rendered there; this recipe clicks it and
+  # Gmail mints the routable permalink + rewrites the URL itself. The
+  # verify selector below confirms the RIGHT thread opened (the h2.hP
+  # header retains the 16-hex id even though the URL uses the permalink).
+  #
+  # Why a click, not a URL deeplink: live-confirmed 2026-05-28 (three
+  # ways) that NONE of the ids the DOM exposes on a row
+  # (data-legacy-thread-id 16-hex, data-thread-id #thread-a:r-…) are
+  # URL-routable — `#all/<16-hex>` and `#inbox/<16-hex>` silently no-op
+  # (h2.hP never appears). Gmail only mints a routable permalink
+  # (#inbox/QgrcJH…) when the row is CLICKED.
+  #
+  # Why current-view, not depends_on_view: Inbox (the 0.6.0 shape):
+  # force-navigating to Inbox discarded the caller's search-results
+  # context AND lost threads below the first rendered inbox page
+  # (`click: no selector matched` — 2026-05-29 follow-up #2). The
+  # current-view shape keeps the caller's list, which read_email's
+  # fresh-tab clone guarantees contains the target row. scroll_into_view
+  # centers below-fold-but-rendered rows before the click.
+  #
+  # Limitation: the row must be present in the currently-loaded list.
+  # Threads not in that list (archived, beyond the rendered page) use the
+  # oauth_api read flavor (users.threads.get, id-agnostic, no nav).
+  #
+  # {{inputs.messageId}} is substituted by the step-executor — entry
+  # recipes receive action inputs (chrome-runtime runEntryRecipe).
   recipe:
-    - id: open_first_row
-      type: click
-      args:
-        selector:
-          - table.F.cf.zt tr.zA span.bog
-          - tr.zA[role='row'] span.bog
-    - id: wait_thread
+    # Wait for the target row to RENDER before clicking. The fresh cloned
+    # tab is still booting Gmail's SPA + executing the #search when this
+    # entry runs; without this gate the click polls an empty list for 5s
+    # and times out → pre_nav_failed, which sent the /agent tool-use loop
+    # into a retry spiral (live smoke 2026-05-29). The old
+    # depends_on_view: Inbox shape got this render wait implicitly from the
+    # Inbox view's verify; the current-view shape must wait explicitly.
+    # Keyed on the SPECIFIC thread id so it also proves the row is present
+    # (not just that some list rendered).
+    - id: await_row
       type: wait_for_element
       args:
-        selector: h2.hP
-        timeout_ms: 8000
+        # Scope to div[role='main']: Gmail keeps the previous list (inbox)
+        # as a DETACHED tr.zA cache OUTSIDE main (live-verified 2026-05-28).
+        # An unscoped match could resolve a hidden detached row → the click
+        # then targets an off-DOM element. Main holds only the live results.
+        selector: "div[role='main'] tr.zA span[data-legacy-thread-id='{{inputs.messageId}}']"
+        timeout_ms: 15000
+    - id: open_thread
+      type: click
+      args:
+        selector: "div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{inputs.messageId}}']) span.bog"
+        scroll_into_view: true
+landmark_probe:
+  selector: h2.hP
+  timeout_ms: 12000
+verify:
+  # Per-instance proof via single-brace {messageId} substitution.
+  # The runtime swaps {messageId} for the caller's input before
+  # waitForElement runs (see chrome-runtime.ts substituteViewPlaceholders).
+  # Gmail rewrites the URL post-nav so URL-based verify can't be
+  # per-instance — but the h2.hP element retains data-legacy-thread-id
+  # equal to the id we navigated with, so the DOM attribute IS the proof.
+  - type: selector_appears
+    selector: "div[role='main'] h2.hP[data-legacy-thread-id='{messageId}']"
+    timeout_ms: 8000
+placeholders:
+  messageId:
+    type: id
+    sample: "18b39c0000000000"
 url_patterns:
-  - https://mail.google.com/mail/u/0/#inbox/.+
-  - https://mail.google.com/mail/u/0/#search/.*/.+
-  - https://mail.google.com/mail/u/0/#label/.*/.+
+  - https://mail.google.com/mail/u/\d+/#inbox/.+
+  - https://mail.google.com/mail/u/\d+/#all/.+
+  - https://mail.google.com/mail/u/\d+/#sent/.+
+  - https://mail.google.com/mail/u/\d+/#search/.*/.+
+  - https://mail.google.com/mail/u/\d+/#label/.*/.+
 identifying_selectors:
   - div[role='main'] h2.hP
   - div[role='main'] div.a3s.aiL

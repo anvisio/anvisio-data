@@ -1,0 +1,127 @@
+_meta:
+  name: manifests/github/actions/create_issue.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    create_issue atom: open a new issue in a repo.
+    commits_changes:true so spec 70 §7 prefers browser
+    (user-clicks-Submit launch contract); MCP / REST cover headless.
+
+    All three flavors populate the composite Issue PK explicitly:
+    owner + repo come from input (the REST/MCP response top-level
+    doesn't carry them); number comes from the URL post-submit
+    (browser) or from response.number (mcp / oauth_api).
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.issue per v70 signature parity rule. Drop primitive issue_number + issue_url; all three flavors use nested extracts to populate the composite (owner, repo, number) PK."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Create a new GitHub issue.
+object: "{{inputs.repo}}"
+object_types: [Issue]
+commits_changes: true
+depends_on_view: any
+mcp_tool: github.issue_write
+inputs:
+  owner: { type: text, required: true, sample: anvisio-dev }
+  repo:  { type: text, required: true, sample: sample-project }
+  title: { type: text, required: true, sample: "Login page returns 500 error" }
+  body:  { type: text, required: false, description: "Markdown" }
+  assignees: { type: list<text>, required: false, description: "User logins" }
+  labels:    { type: list<text>, required: false }
+  milestone: { type: integer,    required: false, description: "Milestone number" }
+result:
+  issue:
+    schema: Issue
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open /issues/new + fill title + body (user clicks Submit on commit:true)
+    recipe:
+      - id: nav_new
+        type: navigate
+        args:
+          url: "https://github.com/{{inputs.owner}}/{{inputs.repo}}/issues/new"
+      - id: fill_title
+        type: use_widget
+        args:
+          widget: github.new_issue_title_input
+          op: fill
+          value: "{{inputs.title}}"
+      - id: fill_body
+        type: use_widget
+        args:
+          widget: github.new_issue_body_textarea
+          op: fill
+          value: "{{inputs.body}}"
+      - id: submit
+        type: use_widget
+        args:
+          widget: github.submit_new_issue_button
+          op: invoke
+        commit: true
+    outcomes:
+      - action: created
+        signal:
+          type: url_matches
+          pattern: "/issues/(?<number>[0-9]+)$"
+          timeout_ms: 30000
+        extract:
+          issue:
+            owner:
+              from_input: owner
+            repo:
+              from_input: repo
+            number:
+              from_url_match: number
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official github-mcp-server issue_write (method=create)
+    server: github
+    tool: issue_write
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          issue:
+            owner:
+              from_input: owner
+            repo:
+              from_input: repo
+            number:
+              from_api_response: true
+              path: number
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: REST POST /repos/{owner}/{repo}/issues
+    request:
+      method: POST
+      url: "https://api.github.com/repos/{{inputs.owner}}/{{inputs.repo}}/issues"
+      body:
+        title: "{{inputs.title}}"
+        body: "{{inputs.body}}"
+        assignees: "{{inputs.assignees}}"
+        labels: "{{inputs.labels}}"
+        milestone: "{{inputs.milestone}}"
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "api.github.com/repos/*/issues"
+          status: 201
+        extract:
+          issue:
+            owner:
+              from_input: owner
+            repo:
+              from_input: repo
+            number:
+              from_api_response: true
+              path: number

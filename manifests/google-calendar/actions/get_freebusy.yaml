@@ -1,0 +1,75 @@
+_meta:
+  name: manifests/google-calendar/actions/get_freebusy.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    get_freebusy atom — return busy intervals for one or more calendars
+    over a time window. The availability primitive behind the
+    schedule_meeting blueprint. oauth_api + mcp flavors only — free/busy
+    is not exposed as structured data anywhere in the calendar.google.com
+    DOM, so there is no browser flavor (see google-calendar.md known gaps).
+  changelog:
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.get-freebusy. No browser flavor — freebusy is API-only."
+
+description: >
+  Return the busy intervals for one or more calendars (the user's own
+  calendars or attendee emails) over a time window. The availability
+  primitive: schedule_meeting calls this to find an open slot before
+  creating an event. oauth_api and mcp flavors only.
+object: Calendar
+commits_changes: false
+depends_on_view: CalendarGrid
+mcp_tool: google-calendar.get-freebusy
+inputs:
+  calendars:
+    type: list
+    required: true
+    description: Calendar ids or attendee emails to query availability for.
+  time_min:
+    type: text
+    required: true
+    description: Window start, ISO 8601.
+  time_max:
+    type: text
+    required: true
+    description: Window end, ISO 8601.
+result:
+  busy: object
+flavors:
+  oauth_api:
+    requires_auth: oauth_token
+    label: Query free/busy via the Calendar API (freebusy.query)
+    request:
+      provider: google
+      method: POST
+      url: https://www.googleapis.com/calendar/v3/freeBusy
+      body:
+        timeMin: "{{inputs.time_min}}"
+        timeMax: "{{inputs.time_max}}"
+        items: "{{inputs.calendars}}"
+    outcomes:
+      - action: queried
+        extract:
+          busy:
+            from_api_response: true
+            path: calendars
+  mcp:
+    requires_auth: mcp_server
+    label: Query free/busy via the google-calendar get-freebusy MCP tool
+    server: google-calendar
+    tool: get-freebusy
+    inputs_map:
+      calendars: "{{inputs.calendars}}"
+      timeMin: "{{inputs.time_min}}"
+      timeMax: "{{inputs.time_max}}"
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          busy:
+            from_api_response: ".calendars"

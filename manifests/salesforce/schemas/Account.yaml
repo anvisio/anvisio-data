@@ -1,18 +1,20 @@
 _meta:
   name: manifests/salesforce/schemas/Account.yaml
-  version: 1.0.0
+  version: 1.1.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
-    Account schema — standard SF Account object fields (Name, Industry, Phone, Website, Type, Description). Used by create_record / update_record when object_type=Account.
+    Account schema: standard SF Account object fields (Name, Industry, Phone, Website, Type, Description). Used by create_record / update_record when object_type=Account.
   changelog:
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    - "1.1.0 (2026-05-24): add primary_key:[Id] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/. Live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: |
   A Salesforce Account. Key prefix 001.
   Required: Name.
   Company/organization. Parent for Contact, Opportunity. Live-probed.
+primary_key: [Id]
 fields:
   Id:
     type: id

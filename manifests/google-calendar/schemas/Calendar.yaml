@@ -1,0 +1,47 @@
+_meta:
+  name: manifests/google-calendar/schemas/Calendar.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Google Calendar Calendar schema: one entry on the user's calendar
+    list (their primary calendar, secondary calendars, subscribed
+    calendars). Returned by list_calendars; referenced by Event.CalendarId.
+    Mirrors the Google Calendar API v3 CalendarListEntry resource.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[Id] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). Fields grounded in Google Calendar API v3 CalendarListEntry."
+
+description: >
+  A calendar on the user's calendar list. The primary calendar has
+  Primary=true; AccessRole reflects the user's permission on the calendar
+  (owner / writer / reader / freeBusyReader). Referenced by Event.CalendarId
+  and used as the target selector for create_event / list_events.
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    primary: true
+    readonly: true
+  Summary:
+    type: text
+    readonly: true
+  Description:
+    type: textarea
+    readonly: true
+  TimeZone:
+    type: text
+    readonly: true
+  AccessRole:
+    type: picklist
+    readonly: true
+  Primary:
+    type: boolean
+    readonly: true
+  BackgroundColor:
+    type: text
+    readonly: true
+natural_keys:
+  - Summary
+  - Id

@@ -1,0 +1,41 @@
+_meta:
+  name: manifests/hubspot/views/RecordView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Record detail view (/contacts/{portalId}/record/{objectTypeId}/{recordId}).
+    The anchor for inline edits + the Edit button + the Actions menu.
+    Reached via open_record; field reads come from the GraphQL
+    crmObject query (apis.yaml/graphql_crm_objects_get).
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. Verified live 2026-05-23 against
+       portal 245597800 deal record 316988725990."
+
+name: RecordView
+
+entry:
+  url: "{instance.origin}/contacts/{portal_id}/record/{object_type_id}/{record_id}"
+landmark_probe:
+  selector: "[data-test-id='record-page'], [data-test-id='record-highlight-card'], h2"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/contacts/[0-9]+/record/[0-9]+-[0-9]+/[0-9]+"
+  - type: selector_appears
+    selector: "h2"
+    timeout_ms: 12000
+placeholders:
+  portal_id:
+    type: text
+    sample: "245597800"
+  object_type_id:
+    type: text
+    sample: "0-3"
+  record_id:
+    type: id
+    sample: "316988725990"
+widgets:
+  - hubspot.edit_record_button
+  - hubspot.global_search_input

@@ -1,38 +1,79 @@
 _meta:
   name: manifests/outlook-calendar/actions/list_events.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Navigate to the Outlook Calendar view (week grid). Read-only — no
-    state mutation, just confirms the grid landmark loads so downstream
-    actions have a stable anchor.
+    list_events atom: list events for a date range (for a daily/weekly brief).
+    Read-only.
 
-description: View the calendar grid (week view).
+    The oauth_api flavor (Graph GET /me/calendarView) is the CLEAN read and the
+    preferred path. The browser flavor scrapes the calendar grid blocks — but
+    OWA renders events AND empty time-slots as the same div[role='button']
+    blocks, so filtering real events from slots is fiddly (HARDEN ITEM). The
+    browser flavor reads the CURRENTLY-DISPLAYED grid (week/day); the
+    startDateTime/endDateTime inputs drive the oauth flavor's range.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new (replaces the 60.4.2 'confirm grid renders' stub). Adds the oauth_api calendarView read + a best-effort browser grid-scrape. HARDEN ITEM: distinguish event blocks from empty time-slots in the grid scrape (both are div[role='button'][aria-label*=' to ']); the Graph read avoids this. Grid read not live-hardened (consumer MSA has no Graph token; grid had no events to scrape during research)."
+
 object: Event
 commits_changes: false
 depends_on_view: Calendar
-inputs: {}
+mcp_tool: outlook-calendar.list_events
+inputs:
+  startDateTime:
+    type: text
+    required: false
+    description: ISO 8601 range start (oauth_api / calendarView).
+  endDateTime:
+    type: text
+    required: false
+    description: ISO 8601 range end (oauth_api / calendarView).
 result:
   listed: boolean
+  events: list<text>
 flavors:
-  dom:
+  browser:
     requires_auth: session_cookie
-    label: Confirm calendar grid renders.
+    label: Scrape the visible calendar grid (current week/day)
     recipe:
-      - id: noop
+      - id: await_grid
         type: wait_for_element
         args:
-          selector:
-            - button[aria-label='New event']
-          timeout_ms: 5000
+          selector: "[data-app-section='calendar-view-0']"
+          timeout_ms: 8000
     outcomes:
       - action: listed
         signal:
           type: selector_appears
-          selector: "button[aria-label='New event']"
-          timeout_ms: 5000
+          selector: "[data-app-section='calendar-view-0']"
+          timeout_ms: 8000
         extract:
           listed:
             literal: true
+          # HARDEN: grid event blocks share markup with empty slots; this scrapes
+          # all grid buttons' aria-labels (event title + time). Filtering events
+          # from empty slots is the open item — the oauth read avoids it.
+          events:
+            from_selector_all:
+              - "[data-app-section='calendar-view-0'] div[role='button'][aria-label]"
+            attr: aria-label
+  oauth_api:
+    requires_auth: oauth_token
+    label: List events in a date range via Graph (calendarView)
+    request:
+      provider: microsoft
+      method: GET
+      url: https://graph.microsoft.com/v1.0/me/calendarView
+      query:
+        startDateTime: "{{inputs.startDateTime}}"
+        endDateTime: "{{inputs.endDateTime}}"
+    outcomes:
+      - action: listed
+        extract:
+          listed:
+            literal: true
+          events:
+            from_api_response: true
+            path: value[*].subject

@@ -1,20 +1,28 @@
 _meta:
   name: manifests/gmail/schemas/Label.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
     Gmail Label schema (system or user-defined). Target of apply_label
-    and move_email actions.
+    and move_email actions; result of create_label.
   changelog:
+    - "0.3.0 (2026-05-25): add Id field (Gmail's `Label_<n>` for user-defined, system constants like INBOX/STARRED/UNREAD for built-ins). Returned by gmail.create_label MCP tool + REST users.labels.create. Name remains primary_key since user-facing flows usually identify labels by name; Id is the stable canonical identifier the MCP + oauth_api flavors return."
+    - "0.2.0 (2026-05-24): add primary_key:[Name] per v70 INTEGRATION_FORMAT signature parity rule."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
 description: A Gmail label (system or user-defined) used as the target for
-  apply_label and move_email actions.
+  apply_label and move_email actions, and the result of create_label.
+primary_key: [Name]
 fields:
   Name:
     type: text
     primary: true
+  Id:
+    type: id
+    readonly: true
+    description: Gmail's internal label id (e.g. `Label_<n>` for user-defined, `INBOX`/`STARRED`/`UNREAD` etc. for system).
 natural_keys:
   - Name
+  - Id

@@ -1,0 +1,119 @@
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: pipeline-prep
+  version: '1.0.0'
+  title: Weekly pipeline prep
+  summary: |
+    Pull the opportunities from your pipeline, judge whether each one's
+    stage still matches its timeline, ask you to confirm a stage update
+    on the stale ones, then synthesize a short sectioned Markdown briefing.
+    Killer demo target from the 2026-05-18 brainstorm — deterministic
+    automation with the judgment delegated to the LLM.
+
+do:
+  - opps:
+      label: Listing your opportunities
+      call: salesforce.atom.query_records
+      with:
+        object_type: Opportunity
+        list_view: AllOpportunities
+
+  - perOpp:
+      label: Reviewing each opportunity
+      for:
+        each: opp
+        in: '${ .opps.records }'
+        item_label: '${ $opp.Name }'
+        item_link:
+          view: RecordView
+          with:
+            object_type: Opportunity
+            record_id: '${ $opp.Id }'
+      do:
+        - staleness:
+            judge: |
+              An opportunity looks STALE when its stage and close date
+              disagree — e.g. it is still in an early-funnel stage
+              (Prospecting / Qualification / Needs Analysis) while the
+              close date is this week or already past. It looks CURRENT
+              when the stage fits the timeline (a late-funnel stage, or
+              a close date weeks out). Classify this opportunity.
+            options: [stale, current]
+            with:
+              stage:      '${ $opp.StageName }'
+              amount:     '${ $opp.Amount }'
+              close_date: '${ $opp.CloseDate }'
+
+        - decide:
+            switch:
+              - when: '${ .staleness == "stale" }'
+                then:
+                  - userChoice:
+                      ask:
+                        prompt: |
+                          ${ $opp.Name } (${ $opp.StageName }, $${ $opp.Amount }, closes ${ $opp.CloseDate }):
+                          Stage looks stale. Update it?
+                        options:
+                          - Move to Negotiation/Review
+                          - Mark Closed Won
+                          - Mark Closed Lost
+                          - Skip
+                  - maybeApply:
+                      switch:
+                        - when: '${ .userChoice.choice == "Move to Negotiation/Review" }'
+                          then:
+                            - update:
+                                call: salesforce.atom.update_record
+                                commit: false
+                                with:
+                                  object_type: Opportunity
+                                  record_id: '${ $opp.Id }'
+                                  fields:
+                                    StageName: Negotiation/Review
+                        - when: '${ .userChoice.choice == "Mark Closed Won" }'
+                          then:
+                            - update:
+                                call: salesforce.atom.update_record
+                                commit: false
+                                with:
+                                  object_type: Opportunity
+                                  record_id: '${ $opp.Id }'
+                                  fields:
+                                    StageName: Closed Won
+                        - when: '${ .userChoice.choice == "Mark Closed Lost" }'
+                          then:
+                            - update:
+                                call: salesforce.atom.update_record
+                                commit: false
+                                with:
+                                  object_type: Opportunity
+                                  record_id: '${ $opp.Id }'
+                                  fields:
+                                    StageName: Closed Lost
+
+  - summary:
+      label: Summarizing the pipeline
+      synthesize: |
+        Compose a pipeline briefing across the opportunities listed,
+        formatted as Markdown with short sections. First-person voice, as
+        if briefing yourself before Monday standup. Use this structure:
+
+        ## At a glance
+        One or two sentences: total pipeline value ($) and overall health.
+
+        ## Needs attention
+        One bullet per stale-flagged deal — **name** ($amount): what was
+        decided (moved to <stage> / marked <stage> / skipped). If nothing
+        was flagged stale, write "Nothing stale — pipeline looks clean."
+
+        ## Top deals
+        The 3 largest by Amount, one bullet each — **name** — $amount,
+        <current stage>.
+
+        Keep each section tight (the whole briefing under ~150 words). Bold
+        the deal names and stages. Do not invent opportunities or numbers
+        beyond the provided context.
+      with:
+        opps:    '${ .opps.records }'
+        triaged: '${ .perOpp }'

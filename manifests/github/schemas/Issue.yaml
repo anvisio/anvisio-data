@@ -1,0 +1,124 @@
+_meta:
+  name: manifests/github/schemas/Issue.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    GitHub Issue property schema. The REST shape from
+    /repos/{owner}/{repo}/issues/{number} (api.github.com/v3).
+
+    owner + repo are contextual identity fields the LLM uses to scope
+    the issue to its repository; they aren't on the REST response top-
+    level (which carries repository_url instead) but they're part of
+    the (owner, repo, number) composite primary_key.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[owner, repo, number] per v70 INTEGRATION_FORMAT signature parity rule. Add owner + repo as contextual identity properties so the composite PK fields exist in the property set."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Issue
+object_type_id: issue
+mcp_object_type: issue
+primary_key: [owner, repo, number]
+
+properties:
+  owner:
+    label: Repository Owner
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: Login of the user or organization that owns the repository (contextual identity).
+    sample: anvisio-dev
+  repo:
+    label: Repository Name
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: Repository name (contextual identity; not on the REST response top-level).
+    sample: sample-project
+  number:
+    label: Issue Number
+    type: number
+    field_type: number
+    required: true
+    read_only: true
+    sample: 1
+  title:
+    label: Title
+    type: string
+    field_type: text
+    required: true
+    sample: "Login page returns 500 error"
+  body:
+    label: Description
+    type: string
+    field_type: textarea
+    description: Markdown-rendered.
+  state:
+    label: State
+    type: enumeration
+    field_type: select
+    options:
+      - { value: open,   label: Open }
+      - { value: closed, label: Closed }
+  state_reason:
+    label: Closed Reason
+    type: enumeration
+    field_type: select
+    description: Set automatically when state transitions to closed.
+    options:
+      - { value: completed,   label: Completed }
+      - { value: not_planned, label: Not planned }
+      - { value: reopened,    label: Reopened }
+  assignees:
+    label: Assignees
+    type: array
+    field_type: select
+    description: Array of user login strings; cap is 10 per issue.
+  labels:
+    label: Labels
+    type: array
+    field_type: select
+    description: Array of label names; multi-select.
+  milestone:
+    label: Milestone
+    type: number
+    field_type: select
+    description: Milestone number (not title).
+  user:
+    label: Author
+    type: object
+    field_type: select
+    read_only: true
+    description: "{ login, id, avatar_url, html_url }"
+  comments:
+    label: Comment Count
+    type: number
+    field_type: number
+    read_only: true
+  created_at:
+    label: Created At
+    type: datetime
+    field_type: date
+    read_only: true
+  updated_at:
+    label: Updated At
+    type: datetime
+    field_type: date
+    read_only: true
+  closed_at:
+    label: Closed At
+    type: datetime
+    field_type: date
+    read_only: true
+  html_url:
+    label: URL
+    type: string
+    field_type: text
+    read_only: true
+
+associations:
+  - { name: pull_requests, object_type_id: pull_request, description: "Linked PRs ('Development' panel)" }
+  - { name: comments,      object_type_id: issue_comment, description: "Comment thread" }

@@ -1,0 +1,317 @@
+_meta:
+  name: widget-libraries/google-calendar.widgets.yaml
+  version: 0.7.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-28
+  description: |
+    Google Calendar widget library, archetype-driven shape (spec 70).
+
+    Every widget declares only:
+      - archetype (one of the catalog names in
+        widget-libraries/archetype-templates.yaml)
+      - selectors (named per the archetype's required_selectors)
+      - overrides (optional knobs the archetype's recipe consumes)
+      - irreversible (optional safety flag)
+
+    The runtime widget-archetype-resolver expands these into executable
+    recipes at manifest-load time.
+
+    Per-instance `manifests/google-calendar/widgets.yaml` declares
+    `extends: widget-libraries/google-calendar.widgets.yaml` and inherits
+    every definition below.
+
+    Selectors are anchored on aria-label / role / data-eventid (kebab-hashed
+    CSS, never class names). The editor + popup + chip selectors were
+    LIVE-VERIFIED on cd2k's account 2026-05-28 (see changelog 0.2.0); the
+    remaining ones (rsvp_button, search_input, create flow verify_targets)
+    are still research-grounded pending a live pass.
+
+  archetypes_used: [text_input, contenteditable_input, typeahead_chip, typeahead_search, click_reveals, click_dismisses, datetime_split, recurrence_picker]
+
+  changelog:
+    - "0.7.0 (2026-05-30): event_guests widget gains `submit_key: Enter` override. Diagnosed from the FIRST heal-screenshot delivered by the new prepended image block: the screenshot showed the email TYPED into the Guests input with the suggestion dropdown OPEN but NO chip committed below. The typeahead_chip archetype's commit step uses `$overrides.submit_key ?? Tab` (widget-archetype-templates.yaml:294); Tab moves focus instead of picking Calendar's open suggestion. Enter picks the highlighted suggestion → chip forms → verify_target matches. This is the actual root cause; the 0.6.0 verify_target shape fix was real but secondary (no chip ever formed → no selector shape would have worked)."
+    - "0.6.0 (2026-05-30): event_guests widget `verify_target` corrected from `[role='listitem'][data-email], div[data-hovercard-id]` to `[role='treeitem'][data-email='{{value}}']`. Live-probed on cd2k account: Calendar's committed guest chip is `<div role='treeitem' aria-label='<email>' data-email='<email>'>` — NOT listitem; data-hovercard-id is over-broad (also on the organizer card + per-guest mark-required buttons). The {{value}} substitution ties the verify to the SPECIFIC email just typed, so multi-guest fills (one per item, via fill_fields' new list iteration) each verify their own chip. Triggered by sales_call_notes' schedule_review_meeting step timing out at 5s when Attendees=['sarah@…','james@…'] (the value the runtime joined to 'sarah,james' before list-iteration fixed it, and the verify never matched anyway because of the listitem/treeitem mismatch)."
+    - "0.5.0 (2026-05-28): LIVE-FIXED the create-flow selectors (the create buttons have NO aria-label — confirmed via chrome-devtools smoke). create_button → [aria-haspopup='menu'] + trigger_text 'Create'; create_event_menuitem → stable [role='menuitem'][data-key='event']; more_options → [role='dialog'] button + trigger_text 'More options'. Required extending the click_reveals archetype with an optional trigger_text override (→ must_contain_text); empty default keeps every existing widget unchanged. Full create→event→more-options→editor flow driven live."
+    - "0.4.0 (2026-05-28): recurring-event support. New event_recurrence widget (recurrence_picker archetype) driving the Recurrence combobox + Custom recurrence dialog from an RRULE (Event.Recurrence field → fill_fields → set_recurrence primitive). New more_options widget (click_reveals) so create_event reaches the FULL editor (where recurrence + the corrected field widgets live) from the quick-create popup. Selectors from the 2026-05-28 live probe (google-calendar.md Recurring section); the 'More options' label is [needs-live-probe]."
+    - "0.3.0 (2026-05-28): event_start/event_end adopt the new datetime_split archetype (date_target + time_target). The editor splits each datetime into separate date + time inputs (live-confirmed); the old text_input only filled the date, so create/update never set the event time. Dropped the ambiguous aria-label^='Start'/'End' fallback (matched both date AND time inputs)."
+    - "0.2.0 (2026-05-28): LIVE-VERIFIED selector fixes (chrome-devtools probe on cd2k's account). event_title: aria-label is 'Title' not 'Add title' (placeholder is 'Add title'); id is #xTiIn not #xTiInput — BOTH old selectors were dead. event_location: aria-label is 'Add location' not 'Location'. event_guests: aria-label is 'Guests' not 'Add guests'. event_save: Save is a real <button>, the [role='button'] form is dead — reordered. event_chip (G1): grid data-eventid is the eid = base64url(apiId+' '+calendarId), NOT the API id; jslog embeds the raw api id and matches uniquely — promoted to primary. VERIFIED-CORRECT as-was: event_start/event_end (date), event_description, event_edit_button, event_delete_button. NOT YET FIXED: editor splits Start/End into separate date+time inputs (aria 'Start time'/'End time') — event_start/event_end only fill the DATE; needs new time widgets + a datetime field-mapping change (follow-up, see google-calendar.md)."
+    - "0.1.0 (2026-05-22): initial hand-authored library — 16 widgets covering the Calendar grid, event editor, and event detail popup. Authored alongside the spec 70 google-calendar manifest."
+
+defaults_by_type:
+  text: google-calendar.event_title
+  datetime: google-calendar.event_start
+  textarea: google-calendar.event_description
+  list<email>: google-calendar.event_guests
+  email: google-calendar.event_guests
+
+widgets:
+
+  # ─── Calendar grid: create + search ───────────────────────────────
+
+  # The Create button has NO aria-label and NO role='button' (live-confirmed
+  # 2026-05-28) — it's a text-labeled <button aria-haspopup='menu'> (jsname
+  # only). Match by visible text via trigger_text (must_contain_text);
+  # aria-haspopup scopes to the menu-openers and only Create contains "Create"
+  # (verified unique — does NOT collide with "Create appointment schedule").
+  google-calendar.create_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[aria-haspopup='menu']"
+        - button[aria-haspopup='menu']
+      verify_target: "[role='menuitem'][data-key='event']"
+    overrides:
+      trigger_text: "Create"
+      verify_timeout_ms: 6000
+
+  # The "Event" menu item has NO aria-label, but data-key='event' is stable
+  # (live-confirmed 2026-05-28) — no text-match needed.
+  google-calendar.create_event_menuitem:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[role='menuitem'][data-key='event']"
+        - "[role='menu'] [role='menuitem'][data-key='event']"
+      verify_target: input[aria-label='Title'], input[placeholder='Add title']
+    overrides:
+      verify_timeout_ms: 8000
+
+  google-calendar.search_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[role='button'][aria-label='Search']"
+        - button[aria-label='Search']
+      verify_target: input[aria-label='Search']
+
+  google-calendar.search_input:
+    archetype: typeahead_search
+    selectors:
+      trigger:
+        - "[role='button'][aria-label='Search']"
+        - input[aria-label='Search']
+      input:
+        - input[aria-label='Search']
+        - input[type='text'][aria-label*='Search']
+    overrides:
+      url_pattern: "/r/search"
+      verify_timeout_ms: 8000
+
+  # ─── Event editor: form fields ────────────────────────────────────
+
+  google-calendar.event_title:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - input[aria-label='Title']
+        - input[placeholder='Add title']
+        - input#xTiIn
+      read_target:
+        - input[aria-label='Title']
+        - input#xTiIn
+
+  # StartTime/EndTime are datetimes but the editor splits each into a
+  # separate date + time input (live-confirmed 2026-05-28). datetime_split
+  # fills both from one ISO value. NOTE the old `aria-label^='Start'` fallback
+  # was ambiguous (matched both 'Start date' AND 'Start time') — dropped.
+  google-calendar.event_start:
+    archetype: datetime_split
+    selectors:
+      date_target:
+        - input[aria-label='Start date']
+        - input#xStDaIn
+      time_target:
+        - input[aria-label='Start time']
+        - input#xStTiIn
+
+  google-calendar.event_end:
+    archetype: datetime_split
+    selectors:
+      date_target:
+        - input[aria-label='End date']
+        - input#xEnDaIn
+      time_target:
+        - input[aria-label='End time']
+        - input#xEnTiIn
+
+  google-calendar.event_description:
+    archetype: contenteditable_input
+    selectors:
+      fill_target:
+        - "div[role='textbox'][aria-label*='escription'][contenteditable='true']"
+        - "div[contenteditable='true'][aria-label*='escription']"
+      read_target:
+        - "div[role='textbox'][aria-label*='escription']"
+
+  google-calendar.event_location:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - input[aria-label='Add location']
+        - input[aria-label*='ocation']
+      read_target:
+        - input[aria-label='Add location']
+        - input[aria-label*='ocation']
+
+  # Each guest chip renders as
+  #   <div role='treeitem' aria-label='<email>' data-email='<email>'
+  #        data-hovercard-id='<email>' class='nBzcnc Wm6kRe …'>
+  # — `role='treeitem'`, NOT `role='listitem'` (live-probed 2026-05-30,
+  # cd2k account). The widget's verify_target is keyed on the SPECIFIC
+  # typed value via {{value}} so it proves the just-added chip exists
+  # (rather than any-chip-anywhere; data-hovercard-id is over-broad —
+  # also set on per-guest 'mark required' buttons + the organizer card).
+  # Pairs with fill_fields' per-item iteration for list<...> fields:
+  # each email is typed + Tab-committed + verified individually.
+  google-calendar.event_guests:
+    archetype: typeahead_chip
+    selectors:
+      trigger:
+        - input[aria-label='Guests']
+        - input[aria-label*='guest' i]
+      input:
+        - input[aria-label='Guests']
+        - input[aria-label*='guest' i]
+      verify_target: "[role='treeitem'][data-email='{{value}}']"
+    overrides:
+      verify_timeout_ms: 5000
+      # Enter (NOT Tab) picks the suggestion when Calendar's typeahead
+      # dropdown is open. Tab moves focus without committing — verified
+      # from the 2026-05-30 heal-screenshot showing dropdown-open +
+      # no-chip after the runtime pressed Tab.
+      submit_key: "Enter"
+
+  google-calendar.event_save:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        # Save is a real <button>; the [role='button'] form is DEAD
+        # (live-confirmed 2026-05-28). Real <button> primary.
+        - button[aria-label='Save']
+        - "[role='button'][aria-label='Save']"
+      verify_target: input[aria-label='Title'], input#xTiIn
+    overrides:
+      verify_timeout_ms: 10000
+
+  google-calendar.event_close:
+    archetype: click_dismisses
+    selectors:
+      trigger:
+        - "[role='button'][aria-label='Back']"
+        - button[aria-label='Close']
+        - button[aria-label='Back']
+      verify_target: input[aria-label='Title'], input#xTiIn
+
+  # Recurrence: the Recurrence combobox + its "Custom recurrence" dialog.
+  # The recurrence_picker archetype's set_recurrence primitive parses the
+  # RRULE (from the Event.Recurrence field) and reconciles the dialog
+  # controls. Selectors from the 2026-05-28 live probe (see google-calendar.md
+  # "Recurring events"). custom_option / done_button are text-matched by the
+  # primitive ("Custom" / "Done"); the selectors here just scope the search.
+  # weekday_button is a {day} TEMPLATE the primitive expands per weekday.
+  # Only present in the FULL editor (create reaches it via "More options").
+  google-calendar.event_recurrence:
+    archetype: recurrence_picker
+    selectors:
+      recurrence_combobox:
+        - "[role='combobox'][aria-label='Recurrence']"
+        - "[aria-label='Recurrence']"
+      custom_option:
+        - "[role='listbox'][aria-label='Recurrence'] [role='option']"
+        - "[role='listbox'] [role='option']"
+      frequency_combobox:
+        - "[aria-label='Frequency']"
+        - "[role='combobox'][aria-label='Frequency']"
+      interval_input:
+        - "[aria-label$='to repeat']"
+      weekday_button:
+        - "button[aria-label='{day}']"
+        - "[role='button'][aria-label='{day}']"
+      end_never_radio:
+        - "[aria-label^='Recurrence never']"
+      end_on_radio:
+        - "[aria-label^='Recurrence ends on']"
+      end_on_date_input:
+        - "[aria-label='Date on which the recurrence ends']"
+      end_after_radio:
+        - "[aria-label^='Recurrence ends after']"
+      end_after_count_input:
+        - "[aria-label='Occurrence count']"
+      done_button:
+        - "[role='dialog'] button"
+
+  # "More options" on the quick-create popup → opens the FULL editor (where
+  # event_recurrence + the corrected field widgets live). Create → Event opens
+  # the condensed quick-create popup, NOT the full editor; create_event's view
+  # entry clicks this to reach it. The button has NO aria-label (live-confirmed
+  # 2026-05-28) — text-labeled <button> in the popup dialog; match by visible
+  # text via trigger_text.
+  google-calendar.more_options:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[role='dialog'] button"
+        - button
+      verify_target: input[aria-label='Title'], input#xTiIn
+    overrides:
+      trigger_text: "More options"
+      verify_timeout_ms: 8000
+
+  # ─── Calendar grid: event chip → detail popup ─────────────────────
+
+  google-calendar.event_chip:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        # G1 (live-confirmed 2026-05-28): the grid chip's data-eventid is
+        # the eid = base64url(apiId + " " + calendarId), NOT the API id
+        # that search/list/get return. The jslog attr embeds the RAW api
+        # id (2:["<apiId>",...]) and matches uniquely — so it is PRIMARY.
+        # The data-eventid forms only match if {{event_id}} is already the
+        # eid; kept as fallbacks. For by-id reads prefer get_event's
+        # session_api (gapi events.get) — no chip needed.
+        - "div[role='button'][jslog*='{{event_id}}']"
+        - "[role='button'][data-eventid='{{event_id}}']"
+        - "[data-eventid='{{event_id}}']"
+      verify_target: "[role='dialog']"
+    overrides:
+      verify_timeout_ms: 6000
+
+  # ─── Event detail popup: edit / delete / RSVP ─────────────────────
+
+  google-calendar.event_edit_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[role='dialog'] button[aria-label='Edit event']"
+        - "[role='dialog'] button[aria-label*='Edit']"
+      verify_target: input[aria-label='Title'], input#xTiIn
+    overrides:
+      verify_timeout_ms: 8000
+
+  google-calendar.event_delete_button:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - "[role='dialog'] button[aria-label='Delete event']"
+        - "[role='dialog'] button[aria-label*='Delete']"
+      verify_target: "[role='dialog']"
+    overrides:
+      verify_timeout_ms: 8000
+
+  # rsvp_button: trigger templated on {{response}} — the action passes
+  # the API enum value (accepted / declined / tentative). Google's RSVP
+  # control labels the buttons Yes / No / Maybe; the data-* form below is
+  # the heal anchor for the first onboarding run.
+  google-calendar.rsvp_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[role='dialog'] [role='button'][data-response-status='{{response}}']"
+        - "[role='dialog'] [role='button'][aria-label*='{{response}}' i]"
+      verify_target: "[role='dialog'] [role='button'][aria-pressed='true']"
+    overrides:
+      verify_timeout_ms: 6000

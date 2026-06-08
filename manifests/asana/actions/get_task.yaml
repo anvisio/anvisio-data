@@ -1,0 +1,85 @@
+_meta:
+  name: manifests/asana/actions/get_task.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    get_task atom: fetch a single task with custom fields, assignee,
+    projects, parent / subtasks.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.task per v70 INTEGRATION_FORMAT signature parity rule. All three flavors' flat extracts already populate the Task whole from response.data."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Fetch a single Asana task.
+object: "{{inputs.task_gid}}"
+object_types: [Task]
+commits_changes: false
+depends_on_view: any
+mcp_tool: asana.get_task
+inputs:
+  task_gid:   { type: text, required: true, sample: "1213754599099000" }
+  opt_fields: { type: text, required: false, default: "name,notes,assignee.name,due_on,due_at,completed,projects,memberships.section.name,custom_fields,parent,permalink_url" }
+result:
+  task:
+    schema: Task
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: SPA GET /tasks/{gid}
+    recipe:
+      - id: api_call
+        type: call_platform_api
+        args:
+          api_def:
+            kind: asana_session_api
+            endpoint: "https://app.asana.com/api/1.0/tasks/{{inputs.task_gid}}?opt_fields={{inputs.opt_fields}}"
+            method: GET
+            extract_path: ""
+    outcomes:
+      - action: fetched
+        signal:
+          type: network_response
+          url_pattern: "app.asana.com/api/1.0/tasks/*"
+          status: 200
+          timeout_ms: 10000
+        extract:
+          task:
+            from_step: api_call
+            path: data
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Asana MCP get_task
+    server: asana
+    tool: get_task
+    outcomes:
+      - action: fetched
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          task:
+            from_api_response: true
+            path: data
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST GET /tasks/{gid}
+    request:
+      method: GET
+      url: "https://app.asana.com/api/1.0/tasks/{{inputs.task_gid}}"
+      query:
+        opt_fields: "{{inputs.opt_fields}}"
+    outcomes:
+      - action: fetched
+        signal:
+          type: network_response
+          url_pattern: "asana.com/api/1.0/tasks/*"
+          status: 200
+        extract:
+          task:
+            from_api_response: true
+            path: data

@@ -1,25 +1,30 @@
 _meta:
   name: manifests/salesforce/actions/query_records.yaml
-  version: 0.1.0
+  version: 0.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    query_records atom — SOQL-style query over an object with optional
-    where / orderBy / limit. Read-only; reads prefer
-    session_api > mcp > browser per spec 70 §7. The browser flavor is
-    the slow fallback (drives the list view + reads visible rows).
+    query_records atom: list the records of an SF listview. Read-only;
+    reads prefer session_api > mcp > browser per spec 70 §7.
   changelog:
+    - "0.4.0 (2026-05-29): add the missing mcp `inputs_map` (objectName/fields/where/orderBy/limit). The query_records MCP tool requires objectName+fields (_mcp_tools.yaml) but the flavor passed nothing — surfaced by the /harden-browser-flavor step-0 MCP parity check. Mirrors update_record.mcp's inputs_map shape. No effect on the session_api/browser paths the browser-first runtime uses."
+    - "0.3.0 (2026-05-24): add Case + Event to object_types (8 SF schemas now exist). Add schema-typed result.records: schema_union list per v70 signature parity rule. browser still returns literal:[] (the listview DOM scrape is brittle; session_api Aura path is the real source). session_api uses from_aura_records which flattens to {Id, ...} matching the schema field names; mcp returns SOQL records (also {Id, ...})."
+    - "0.2.0 (2026-05-21): session_api rewritten to Aura ListUiController.postListRecordsByName (the ONLY SF read proven to work statelessly on the Lightning session cookie). SOQL where/orderBy dropped — list controllers ignore filters."
     - "0.1.0 (2026-05-19): initial v70 seed."
 
 description: >
-  Query records on an SF object with optional WHERE / ORDER BY / LIMIT.
-  session_api hits /services/data/v62.0/query directly with a constructed
-  SOQL string; mcp goes through the MCP `query_records` tool. The browser
-  flavor opens /lightning/o/{object_type}/list and reads visible rows
-  (used only when neither API path is available).
+  List the records of a Salesforce listview. session_api dispatches the
+  Aura ListUiController.postListRecordsByName controller from MAIN-world
+  via call_platform_api (session cookie + CSRF auto-extracted) — the one
+  SF read path proven to work statelessly on a Lightning cookie. It
+  returns the named listview's records with that listview's columns;
+  SF list controllers ignore server-side filters, so callers scope by
+  picking the listview and filter / judge client-side. mcp goes through
+  the SF MCP query_records tool (true SOQL). browser opens
+  /lightning/o/{object_type}/list as a last-resort fallback.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: false
 depends_on_view: any
 mcp_tool: salesforce.query_records
@@ -27,44 +32,79 @@ inputs:
   object_type:
     type: text
     required: true
+    sample: Opportunity
+  list_view:
+    type: text
+    required: false
+    description: >
+      Listview API name to list (session_api / browser). e.g.
+      AllOpportunities, AllAccounts, AllContacts, AllOpenLeads.
+    sample: AllOpportunities
   fields:
     type: list<text>
-    required: true
-    description: SOQL field list (e.g. ["Id", "Name", "StageName", "Amount", "CloseDate"])
+    required: false
+    description: SOQL field list — honored only by the mcp flavor.
   where:
     type: text
     required: false
-    description: SOQL WHERE clause body (without the keyword), e.g. "CloseDate THIS_WEEK"
+    description: SOQL WHERE clause body — honored only by the mcp flavor.
   orderBy:
     type: text
     required: false
+    description: SOQL ORDER BY clause — honored only by the mcp flavor.
   limit:
     type: integer
     required: false
 result:
-  records: list<object>
-  totalSize: integer
+  records:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
+    cardinality: list
 flavors:
   session_api:
     requires_auth: session_cookie
-    label: GET /services/data/v62.0/query
-    api: salesforce.query_records_session
+    label: SF list records via Aura postListRecordsByName (session cookie + CSRF)
+    recipe:
+      - id: aura_list
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "aura://ListUiController/ACTION$postListRecordsByName"
+            extract_path: "actions[0].returnValue.records"
+          args:
+            objectApiName: "{{inputs.object_type}}"
+            listViewApiName: "{{inputs.list_view}}"
+            listRecordsQuery:
+              pageSize: 50
     outcomes:
       - action: queried
+        # The Aura call runs entirely inside the recipe's call_platform_api
+        # step — there is no post-recipe DOM/URL transition, so a
+        # network_response signal would start watching AFTER the fetch
+        # already completed and time out. url_matches on the SF domain
+        # resolves on the first poll; `extract` then reads the step result.
         signal:
-          type: network_response
-          url_pattern: "/services/data/v62.0/query.*"
-          status: 200
+          type: url_matches
+          pattern: "lightning\\.force\\.com"
+          timeout_ms: 10000
         extract:
           records:
-            from_api_response: ".records"
-          totalSize:
-            from_api_response: ".totalSize"
+            from_aura_records: aura_list
   mcp:
     requires_auth: mcp_server
     label: Query via SF MCP server
     server: salesforce
     tool: query_records
+    # The query_records MCP tool REQUIRES objectName + fields (see
+    # _mcp_tools.yaml). Without this map the flavor passed nothing and the
+    # MCP call would reject. object_type → objectName; the SOQL filter inputs
+    # (honored only here, per the atom description) pass straight through.
+    inputs_map:
+      objectName: "{{inputs.object_type}}"
+      fields: "{{inputs.fields}}"
+      where: "{{inputs.where}}"
+      orderBy: "{{inputs.orderBy}}"
+      limit: "{{inputs.limit}}"
     outcomes:
       - action: queried
         signal:
@@ -74,8 +114,6 @@ flavors:
         extract:
           records:
             from_api_response: ".records"
-          totalSize:
-            from_api_response: ".totalSize"
   browser:
     requires_auth: session_cookie
     label: Navigate to list view; read visible rows

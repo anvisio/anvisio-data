@@ -1,0 +1,127 @@
+_meta:
+  name: manifests/outlook/_mcp_tools.yaml
+  version: 2.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Outlook Mail MCP tool catalog. Per spec 70 §3 this is the canonical
+    contract the browser-flavor atoms are authored AGAINST (catalog → atoms),
+    so a future mcp / oauth_api flavor is a no-op flavor-swap.
+
+    SOURCING (honest, per the add-integration 0.2 rule — no fabrication):
+    The Softeria ms-365-mcp-server README states every tool "maps 1-to-1 to a
+    Graph API endpoint" (tool defs live in its src/endpoints.json, NOT
+    reproduced in the README), and confirms the real mail tool names
+    `list-mail-messages` / `get-mail-message` (+ `send-mail`). So the REAL
+    contract is Microsoft Graph itself. The schemas below were VERIFIED
+    directly from the Microsoft Graph v1.0 reference (learn.microsoft.com,
+    fetched 2026-06-01) — list-messages, get-message (Message resource), and
+    sendMail — NOT dumped from a live server. `tool` is the anvisio-normalized
+    verb (matches each action's `mcp_tool:` pointer); `mcp_tool_name` +
+    `graph_endpoint` record the real underlying operation.
+
+    NOT verified by a live MCP-server call (no server was run); the Graph
+    docs are the authority. Mark any future additions you can't trace to a
+    Graph endpoint `unverified: true`.
+  changelog:
+    - "2.0.0 (2026-06-01): REPLACES the fabricated 1.0.0. 1.0.0 hand-authored tool defs to match verbs already chosen + carried a misleading `fetched_at` (the add-integration 0.2 anti-pattern). 2.0.0 grounds every tool in the verified MS Graph v1.0 contract: real Graph field names (conversationId, from.emailAddress.address, toRecipients, body.contentType/content, receivedDateTime), real endpoints, and the real Softeria tool names. Key verified facts now reflected in the atoms: sendMail returns 202 + NO body/id (send_email.message_id is correctly null); list-messages exposes conversationId (browser data-convid maps to it); get-message takes a message id (oauth read needs a conversationId→message reconciliation — noted divergence)."
+    - "1.0.0 (2026-06-01): SUPERSEDED — fabricated stub."
+
+server:
+  name: ms-365-mcp-server
+  source_url: https://github.com/softeria/ms-365-mcp-server
+  remote_url: https://agent365.svc.cloud.microsoft/agents/tenants/{tenant_id}/servers/mcp_MailTools
+  transport: stdio
+  contract_authority: https://learn.microsoft.com/en-us/graph/api/resources/message
+  researched_at: 2026-06-01
+
+tools:
+  - tool: search_emails
+    mcp_tool_name: list-mail-messages
+    graph_endpoint: GET /me/messages
+    description: |
+      List/search messages in the mailbox. Graph $search is KQL free-text;
+      $top caps the page (1-1000, default 10); paging via @odata.nextLink.
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query:      { type: string, description: "KQL/free-text → Graph $search" }
+        maxResults: { type: integer, description: "→ Graph $top" }
+    output_schema:
+      type: object
+      properties:
+        value:
+          type: array
+          items:
+            type: object
+            properties:
+              id:               { type: string, description: "message id (Graph primary key)" }
+              conversationId:   { type: string, description: "thread id — the browser scrapes this (data-convid)" }
+              subject:          { type: string }
+              from:             { type: object, description: "{ emailAddress: { name, address } }" }
+              receivedDateTime: { type: string, format: date-time }
+              bodyPreview:      { type: string }
+              isRead:           { type: boolean }
+              hasAttachments:   { type: boolean }
+    # anvisio mapping: result.conversation_ids ← value[].conversationId
+    # (NOT value[].id — browser+atom work at conversation granularity).
+
+  - tool: read_email
+    mcp_tool_name: get-mail-message
+    graph_endpoint: GET /me/messages/{id}
+    description: |
+      Get a single message by its Graph message id. Returns the full Message
+      resource. NOTE id divergence: the browser flavor's messageId is a
+      conversationId (data-convid); the oauth flavor takes a message id, so
+      an oauth read must reconcile (GET /me/messages?$filter=conversationId eq
+      '{id}'&$orderby=receivedDateTime desc&$top=1). Documented, not yet built.
+    input_schema:
+      type: object
+      required: [messageId]
+      properties:
+        messageId: { type: string }
+    output_schema:
+      type: object
+      properties:
+        subject:          { type: string }
+        from:             { type: object, description: "{ emailAddress: { name, address } }" }
+        toRecipients:     { type: array, description: "[{ emailAddress: { name, address } }]" }
+        body:             { type: object, description: "{ contentType: Text|HTML, content }" }
+        receivedDateTime: { type: string, format: date-time }
+        hasAttachments:   { type: boolean }
+    # anvisio mapping: subject←subject, from←from.emailAddress.address, body←body.content.
+    # to/receivedDateTime/hasAttachments available for future enrichment.
+
+  - tool: send_email
+    mcp_tool_name: send-mail
+    graph_endpoint: POST /me/sendMail
+    description: |
+      Send a new message. VERIFIED: returns 202 Accepted with NO response
+      body and NO message id, and saves the message to Sent Items. This is
+      why send_email.result.message_id is null in EVERY flavor (the id isn't
+      returned) and why the browser L4 can't read a sent id — the only
+      post-hoc confirmation is the Sent-folder delta.
+    input_schema:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: object
+          required: [subject, body, toRecipients]
+          properties:
+            subject:       { type: string }
+            body:          { type: object, description: "{ contentType: Text|HTML, content }" }
+            toRecipients:  { type: array, description: "[{ emailAddress: { address } }]" }
+            ccRecipients:  { type: array }
+            bccRecipients: { type: array }
+        saveToSentItems: { type: boolean, description: "default true" }
+    output_schema:
+      type: object
+      description: "202 Accepted, empty body — no id returned."
+      properties:
+        sent: { type: boolean }
+    # anvisio mapping: To→message.toRecipients[].emailAddress.address,
+    # Subject→message.subject, Body→message.body.content; result.sent=true on 202;
+    # result.message_id=null (Graph returns no id).

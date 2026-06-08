@@ -1,0 +1,106 @@
+_meta:
+  name: manifests/asana/actions/list_projects.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    list_projects atom: fetch projects in a workspace. Read;
+    spec 70 §7 priority is session_api > mcp > oauth_api.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.projects: list<Project> per v70 signature parity rule. Flat extracts on .data already populate the list whole."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: List Asana projects in a workspace.
+object: projects
+object_types: [Project]
+commits_changes: false
+depends_on_view: any
+mcp_tool: asana.list_projects
+inputs:
+  workspace:  { type: text, required: true, sample: "1213743270865179", description: "Workspace gid." }
+  team:       { type: text, required: false }
+  archived:   { type: text, required: false, default: "false" }
+  limit:      { type: integer, required: false, default: 50, maximum: 100 }
+  offset:     { type: text, required: false, default: "" }
+  opt_fields: { type: text, required: false, default: "name,owner,color,default_view,archived,team" }
+result:
+  projects:
+    schema: Project
+    cardinality: list
+  next_offset:
+    type: text
+    nullable: true
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: SPA GET /workspaces/{gid}/projects
+    recipe:
+      - id: api_call
+        type: call_platform_api
+        args:
+          api_def:
+            kind: asana_session_api
+            endpoint: "https://app.asana.com/api/1.0/workspaces/{{inputs.workspace}}/projects?limit={{inputs.limit}}&offset={{inputs.offset}}&opt_fields={{inputs.opt_fields}}"
+            method: GET
+            extract_path: ""
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "app.asana.com/api/1.0/workspaces/*/projects*"
+          status: 200
+          timeout_ms: 10000
+        extract:
+          projects:
+            from_step: api_call
+            path: data
+          next_offset:
+            from_step: api_call
+            path: next_page.offset
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Asana MCP list_projects
+    server: asana
+    tool: list_projects
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          projects:
+            from_api_response: true
+            path: data
+          next_offset:
+            from_api_response: true
+            path: next_page.offset
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST GET /workspaces/{gid}/projects
+    request:
+      method: GET
+      url: "https://app.asana.com/api/1.0/workspaces/{{inputs.workspace}}/projects"
+      query:
+        team:       "{{inputs.team}}"
+        archived:   "{{inputs.archived}}"
+        limit:      "{{inputs.limit}}"
+        offset:     "{{inputs.offset}}"
+        opt_fields: "{{inputs.opt_fields}}"
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "asana.com/api/1.0/workspaces/*/projects"
+          status: 200
+        extract:
+          projects:
+            from_api_response: true
+            path: data
+          next_offset:
+            from_api_response: true
+            path: next_page.offset

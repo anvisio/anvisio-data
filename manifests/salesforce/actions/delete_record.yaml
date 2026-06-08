@@ -1,24 +1,26 @@
 _meta:
   name: manifests/salesforce/actions/delete_record.yaml
-  version: 2.0.0
+  version: 2.2.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    delete_record atom — destructive removal of a single SF record.
-    Spec 70: `browser` flavor walks the RecordView overflow menu →
-    Delete → confirm-modal (confirm click is the commit step);
+    delete_record atom: destructive removal of a single SF record.
+    Spec 70: `browser` flavor walks the RecordView overflow menu to
+    Delete to confirm-modal (confirm click is the commit step);
     `session_api` fires DELETE /sobjects/<obj>/<id>; `mcp` calls
-    dml_records with operation: delete. Writes prefer
-    browser > session_api > mcp per spec 70 §7 — user sees the
-    delete confirmation before committing.
+    dml_records with operation: delete. Writes prefer browser >
+    session_api > mcp per spec 70 §7: user sees the delete confirmation
+    before committing.
   changelog:
-    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified browser recipe + selectors carry over from v1.0.0."
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    - "2.2.0 (2026-05-29): spec 72 — browser `deleted` L4 gains the positive toaster rung. Live-probed the toast as `<Obj> \"<Name>\" was deleted. Undo` in `.toastMessage` (.slds-theme--success, role=null). New signal: all:[transient_appears .toastMessage 'was deleted', url_matches /o/.../list]. The url-nav was already discard-safe (cancelling the confirm dialog stays on /view — live-confirmed), but it timed out slowly on abandon; the toaster rung + `abandon_signal` (selector_disappears the confirm dialog) now resolve a cancel FAST via the grace-arbitrated race. Dropped the timeout_ms:12000 (inherit caller budget)."
+    - "2.1.0 (2026-05-24): add Case + Event to object_types (matching the 8 SF schemas authored from live describe). Add schema-typed result.record per v70 signature parity rule; all flavors echo record.Id from input."
+    - "2.0.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified browser recipe + selectors carry over from v1.0.0."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/. Live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Delete a record from its detail page via the overflow menu.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: true
 depends_on_view: RecordView
 mcp_tool: salesforce.dml_records
@@ -33,10 +35,20 @@ inputs:
 result:
   record_id: id
   deleted: boolean
+  record:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
 flavors:
   browser:
     requires_auth: session_cookie
     label: Open the delete dialog; confirm when commit:true
+    # Spec 72 R1: a HITL discard = the user clicking Cancel in the confirm
+    # dialog (dialog gone, no "was deleted" toast, stays on /view — live-
+    # confirmed 2026-05-29). Same selector as the `deleted` rung-2 surface;
+    # the grace window disambiguates (toast/list-nav in grace -> deleted,
+    # else -> cancelled).
+    abandon_signal:
+      type: selector_disappears
+      selector: div[role='dialog']
     recipe:
       - id: open_overflow
         type: use_widget
@@ -60,16 +72,29 @@ flavors:
           type: selector_appears
           selector: div[role='dialog'] button[title='Delete']
           timeout_ms: 8000
+      # Spec 72 L4 consequence ladder. Rung 1 (positive): the success toaster
+      # — live-probed 2026-05-29 as `<Obj> "<Name>" was deleted. Undo` in
+      # `.toastMessage` (.slds-theme--success, role=null — NOT [role='alert']).
+      # Rung 2 (corroborating): the post-delete nav to the object list. all:
+      # so cancelling the confirm dialog (no toaster, stays on /view) reports
+      # NOT committed. No per-rung timeout_ms — inherit the caller budget
+      # (30s commit / 10min HITL).
       - action: deleted
         signal:
-          type: url_matches
-          pattern: /lightning/o/.+/(list|home)
-          timeout_ms: 12000
+          all:
+            - type: transient_appears
+              selector: ".toastMessage"
+              must_contain_text: "was deleted"
+            - type: url_matches
+              pattern: /lightning/o/.+/(list|home)
         extract:
           record_id:
             from_input: record_id
           deleted:
             literal: true
+          record:
+            Id:
+              from_input: record_id
   session_api:
     requires_auth: session_cookie
     label: DELETE /services/data/v62.0/sobjects/{object_type}/{record_id}
@@ -85,6 +110,9 @@ flavors:
             from_input: record_id
           deleted:
             literal: true
+          record:
+            Id:
+              from_input: record_id
   mcp:
     requires_auth: mcp_server
     label: Delete via SF MCP server (dml_records delete)
@@ -106,3 +134,6 @@ flavors:
             from_input: record_id
           deleted:
             from_api_response: ".results[0].success"
+          record:
+            Id:
+              from_input: record_id

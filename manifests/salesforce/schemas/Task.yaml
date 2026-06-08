@@ -1,0 +1,74 @@
+_meta:
+  name: manifests/salesforce/schemas/Task.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-24
+  description: |
+    Task schema: standard SF Task fields trimmed from the live org's
+    RecordUiController.getObjectInfo describe (2026-05-24). Used by
+    create_record / update_record when object_type=Task.
+  changelog:
+    - "0.1.0 (2026-05-24): initial schema authored from live SF describe. Trimmed to user-facing CRUD fields out of 40 standard fields. Recurrence* fields dropped (not commonly used in our flows); call telemetry fields (CallDisposition, CallDurationInSeconds, etc.) also dropped."
+
+description: |
+  A Salesforce Task. Key prefix 00T.
+  Required: Subject, Status, Priority.
+  An activity record. WhoId is polymorphic (Contact|Lead);
+  WhatId is polymorphic across ~70 object types (Account, Opportunity,
+  Case, Campaign, etc.). Live-probed.
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    label: Task ID
+    primary: true
+    readonly: true
+  Subject:
+    type: text
+    label: Subject
+    required: true
+  Status:
+    type: picklist
+    label: Status
+    required: true
+  Priority:
+    type: picklist
+    label: Priority
+    required: true
+  ActivityDate:
+    type: date
+    label: Due Date
+    optional: true
+  WhoId:
+    type: id
+    label: Name (Contact / Lead)
+    optional: true
+    ref: Contact.Id, Lead.Id
+    description: Polymorphic reference (Contact or Lead).
+  WhatId:
+    type: id
+    label: Related To
+    optional: true
+    description: Polymorphic reference (Account, Opportunity, Case, ~70 object types).
+  TaskSubtype:
+    type: picklist
+    label: Subtype
+    optional: true
+  Description:
+    type: textarea
+    label: Comments
+    optional: true
+  ReminderDateTime:
+    type: datetime
+    label: Reminder
+    optional: true
+  IsReminderSet:
+    type: bool
+    label: Reminder Set
+    optional: true
+  OwnerId:
+    type: id
+    label: Assigned To
+    optional: true
+    ref: User.Id

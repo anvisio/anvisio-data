@@ -1,0 +1,93 @@
+_meta:
+  name: manifests/outlook-calendar/_mcp_tools.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Outlook Calendar MCP tool catalog. Per spec 70 §3 this is the canonical
+    contract the browser-flavor atoms are authored AGAINST (catalog → atoms).
+
+    SOURCING (per the add-integration 0.2 rule — fetched from the AUTHORITATIVE
+    file, not inferred): tool names verified from the Softeria ms-365-mcp-server
+    `src/endpoints.json` (fetched 2026-06-01); each maps 1:1 to a Microsoft
+    Graph endpoint, and the schemas were verified directly from the MS Graph
+    v1.0 reference (learn.microsoft.com: list-events, event resource,
+    create-event). NOT a live-server dump. `tool` is the anvisio-normalized
+    verb (matches the action `mcp_tool:` pointer); `mcp_tool_name` +
+    `graph_endpoint` record the real underlying operation.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new, grounded on the real endpoints.json catalog + verified Graph contract. Key verified fact: create-calendar-event (POST /me/events) returns 201 Created WITH the Event body (id + webLink) — UNLIKE mail's sendMail (202, no id) — so create_event.result CAN populate event_id + html_link."
+
+server:
+  name: ms-365-mcp-server
+  source_url: https://github.com/softeria/ms-365-mcp-server
+  remote_url: https://agent365.svc.cloud.microsoft/agents/tenants/{tenant_id}/servers/mcp_CalendarTools
+  transport: stdio
+  contract_authority: https://learn.microsoft.com/en-us/graph/api/resources/event
+  researched_at: 2026-06-01
+
+tools:
+  - tool: list_events
+    mcp_tool_name: get-calendar-view
+    graph_endpoint: GET /me/calendarView
+    description: |
+      List events in a date range (the right tool for a daily/weekly brief).
+      startDateTime/endDateTime bound the range; expands recurring instances.
+      (list-calendar-events = GET /me/events is the non-range sibling.)
+    input_schema:
+      type: object
+      required: [startDateTime, endDateTime]
+      properties:
+        startDateTime: { type: string, format: date-time }
+        endDateTime:   { type: string, format: date-time }
+    output_schema:
+      type: object
+      properties:
+        value:
+          type: array
+          items:
+            type: object
+            properties:
+              id:               { type: string }
+              subject:          { type: string }
+              start:            { type: object, description: "{ dateTime, timeZone }" }
+              end:              { type: object, description: "{ dateTime, timeZone }" }
+              location:         { type: object, description: "{ displayName }" }
+              attendees:        { type: array,  description: "[{ emailAddress{name,address}, type, status }]" }
+              organizer:        { type: object, description: "{ emailAddress{name,address} }" }
+              isAllDay:         { type: boolean }
+              webLink:          { type: string }
+    # anvisio mapping: events[] ← value[]; start/end ← start.dateTime/end.dateTime.
+
+  - tool: create_event
+    mcp_tool_name: create-calendar-event
+    graph_endpoint: POST /me/events
+    description: |
+      Create a calendar event. VERIFIED: returns 201 Created WITH the Event
+      object in the body (id, createdDateTime, webLink) — so the oauth/mcp
+      flavors CAN return event_id + html_link (contrast mail sendMail: 202, no id).
+    input_schema:
+      type: object
+      required: [subject, start, end]
+      properties:
+        subject:     { type: string }
+        start:       { type: object, description: "{ dateTime (ISO 8601), timeZone }" }
+        end:         { type: object, description: "{ dateTime (ISO 8601), timeZone }" }
+        location:    { type: object, description: "{ displayName }" }
+        attendees:   { type: array,  description: "[{ emailAddress{address,name}, type }]" }
+        body:        { type: object, description: "{ contentType, content }" }
+        isOnlineMeeting: { type: boolean }
+    output_schema:
+      type: object
+      description: "201 Created — full Event in body."
+      properties:
+        id:      { type: string }
+        webLink: { type: string }
+    # anvisio mapping: Title→subject, StartTime→start.dateTime, EndTime→end.dateTime,
+    # Location→location.displayName, Attendees→attendees[].emailAddress.address;
+    # result.event_id←id, result.html_link←webLink.
+
+  # Also in the catalog (for expansion): get-calendar-event (GET /me/events/{id}),
+  # update-calendar-event (PATCH), delete-calendar-event (DELETE),
+  # accept-/decline-calendar-event (POST .../accept|decline).

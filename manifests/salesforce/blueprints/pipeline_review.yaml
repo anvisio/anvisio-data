@@ -1,0 +1,58 @@
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: pipeline-review
+  version: '1.0.0'
+  title: Pipeline review (multi-select)
+  summary: |
+    Pull your open opportunities, let you multi-select the ones worth a
+    closer look (checkboxes + select-all over a rich card — stage, amount,
+    close date, open-in-SF ↗), then synthesize a short prep briefing across
+    just the ones you picked. The select:many half of the pick view — the
+    counterpart to upsert_contact's select:one.
+
+do:
+  - opps:
+      label: Listing your opportunities
+      call: salesforce.atom.query_records
+      with:
+        object_type: Opportunity
+        list_view: AllOpportunities
+
+  - chosen:
+      label: Pick opportunities to brief
+      pick:
+        prompt: "Your open pipeline. Select the opportunities to brief — one, a few, or all."
+        from: '${ .opps.records }'
+        select: many
+        display:
+          main: '${ $item.Name }'
+          # Rich per-entity viz from the listview columns (query_records
+          # returns the AllOpportunities columns; from_aura_records flattens).
+          sub: '${ $item.StageName } · $${ $item.Amount } · closes ${ $item.CloseDate }'
+        link:
+          view: RecordView
+          with:
+            object_type: Opportunity
+            record_id: '${ $item.Id }'
+
+  - summary:
+      label: Prepping your briefing
+      synthesize: |
+        Compose a prep briefing for the selected opportunities, formatted as
+        MARKDOWN so it renders as rows. Each item in `selected` is one
+        opportunity already rendered for display: `main` is its name, `sub` is
+        "stage · $amount · closes date".
+        - First line: total pipeline value across the selection ($) and the count.
+        - Then ONE bullet per opportunity: `**<main>** — <sub>` then a short
+          talking point (what to do or watch for next).
+        - Close with one line flagging the one or two that need attention first.
+        Keep each talking point tight. Use only the opportunities provided.
+      with:
+        # Pass the pick's rendered rows ({main, sub, href}), NOT .chosen.selected:
+        # the raw Aura records carry deeply nested Account/Owner sub-records the
+        # briefing never reads. The display templates already projected the
+        # scalars it prints (Name/Stage/Amount/CloseDate), so this is the same
+        # information at a fraction of the tokens. (The engine has no array-map to
+        # project .selected inline; reusing picks is the DRY scalar view.)
+        selected: '${ .chosen.picks }'

@@ -1,0 +1,277 @@
+_meta:
+  name: manifests/hubspot/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot APIs catalog. Three transports:
+
+      - `session_cookie` on `app{,-na2,-eu1,…}.hubspot.com` — what the
+        SPA itself uses. /api/graphql/crm is the primary read path
+        (the deal board, contact list, and record view all hydrate
+        through it). /api/properties/v4 + /api/pipelines/v2 cover
+        schema / pipeline introspection. CSRF is sent in the
+        `x-hubspot-csrf-hubspotapi` header (the value is also stored
+        as the `hubspotapi-csrf` cookie); the runtime's session_api
+        transport extracts it from cookies.
+      - `oauth_api` on `api.hubapi.com` — the public REST surface
+        documented at developers.hubspot.com/docs/api/crm. Requires
+        an OAuth bearer token or private-app token; out-of-scope for
+        the session-cookie default path.
+      - `mcp` via the official remote server at https://mcp.hubspot.com
+        (OAuth 2.1 + PKCE). See _mcp_tools.yaml.
+
+    The session_cookie path is the daily-driver — the user is already
+    in a HubSpot tab when the blueprint fires, so we ride the existing
+    session. oauth_api / mcp are wired for headless / cross-tab
+    invocations.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. GraphQL crmObjectsSearch +
+       properties/v4 + pipelines/v2 captured live from the deal-board
+       page load on portal 245597800. REST endpoint shapes from
+       developers.hubspot.com/docs/api/crm/objects."
+
+apis:
+  # ── In-session GraphQL (the SPA's own read path) ──────────────────
+  graphql_crm_search:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "app*.hubspot.com"
+    endpoint_pattern: "{instance.origin}/api/graphql/crm?portalId={portal_id}"
+    method: POST
+    csrf_header: x-hubspot-csrf-hubspotapi
+    csrf_cookie: hubspotapi-csrf
+    body_template:
+      operationName: CrmObjectSearch
+      variables:
+        filterGroups: "{{inputs.filter_groups}}"
+        sorts: "{{inputs.sorts}}"
+        query: "{{inputs.query}}"
+        objectTypeId: "{{inputs.object_type_id}}"
+        properties: "{{inputs.properties}}"
+        count: "{{inputs.count}}"
+        offset: "{{inputs.offset}}"
+      query: |
+        query CrmObjectSearch(
+          $filterGroups: [FilterGroup!]!
+          $sorts: [Sort!]
+          $query: String
+          $objectTypeId: String!
+          $properties: [String!]!
+          $count: Int
+          $offset: Int
+        ) {
+          crmObjectsSearch(
+            filterGroups: $filterGroups
+            sorts: $sorts
+            query: $query
+            type: $objectTypeId
+            count: $count
+            offset: $offset
+          ) {
+            total
+            offset
+            hasMore
+            results {
+              id
+              objectId: id
+              properties(names: $properties) {
+                name
+                value
+              }
+            }
+          }
+        }
+    extract_path: data.crmObjectsSearch
+    inputs:
+      portal_id:      { type: text, required: true }
+      object_type_id: { type: text, required: true, sample: "0-3" }
+      properties:     { type: list<text>, required: true, sample: ["dealname", "amount", "dealstage"] }
+      filter_groups:  { type: list<object>, required: false, default: [] }
+      sorts:          { type: list<object>, required: false, default: [] }
+      query:          { type: text, required: false, default: "" }
+      count:          { type: integer, required: false, default: 50 }
+      offset:         { type: integer, required: false, default: 0 }
+    response_shape:
+      type: object
+      properties:
+        total:   { type: integer }
+        offset:  { type: integer }
+        hasMore: { type: boolean }
+        results: { type: array }
+    confidence: high
+    verified_at: 2026-05-23
+    notes: |
+      Verified live 2026-05-23 from a deal-board page load on portal
+      245597800. Response body has the property values nested at
+      `results[].properties[].value` (array of {name,value} pairs).
+      A future `from_hubspot_properties` extract source could flatten
+      that into a {Id, propName: value, ...} record — mirrors the SF
+      from_aura_records pattern.
+
+  graphql_crm_objects_get:
+    transport: session_api
+    auth: session_cookie
+    domain_condition: "app*.hubspot.com"
+    endpoint_pattern: "{instance.origin}/api/graphql/crm?portalId={portal_id}"
+    method: POST
+    csrf_header: x-hubspot-csrf-hubspotapi
+    csrf_cookie: hubspotapi-csrf
+    body_template:
+      operationName: CrmObjectGet
+      variables:
+        id: "{{inputs.record_id}}"
+        objectTypeId: "{{inputs.object_type_id}}"
+        properties: "{{inputs.properties}}"
+      query: |
+        query CrmObjectGet($id: String!, $objectTypeId: String!, $properties: [String!]!) {
+          crmObject(id: $id, type: $objectTypeId) {
+            id
+            objectId: id
+            properties(names: $properties) {
+              name
+              value
+            }
+          }
+        }
+    extract_path: data.crmObject
+    inputs:
+      portal_id:      { type: text, required: true }
+      object_type_id: { type: text, required: true }
+      record_id:      { type: text, required: true }
+      properties:     { type: list<text>, required: true }
+    confidence: medium
+    verified_at: null
+    notes: |
+      Shape inferred from the search query; needs a live-verify pass
+      against a record-view page load to confirm `crmObject(id, type)`
+      is the right field name. Fall back to the REST GET endpoint
+      below if this shape proves wrong.
+
+  # ── In-session metadata (property + pipeline introspection) ───────
+  properties_groups:
+    transport: rest
+    auth: session_cookie
+    domain_condition: "app*.hubspot.com"
+    method: GET
+    endpoint_pattern: "{instance.origin}/api/properties/v4/groups/{object_type_id}/properties?includeFieldLevelPermission=true&portalId={portal_id}"
+    inputs:
+      object_type_id: { type: text, required: true, sample: "0-3" }
+      portal_id:      { type: text, required: true }
+    response_shape:
+      type: object
+      properties:
+        results: { type: array, description: "groups[].propertyDefinitions[].property" }
+    confidence: high
+    verified_at: 2026-05-23
+    notes: |
+      The data source for schema/<Object>.yaml generation. Each entry
+      under results[].propertyDefinitions[].property carries
+      label/type/fieldType/options/description — enough to seed a
+      typed schema without an MCP call.
+
+  pipelines_get:
+    transport: rest
+    auth: session_cookie
+    domain_condition: "app*.hubspot.com"
+    method: GET
+    endpoint_pattern: "{instance.origin}/api/pipelines/v2/pipelines/{object_type_id}?includeApprovalStageStatus=true&portalId={portal_id}"
+    inputs:
+      object_type_id: { type: text, required: true, sample: "0-3" }
+      portal_id:      { type: text, required: true }
+    response_shape:
+      type: object
+      properties:
+        results: { type: array, description: "pipelines with stages[]" }
+    confidence: high
+    verified_at: 2026-05-23
+
+  # ── Public REST (api.hubapi.com — OAuth bearer or private-app PAT) ─
+  rest_search:
+    transport: oauth_api
+    auth: oauth_token
+    method: POST
+    endpoint_pattern: "https://api.hubapi.com/crm/v3/objects/{object_type}/search"
+    inputs:
+      object_type:   { type: text, required: true, sample: deals }
+      body:          { type: object, required: true }
+    response_shape:
+      type: object
+      properties:
+        total:   { type: integer }
+        results: { type: array }
+        paging:  { type: object }
+    notes: Body matches the public Search API spec (filterGroups + sorts + properties + query + limit + after).
+
+  rest_get_object:
+    transport: oauth_api
+    auth: oauth_token
+    method: GET
+    endpoint_pattern: "https://api.hubapi.com/crm/v3/objects/{object_type}/{record_id}?properties={properties_csv}&associations={associations_csv}"
+    inputs:
+      object_type:        { type: text, required: true }
+      record_id:          { type: text, required: true }
+      properties_csv:     { type: text, required: false }
+      associations_csv:   { type: text, required: false }
+    response_shape:
+      type: object
+      properties:
+        id:           { type: string }
+        properties:   { type: object }
+        associations: { type: object }
+
+  rest_create_object:
+    transport: oauth_api
+    auth: oauth_token
+    method: POST
+    endpoint_pattern: "https://api.hubapi.com/crm/v3/objects/{object_type}"
+    inputs:
+      object_type: { type: text, required: true }
+      body:        { type: object, required: true, description: "{ properties: { name: value }, associations: [...] }" }
+    response_shape:
+      type: object
+      properties:
+        id:         { type: string }
+        properties: { type: object }
+        createdAt:  { type: string }
+
+  rest_update_object:
+    transport: oauth_api
+    auth: oauth_token
+    method: PATCH
+    endpoint_pattern: "https://api.hubapi.com/crm/v3/objects/{object_type}/{record_id}"
+    inputs:
+      object_type: { type: text, required: true }
+      record_id:   { type: text, required: true }
+      body:        { type: object, required: true, description: "{ properties: { name: value } }" }
+    response_shape:
+      type: object
+      properties:
+        id:         { type: string }
+        properties: { type: object }
+        updatedAt:  { type: string }
+
+  rest_archive_object:
+    transport: oauth_api
+    auth: oauth_token
+    method: DELETE
+    endpoint_pattern: "https://api.hubapi.com/crm/v3/objects/{object_type}/{record_id}"
+    inputs:
+      object_type: { type: text, required: true }
+      record_id:   { type: text, required: true }
+    response_shape:
+      type: "null"
+
+  rest_properties_describe:
+    transport: oauth_api
+    auth: oauth_token
+    method: GET
+    endpoint_pattern: "https://api.hubapi.com/crm/v3/properties/{object_type}"
+    inputs:
+      object_type: { type: text, required: true }
+    response_shape:
+      type: object
+      properties:
+        results: { type: array }
+    notes: Public-API counterpart to /api/properties/v4 (same shape, OAuth-auth).
