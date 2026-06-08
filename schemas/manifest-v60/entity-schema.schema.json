@@ -4,49 +4,55 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/entity-schema.schema.json",
-      "version": "1.0.0",
-      "cdn_schema_version": "60.3.0",
+      "version": "2.0.0",
+      "cdn_schema_version": "70.0.0",
       "authored_by": "cd2k + claude",
-      "authored_at": "2026-05-11",
-      "description": "Per-role schema for manifests/<saas>/schemas/<Entity>.yaml body (post-_meta-strip). Requires the fields map; description optional. Per-field shape (type, widget, readonly, …) is validated permissively here and rigorously by the runtime validator.",
-      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled for v0"
+      "authored_at": "2026-06-08",
+      "description": "Per-role schema for manifests/<saas>/schemas/<Entity>.yaml body (post-_meta-strip). v70: the field map is `properties` OR the legacy `fields` (both conventions coexist in the data; at least one is required). Each entry must carry `type`. label/field_type/read_only/required/primary/picklist/sample optional. Per-field shape is validated permissively here and rigorously by the runtime validator. FOLLOW-UP: normalize the data to a single key.",
+      "changelog": [
+        "2.0.0 (2026-06-08): v70 shape — accept `properties` map (new) OR `fields` map (legacy); per-field `read_only`/`field_type`/`label`/`sample` allowed (additionalProperties:true).",
+        "1.0.0 (2026-05-11): initial v60 hand-rolled."
+      ],
+      "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled."
     }
   },
-  "title": "Spec 60 — schemas/<Entity>.yaml body",
-  "description": "Validates the body of a per-SaaS entity schema file (e.g. manifests/gmail/schemas/Message.yaml) after _meta is stripped. The fields map is required.",
+  "title": "Spec 70 — schemas/<Entity>.yaml body",
+  "description": "Validates the body of a per-SaaS entity schema file (e.g. manifests/gmail/schemas/Message.yaml) after _meta is stripped. A `properties` or `fields` map is required.",
   "type": "object",
-  "required": ["fields"],
   "additionalProperties": true,
+  "anyOf": [
+    { "required": ["properties"] },
+    { "required": ["fields"] }
+  ],
   "properties": {
-    "description": {
-      "type": "string"
+    "name": { "type": "string" },
+    "object_type_id": { "type": "string" },
+    "mcp_object_type": { "type": "string" },
+    "primary_key": {
+      "type": "array",
+      "items": { "type": "string" }
     },
-    "fields": {
+    "description": { "type": "string" },
+    "properties": { "$ref": "#/$defs/FieldMap" },
+    "fields": { "$ref": "#/$defs/FieldMap" }
+  },
+  "$defs": {
+    "FieldMap": {
       "type": "object",
-      "description": "Map of field name (e.g. Subject, To) → field definition. Each entry must have type; widget/primary/readonly/required/picklist are optional.",
+      "description": "Map of field name (e.g. Subject, To) → field definition. Each entry must have type; label/field_type/read_only/required/primary/picklist/sample are optional.",
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
         "required": ["type"],
         "additionalProperties": true,
         "properties": {
-          "type": {
-            "type": "string",
-            "description": "Field type (text, email, list<email>, id, …)."
-          },
-          "widget": {
-            "type": "string",
-            "description": "Widget id used to read/write this field (e.g. gmail.compose_to_input)."
-          },
-          "primary": {
-            "type": "boolean"
-          },
-          "readonly": {
-            "type": "boolean"
-          },
-          "required": {
-            "type": "boolean"
-          }
+          "type": { "type": "string", "description": "Field type (text, email, list<email>, id, string, …)." },
+          "field_type": { "type": "string", "description": "UI field kind (text, picklist, datetime, …)." },
+          "label": { "type": "string" },
+          "widget": { "type": "string", "description": "Widget id used to read/write this field." },
+          "primary": { "type": "boolean" },
+          "read_only": { "type": "boolean" },
+          "required": { "type": "boolean" }
         }
       }
     }

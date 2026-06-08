@@ -4,18 +4,18 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/action.schema.json",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "cdn_schema_version": "70.0.0",
       "authored_by": "cd2k + claude",
-      "authored_at": "2026-05-19",
+      "authored_at": "2026-06-08",
       "description": "Per-role schema for manifests/<saas>/actions/<verb>.yaml body (post-_meta-strip). Spec 70 update: accepts optional `mcp_tool:` pointer at the action level; per-flavor `recipe` is required ONLY for the `browser` flavor — the `oauth_api` flavor declares an inline `request:` block (provider/method/url/query) issued by the runtime oauth_api transport; session_api / byok_api flavors use an `api:` reference; the `mcp` flavor uses `server:` + `tool:`. Runtime validator enforces step-type vocabulary inside recipe[] and the ApiDef shape inside `call_platform_api` args (kind: aura | gapi | rest_session as of 1.2.0).",
       "regenerate_requires": "spec 60.3 §D3.5 — TS source-of-truth generator path; currently hand-rolled."
     }
   },
   "title": "Spec 70 — actions/<verb>.yaml body",
-  "description": "Validates the body of a per-SaaS action recipe file (e.g. manifests/gmail/actions/send_email.yaml) after _meta is stripped. description + flavors required.",
+  "description": "Validates the body of a per-SaaS action recipe file (e.g. manifests/gmail/actions/send_email.yaml) after _meta is stripped. flavors required; body-level description optional (v71 keeps it in _meta).",
   "type": "object",
-  "required": ["description", "flavors"],
+  "required": ["flavors"],
   "additionalProperties": true,
   "properties": {
     "description": {

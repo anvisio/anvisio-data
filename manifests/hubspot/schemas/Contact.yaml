@@ -38,7 +38,7 @@ properties:
     type: string
     field_type: text
     description: Primary email; HubSpot enforces uniqueness per portal.
-    sample: bh@hubspot.com
+    sample: brian.halligan@example.com
   phone:
     label: Phone Number
     type: string

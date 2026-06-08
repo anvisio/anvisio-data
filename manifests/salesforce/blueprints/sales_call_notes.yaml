@@ -92,7 +92,7 @@ do:
         fields:
           FirstName: James
           LastName: Wong
-          Email: james.wong@globalind.com
+          Email: james.wong@example.com
           Title: CTO
 
   - send_summary_email:
@@ -101,7 +101,7 @@ do:
       commit: false
       with:
         fields:
-          To: ['sarah@globalind.com']
+          To: ['sarah@example.com']
           Subject: 'Follow-up: Pricing & Pilot Timeline — Global Industries'
           Body: |
             Hi Sarah,
@@ -125,8 +125,8 @@ do:
           StartTime: '2026-06-09T14:00:00-07:00'
           EndTime:   '2026-06-09T14:45:00-07:00'
           Attendees:
-            - sarah@globalind.com
-            - james.wong@globalind.com
+            - sarah@example.com
+            - james.wong@example.com
           Description: |
             Technical review with Sarah (Global Industries) and James
             Wong (CTO, Global Industries) for the pilot.

@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/actions/list_records.yaml
-  version: 2.0.0
+  version: 2.0.1
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19

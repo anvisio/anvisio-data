@@ -106,6 +106,11 @@ export function expectsFrontmatter(repoPath) {
   if (repoPath.startsWith('widget-libraries/') && (repoPath.endsWith('.yaml') || repoPath.endsWith('.yml'))) return true;
   if (repoPath.startsWith('schemas/') && repoPath.endsWith('.json')) return true;
   if (repoPath.startsWith('tools/') && repoPath.endsWith('.json')) return true;
+  // Blueprints are engine-format orchestrations (a `document:` block with
+  // name/version/title/summary, not a CDN `_meta:` block). They're validated
+  // by the runtime blueprint parser + the plugin's load-definitions, not this
+  // CDN frontmatter gate. (check-schema.mjs already treats them as pass-through.)
+  if (/^manifests\/[^/]+\/blueprints\//.test(repoPath)) return false;
   if (repoPath.startsWith('manifests/') && (repoPath.endsWith('.yaml') || repoPath.endsWith('.yml'))) return true;
   return false;
 }
