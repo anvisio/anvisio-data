@@ -2,7 +2,7 @@ document:
   dsl: '1.0.0'
   namespace: salesforce
   name: sales-call-notes
-  version: '1.0.0'
+  version: '1.1.0'
   title: After a sales call — Opportunity + Contact + Email + Meeting
   summary: |
     The canonical "after a sales call" demo, re-implemented on the v70
@@ -10,23 +10,25 @@ document:
     hardcoded /demo-wizard (removed Phase D 2026-05-18) — same narrative,
     now data not code.
 
-    The demo walks through five HITL writes against a SINGLE story:
-    Sarah at Global Industries confirmed a $200k flat rate; loop in CTO
-    James Wong for technical sign-off; schedule the technical review;
-    send Sarah the follow-up summary.
+    The demo walks through five HITL writes against a SINGLE story: a
+    customer confirmed a flat-rate deal; loop in their CTO for technical
+    sign-off; schedule the technical review; send the follow-up summary.
+
+    The contact / recipient / account / amount come from per-integration
+    fixtures ($fixtures.salesforce.* + $fixtures.gmail.*). The committed
+    fixtures.example.yaml ships example.com placeholders; drop a gitignored
+    fixtures.local.yaml next to each (manifests/<int>/) to run with your real
+    test data without committing PII.
 
     Steps:
-      1. SETUP — create a throwaway "Global Industries Pilot" Opportunity
-         so the demo is portable across orgs (no pre-existing record
-         needed). Click SAVE in the SF New modal.
+      1. SETUP — create a throwaway "<account> Pilot" Opportunity so the demo
+         is portable across orgs (no pre-existing record needed). Click SAVE.
       2. UPDATE the Opportunity — Amount / Stage / NextStep / Description
          reflecting the call result. Click SAVE in the SF edit modal.
-      3. ADD CONTACT — create James Wong (CTO) as a Contact for follow-up.
-         Click SAVE in the SF New modal.
-      4. SEND EMAIL — compose the follow-up summary to Sarah via Gmail.
-         Click SEND in the compose pane.
-      5. SCHEDULE MEETING — 45-min technical review next Tuesday with
-         both Sarah and James as attendees. Click SAVE in the calendar
+      3. ADD CONTACT — create the CTO as a Contact for follow-up. Click SAVE.
+      4. SEND EMAIL — compose the follow-up summary via Gmail. Click SEND.
+      5. SCHEDULE MEETING — 45-min technical review next Tuesday with both
+         the recipient and the CTO as attendees. Click SAVE in the calendar
          event editor.
 
     Every step is `commit: false` (spec 71 HITL): the recipe FILLS each
@@ -49,13 +51,13 @@ document:
 
 do:
   - fixture_opp:
-      label: 'Setup: create the "Global Industries Pilot" Opportunity (click SAVE in SF)'
+      label: 'Setup: create the "${ $fixtures.salesforce.account.name } Pilot" Opportunity (click SAVE in SF)'
       call: salesforce.atom.create_record
       commit: false
       with:
         object_type: Opportunity
         fields:
-          Name: Global Industries Pilot
+          Name: '${ $fixtures.salesforce.account.name } Pilot'
           StageName: Prospecting
           CloseDate: 12/31/2026
           Amount: 50000
@@ -68,49 +70,51 @@ do:
         record_id: '${ .fixture_opp.record_id }'
 
   - update_opp_post_call:
-      label: 'Update the Opportunity — $200k flat rate, Negotiation/Review, follow-up notes (click SAVE in SF)'
+      label: 'Update the Opportunity — flat rate, Negotiation/Review, follow-up notes (click SAVE in SF)'
       call: salesforce.atom.update_record
       commit: false
       with:
         object_type: Opportunity
         record_id: '${ .fixture_opp.record_id }'
         fields:
-          Amount: 200000
+          Amount: '${ $fixtures.salesforce.deal.amount }'
           StageName: Negotiation/Review
-          NextStep: Technical review with CTO James Wong
+          NextStep: 'Technical review with CTO ${ $fixtures.salesforce.contact.first_name } ${ $fixtures.salesforce.contact.last_name }'
           Description: |
-            Sarah confirmed $200k flat rate. Pilot starts in 2 weeks.
-            CTO James Wong needs to sign off — scheduling the technical
-            review for next Tuesday.
+            ${ $fixtures.gmail.recipient.name } confirmed the flat rate. Pilot
+            starts in 2 weeks. CTO ${ $fixtures.salesforce.contact.first_name }
+            ${ $fixtures.salesforce.contact.last_name } needs to sign off —
+            scheduling the technical review for next Tuesday.
 
   - add_contact:
-      label: 'Add the follow-up Contact — James Wong (CTO) (click SAVE in SF)'
+      label: 'Add the follow-up Contact — the CTO (click SAVE in SF)'
       call: salesforce.atom.create_record
       commit: false
       with:
         object_type: Contact
         fields:
-          FirstName: James
-          LastName: Wong
-          Email: james.wong@example.com
-          Title: CTO
+          FirstName: '${ $fixtures.salesforce.contact.first_name }'
+          LastName: '${ $fixtures.salesforce.contact.last_name }'
+          Email: '${ $fixtures.salesforce.contact.email }'
+          Title: '${ $fixtures.salesforce.contact.title }'
 
   - send_summary_email:
-      label: 'Compose the follow-up email to Sarah (click SEND in Gmail)'
+      label: 'Compose the follow-up email to ${ $fixtures.gmail.recipient.name } (click SEND in Gmail)'
       call: gmail.atom.send_email
       commit: false
       with:
         fields:
-          To: ['sarah@example.com']
-          Subject: 'Follow-up: Pricing & Pilot Timeline — Global Industries'
+          To: ['${ $fixtures.gmail.recipient.email }']
+          Subject: 'Follow-up: Pricing & Pilot Timeline — ${ $fixtures.salesforce.account.name }'
           Body: |
-            Hi Sarah,
+            Hi ${ $fixtures.gmail.recipient.name },
 
-            Thanks for the call today. To confirm what we agreed: $200k
-            flat rate, with the pilot starting in 2 weeks.
+            Thanks for the call today. To confirm what we agreed: the flat
+            rate, with the pilot starting in 2 weeks.
 
-            I'm looping in our CTO James Wong for the technical sign-off
-            and have scheduled a 45-minute technical review for next
+            I'm looping in our CTO ${ $fixtures.salesforce.contact.first_name }
+            ${ $fixtures.salesforce.contact.last_name } for the technical
+            sign-off and have scheduled a 45-minute technical review for next
             Tuesday at 2pm Pacific — calendar invite to follow.
 
             Best,
@@ -121,15 +125,17 @@ do:
       commit: false
       with:
         fields:
-          Title: 'Technical Review — Global Industries Pilot'
+          Title: 'Technical Review — ${ $fixtures.salesforce.account.name } Pilot'
           StartTime: '2026-06-09T14:00:00-07:00'
           EndTime:   '2026-06-09T14:45:00-07:00'
           Attendees:
-            - sarah@example.com
-            - james.wong@example.com
+            - '${ $fixtures.gmail.recipient.email }'
+            - '${ $fixtures.salesforce.contact.email }'
           Description: |
-            Technical review with Sarah (Global Industries) and James
-            Wong (CTO, Global Industries) for the pilot.
+            Technical review with ${ $fixtures.gmail.recipient.name }
+            (${ $fixtures.salesforce.account.name }) and
+            ${ $fixtures.salesforce.contact.first_name }
+            ${ $fixtures.salesforce.contact.last_name } (CTO) for the pilot.
 
-            Confirmed on the discovery call: $200k flat rate; pilot
-            start in 2 weeks pending James's technical sign-off.
+            Confirmed on the discovery call: flat rate; pilot start in 2
+            weeks pending the CTO's technical sign-off.

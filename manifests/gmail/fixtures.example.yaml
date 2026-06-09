@@ -1,0 +1,16 @@
+_meta:
+  name: manifests/gmail/fixtures.example.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-08
+  description: |
+    Demo fixtures for gmail blueprints (the sales_call_notes follow-up email
+    recipient). The committed values are example.com placeholders. Copy this
+    to fixtures.local.yaml (gitignored) with a real recipient to run the demo
+    live. Exposed to the engine as $fixtures.gmail.<key>.
+
+# The customer contact the follow-up email + meeting invite go to.
+recipient:
+  name: Sam
+  email: sam@example.com

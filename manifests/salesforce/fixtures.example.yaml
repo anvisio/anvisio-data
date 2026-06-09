@@ -1,0 +1,26 @@
+_meta:
+  name: manifests/salesforce/fixtures.example.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-08
+  description: |
+    Demo fixtures for salesforce blueprints (the sales_call_notes "after a
+    sales call" demo). The committed values are example.com placeholders.
+    Copy this file to fixtures.local.yaml (gitignored) and fill in your real
+    test-org data to drive the demo against your own contacts without
+    committing PII. The blueprint engine exposes these as
+    $fixtures.salesforce.<key> (local deep-merged over example).
+
+# The account / opportunity the demo prepares.
+account:
+  name: Example Industries
+deal:
+  amount: 200000
+
+# The follow-up contact created during the demo (the CTO to loop in).
+contact:
+  first_name: Alex
+  last_name: Rivera
+  email: alex.rivera@example.com
+  title: CTO
