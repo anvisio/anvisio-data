@@ -12,8 +12,7 @@
         "time_min": "2026-06-01T00:00:00-07:00",
         "time_max": "2026-06-01T23:59:59-07:00",
         "calendar_id": "primary"
-      },
-      "expected_data": { "listed": true }
+      }
     },
     {
       "name": "list_events - oauth_api - listed - auto",
@@ -79,8 +78,7 @@
       "flavor": "browser",
       "variant": "auto",
       "expected_outcome": "searched",
-      "inputs": { "query": "anvisio" },
-      "expected_data": { "searched": true }
+      "inputs": { "query": "anvisio" }
     },
     {
       "name": "search_events - oauth_api - searched - auto",
@@ -132,8 +130,7 @@
       "flavor": "browser",
       "variant": "auto",
       "expected_outcome": "listed",
-      "inputs": {},
-      "expected_data": { "listed": true }
+      "inputs": {}
     },
     {
       "name": "list_calendars - oauth_api - listed - auto",
@@ -154,39 +151,19 @@
       "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
     },
     {
-      "name": "create_event - browser - ready_to_create - auto",
-      "action": "create_event",
-      "flavor": "browser",
-      "variant": "auto",
-      "expected_outcome": "ready_to_create",
-      "inputs": {
-        "fields": {
-          "Title": "Anvisio onboarding event",
-          "StartTime": "2026-06-01T15:00:00-07:00",
-          "EndTime": "2026-06-01T15:30:00-07:00",
-          "Description": "Event created by the Anvisio onboarding run.",
-          "Location": "Remote"
-        },
-        "calendar_id": "primary"
-      }
-    },
-    {
       "name": "create_event - browser - created - auto-save",
       "action": "create_event",
       "flavor": "browser",
       "variant": "auto-save",
       "expected_outcome": "created",
       "inputs": {
-        "fields": {
-          "Title": "Anvisio onboarding event",
-          "StartTime": "2026-06-01T15:00:00-07:00",
-          "EndTime": "2026-06-01T15:30:00-07:00",
-          "Description": "Event created by the Anvisio onboarding run.",
-          "Location": "Remote"
-        },
+        "Title": "Anvisio onboarding event",
+        "StartTime": "2026-06-01T15:00:00-07:00",
+        "EndTime": "2026-06-01T15:30:00-07:00",
+        "Description": "Event created by the Anvisio onboarding run.",
+        "Location": "Remote",
         "calendar_id": "primary"
-      },
-      "expected_data": { "created": true }
+      }
     },
     {
       "name": "create_event - oauth_api - created - auto",
@@ -195,13 +172,11 @@
       "variant": "auto",
       "expected_outcome": "created",
       "inputs": {
-        "fields": {
-          "Title": "Anvisio onboarding event",
-          "StartTime": "2026-06-01T15:00:00-07:00",
-          "EndTime": "2026-06-01T15:30:00-07:00",
-          "Description": "Event created by the Anvisio onboarding run.",
-          "Location": "Remote"
-        },
+        "Title": "Anvisio onboarding event",
+        "StartTime": "2026-06-01T15:00:00-07:00",
+        "EndTime": "2026-06-01T15:30:00-07:00",
+        "Description": "Event created by the Anvisio onboarding run.",
+        "Location": "Remote",
         "calendar_id": "primary"
       },
       "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
@@ -213,33 +188,14 @@
       "variant": "auto",
       "expected_outcome": "created",
       "inputs": {
-        "fields": {
-          "Title": "Anvisio onboarding event",
-          "StartTime": "2026-06-01T15:00:00-07:00",
-          "EndTime": "2026-06-01T15:30:00-07:00",
-          "Description": "Event created by the Anvisio onboarding run.",
-          "Location": "Remote"
-        },
+        "Title": "Anvisio onboarding event",
+        "StartTime": "2026-06-01T15:00:00-07:00",
+        "EndTime": "2026-06-01T15:30:00-07:00",
+        "Description": "Event created by the Anvisio onboarding run.",
+        "Location": "Remote",
         "calendar_id": "primary"
       },
       "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
-    },
-    {
-      "name": "update_event - browser - ready_to_update - auto",
-      "action": "update_event",
-      "flavor": "browser",
-      "variant": "auto",
-      "expected_outcome": "ready_to_update",
-      "fixture_required": true,
-      "seed_fixtures": [{ "type": "Event", "role": "target" }],
-      "inputs": {
-        "event_id": "{{fixtures.target.id}}",
-        "fields": {
-          "StartTime": "2026-06-01T16:00:00-07:00",
-          "EndTime": "2026-06-01T16:30:00-07:00"
-        },
-        "calendar_id": "primary"
-      }
     },
     {
       "name": "update_event - browser - updated - auto-save",
@@ -251,13 +207,10 @@
       "seed_fixtures": [{ "type": "Event", "role": "target" }],
       "inputs": {
         "event_id": "{{fixtures.target.id}}",
-        "fields": {
-          "StartTime": "2026-06-01T16:00:00-07:00",
-          "EndTime": "2026-06-01T16:30:00-07:00"
-        },
+        "StartTime": "2026-06-01T16:00:00-07:00",
+        "EndTime": "2026-06-01T16:30:00-07:00",
         "calendar_id": "primary"
-      },
-      "expected_data": { "updated": true }
+      }
     },
     {
       "name": "update_event - oauth_api - updated - auto",
@@ -269,10 +222,8 @@
       "seed_fixtures": [{ "type": "Event", "role": "target" }],
       "inputs": {
         "event_id": "{{fixtures.target.id}}",
-        "fields": {
-          "StartTime": "2026-06-01T16:00:00-07:00",
-          "EndTime": "2026-06-01T16:30:00-07:00"
-        },
+        "StartTime": "2026-06-01T16:00:00-07:00",
+        "EndTime": "2026-06-01T16:30:00-07:00",
         "calendar_id": "primary"
       },
       "skip_reason": "oauth_api flavor requires a Google OAuth token — the browser-session onboarding path authenticates with the session cookie only; enumerated for completeness."
@@ -287,23 +238,11 @@
       "seed_fixtures": [{ "type": "Event", "role": "target" }],
       "inputs": {
         "event_id": "{{fixtures.target.id}}",
-        "fields": {
-          "StartTime": "2026-06-01T16:00:00-07:00",
-          "EndTime": "2026-06-01T16:30:00-07:00"
-        },
+        "StartTime": "2026-06-01T16:00:00-07:00",
+        "EndTime": "2026-06-01T16:30:00-07:00",
         "calendar_id": "primary"
       },
       "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
-    },
-    {
-      "name": "delete_event - browser - ready_to_delete - auto",
-      "action": "delete_event",
-      "flavor": "browser",
-      "variant": "auto",
-      "expected_outcome": "ready_to_delete",
-      "fixture_required": true,
-      "seed_fixtures": [{ "type": "Event", "role": "target" }],
-      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" }
     },
     {
       "name": "delete_event - browser - deleted - auto-save",
@@ -313,8 +252,19 @@
       "expected_outcome": "deleted",
       "fixture_required": true,
       "seed_fixtures": [{ "type": "Event", "role": "target" }],
-      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" },
-      "expected_data": { "deleted": true }
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary" }
+    },
+    {
+      "name": "delete_event - browser - deleted - guest event (notify_guests)",
+      "action": "delete_event",
+      "flavor": "browser",
+      "variant": "auto-save",
+      "expected_outcome": "deleted",
+      "fixture_required": true,
+      "seed_fixtures": [{ "type": "Event", "role": "target" }],
+      "seed_state": { "has_guests": true },
+      "inputs": { "event_id": "{{fixtures.target.id}}", "calendar_id": "primary", "notify_guests": false },
+      "skip_reason": "Handler LIVE-VERIFIED 2026-06-08 (manual chrome-devtools): created a guest event, clicked Delete → the 'send cancellation emails to guests?' modal appeared with buttons 'Back to editing'/'Don't send'/'Send' (plain text, no aria-label); exact-text match cleanly distinguished 'Send' (1) from 'Don't send' (1); clicking 'Don't send' fired the 'Event deleted' toast + the event went status=cancelled. Catalog entry still needs a SEEDED guest fixture to drive it through the engine (the fixture harness can't yet seed has_guests)."
     },
     {
       "name": "delete_event - oauth_api - deleted - auto",
@@ -339,17 +289,6 @@
       "skip_reason": "mcp flavor requires a connected Google Calendar MCP server — not available on the browser-session onboarding path; enumerated for completeness."
     },
     {
-      "name": "respond_to_event - browser - ready_to_respond - auto",
-      "action": "respond_to_event",
-      "flavor": "browser",
-      "variant": "auto",
-      "expected_outcome": "ready_to_respond",
-      "fixture_required": true,
-      "seed_fixtures": [{ "type": "Event", "role": "target" }],
-      "seed_state": { "is_invitation": true },
-      "inputs": { "event_id": "{{fixtures.target.id}}", "response": "accepted", "calendar_id": "primary" }
-    },
-    {
       "name": "respond_to_event - browser - responded - auto-save",
       "action": "respond_to_event",
       "flavor": "browser",
@@ -358,8 +297,7 @@
       "fixture_required": true,
       "seed_fixtures": [{ "type": "Event", "role": "target" }],
       "seed_state": { "is_invitation": true },
-      "inputs": { "event_id": "{{fixtures.target.id}}", "response": "accepted", "calendar_id": "primary" },
-      "expected_data": { "responded": true }
+      "inputs": { "event_id": "{{fixtures.target.id}}", "response": "accepted", "calendar_id": "primary" }
     },
     {
       "name": "respond_to_event - mcp - responded - auto",

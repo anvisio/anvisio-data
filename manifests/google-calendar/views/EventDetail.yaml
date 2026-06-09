@@ -11,6 +11,7 @@ _meta:
     (RSVP Yes/No/Maybe). Entry clicks the event_chip for the supplied
     event_id; exit dismisses via Escape.
   changelog:
+    - "0.3.0 (2026-06-08): drop google-calendar.rsvp_button from the widgets list — the widget was removed (widget-lib 0.9.0) after the live invitation test showed it was fully wrong; respond_to_event's browser flavor now uses the resolve_rsvp recipe step (enum→label map in its args), not a widget."
     - "0.2.0 (2026-05-28): entry navigates the grid to occurrence_date (a day deep-link, /r/day/YYYY/M/D) BEFORE clicking the chip, gated on the occurrence_date input — so update/delete/get reach an event that's off the currently-rendered grid range (gotcha #2). Uses the navigate step's new {date.*} formatting. Live-confirmed the day-nav renders an off-week chip."
     - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70)."
 
@@ -61,4 +62,3 @@ widgets:
   - google-calendar.event_chip
   - google-calendar.event_edit_button
   - google-calendar.event_delete_button
-  - google-calendar.rsvp_button

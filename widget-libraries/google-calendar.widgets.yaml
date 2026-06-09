@@ -1,6 +1,6 @@
 _meta:
   name: widget-libraries/google-calendar.widgets.yaml
-  version: 0.7.0
+  version: 0.9.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-28
@@ -22,14 +22,18 @@ _meta:
     every definition below.
 
     Selectors are anchored on aria-label / role / data-eventid (kebab-hashed
-    CSS, never class names). The editor + popup + chip selectors were
-    LIVE-VERIFIED on cd2k's account 2026-05-28 (see changelog 0.2.0); the
-    remaining ones (rsvp_button, search_input, create flow verify_targets)
-    are still research-grounded pending a live pass.
+    CSS, never class names). The editor + popup + chip + search selectors were
+    LIVE-VERIFIED on cd2k's account (2026-05-28 editor/popup/chip per changelog
+    0.2.0; 2026-06-08 search_input + grid per 0.8.0). rsvp_button remains
+    research-grounded — it needs a real invitation to test (the RSVP control
+    renders only on events you are a guest of, not organizer; live-confirmed
+    ABSENT on a solo event 2026-06-08, data-response-status count 0).
 
   archetypes_used: [text_input, contenteditable_input, typeahead_chip, typeahead_search, click_reveals, click_dismisses, datetime_split, recurrence_picker]
 
   changelog:
+    - "0.9.0 (2026-06-08): REMOVE the rsvp_button widget. Live-verified against a real invitation 2026-06-08: every selector it guessed was dead — the real RSVP buttons are plain <button aria-label='Respond Yes'|'Respond No'|'Respond Maybe'> and the API enum (accepted/declined/tentative) appears NOWHERE in the DOM, so a widget (which can't map enum→label) cannot drive RSVP. respond_to_event's browser flavor now uses the new resolve_rsvp recipe step (the map lives in the step args). EventDetail.yaml drops it from its widgets list."
+    - "0.8.0 (2026-06-08): provenance only, NO selector change. LIVE-VERIFIED search_input during the read-trio hardening: input[aria-label='Search'] is a role=combobox, present in the DOM + unique (exact-match aria-label='Search' does NOT collide with the sidebar input[aria-label='Search for people']). The grid identifying selectors also verified (2 [role='grid']). rsvp_button was UNVERIFIED here; the 2026-06-08 live invitation test (0.9.0) then proved it fully wrong and removed it."
     - "0.7.0 (2026-05-30): event_guests widget gains `submit_key: Enter` override. Diagnosed from the FIRST heal-screenshot delivered by the new prepended image block: the screenshot showed the email TYPED into the Guests input with the suggestion dropdown OPEN but NO chip committed below. The typeahead_chip archetype's commit step uses `$overrides.submit_key ?? Tab` (widget-archetype-templates.yaml:294); Tab moves focus instead of picking Calendar's open suggestion. Enter picks the highlighted suggestion → chip forms → verify_target matches. This is the actual root cause; the 0.6.0 verify_target shape fix was real but secondary (no chip ever formed → no selector shape would have worked)."
     - "0.6.0 (2026-05-30): event_guests widget `verify_target` corrected from `[role='listitem'][data-email], div[data-hovercard-id]` to `[role='treeitem'][data-email='{{value}}']`. Live-probed on cd2k account: Calendar's committed guest chip is `<div role='treeitem' aria-label='<email>' data-email='<email>'>` — NOT listitem; data-hovercard-id is over-broad (also on the organizer card + per-guest mark-required buttons). The {{value}} substitution ties the verify to the SPECIFIC email just typed, so multi-guest fills (one per item, via fill_fields' new list iteration) each verify their own chip. Triggered by sales_call_notes' schedule_review_meeting step timing out at 5s when Attendees=['sarah@…','james@…'] (the value the runtime joined to 'sarah,james' before list-iteration fixed it, and the verify never matched anyway because of the listitem/treeitem mismatch)."
     - "0.5.0 (2026-05-28): LIVE-FIXED the create-flow selectors (the create buttons have NO aria-label — confirmed via chrome-devtools smoke). create_button → [aria-haspopup='menu'] + trigger_text 'Create'; create_event_menuitem → stable [role='menuitem'][data-key='event']; more_options → [role='dialog'] button + trigger_text 'More options'. Required extending the click_reveals archetype with an optional trigger_text override (→ must_contain_text); empty default keeps every existing widget unchanged. Full create→event→more-options→editor flow driven live."
@@ -302,16 +306,8 @@ widgets:
     overrides:
       verify_timeout_ms: 8000
 
-  # rsvp_button: trigger templated on {{response}} — the action passes
-  # the API enum value (accepted / declined / tentative). Google's RSVP
-  # control labels the buttons Yes / No / Maybe; the data-* form below is
-  # the heal anchor for the first onboarding run.
-  google-calendar.rsvp_button:
-    archetype: click_reveals
-    selectors:
-      trigger:
-        - "[role='dialog'] [role='button'][data-response-status='{{response}}']"
-        - "[role='dialog'] [role='button'][aria-label*='{{response}}' i]"
-      verify_target: "[role='dialog'] [role='button'][aria-pressed='true']"
-    overrides:
-      verify_timeout_ms: 6000
+  # rsvp_button REMOVED in 0.9.0 (2026-06-08): the live RSVP buttons are
+  # <button aria-label='Respond Yes|No|Maybe'> and the API enum
+  # (accepted/declined/tentative) appears nowhere in the DOM, so no widget can
+  # map the enum → the button. respond_to_event's browser flavor uses the
+  # resolve_rsvp recipe step instead (the enum→label map lives in its args).

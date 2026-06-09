@@ -1,6 +1,6 @@
 ---
 name: manifests/google-calendar/google-calendar.md
-version: 0.6.0
+version: 0.7.0
 cdn_schema_version: 70.0.0
 authored_by: cd2k + claude
 authored_at: 2026-05-28
@@ -17,14 +17,20 @@ landmark navigation is **path-based** (NOT hash-based like Gmail):
 Authenticated by the user's Google session cookie — no separate OAuth
 step at run time.
 
-> Authoring status (0.1.0, 2026-05-28): this doc was seeded from the
-> existing hand-authored manifest (2026-05-22/24), the 2026-05-15
-> `/onboard-saas` CRUD-chain session, and the verified
-> `reference_google_workspace_api_paths` probe (2026-04-16). It has NOT
-> yet been through the `/harden-browser-flavor` live loop under the
-> current methodology. Items below are tagged **[verified]**,
-> **[research-only]**, or **[needs-live-probe]** so the next session
-> knows what to trust.
+> Authoring status (0.7.0, 2026-06-08): HARDENED LIVE this session via the
+> `/harden-browser-flavor` loop on cd2k's signed-in account. All 9 atoms were
+> brought to CANONICAL ACTION FORM v71; reads re-verified via gapi (200);
+> respond_to_event's RSVP control + the delete-with-guests modal were
+> live-probed and the (wrong) `rsvp_button` widget replaced by the `resolve_rsvp`
+> step + a new `resolve_guest_notification` step. Remaining un-live-verified:
+> get_freebusy session_api (blocked on the items→[{id}] shaping gap) and the
+> guest/RSVP/freebusy session_api flavors (the list-transform runtime follow-up).
+> Older items below may still carry **[research-only]** / **[needs-live-probe]**
+> tags — trust the dated live-verified notes (2026-06-08) over those.
+>
+> Seed history (0.1.0, 2026-05-28): seeded from the hand-authored manifest
+> (2026-05-22/24), the 2026-05-15 `/onboard-saas` CRUD-chain session, and the
+> `reference_google_workspace_api_paths` probe (2026-04-16).
 
 ## Three sources feeding propose
 
@@ -91,7 +97,7 @@ OAuth token, no running MCP server) the flavor-picker skips `oauth_api`
 | `create_event` | write | fill editor (via More options) + Save; recurrence via RRULE | (browser-first) | 403 | needs server | ✅ via browser (incl. recurring) |
 | `update_event` | write | edit pencil + Save + scope dialog **[recurring handled]** | (browser-first) | 403 | needs server | ✅ via browser (incl. recurring) |
 | `delete_event` | write | trash + confirm + scope dialog **[recurring handled]** | (browser-first) | 403 | needs server | ✅ via browser (incl. recurring) |
-| `respond_to_event` | write | RSVP button **[research-only]** | (no oauth RSVP endpoint) | n/a | needs server | ⚠️ browser only, unverified |
+| `respond_to_event` | write | `resolve_rsvp` step **[live-verified 2026-06-08]** | `events.patch` self responseStatus **(proven 200, but needs runtime helper — see below)** | (events.patch, same shaping gap) | needs server | ✅ via browser (resolve_rsvp) |
 
 **The headline finding:** calendar is **gapi-first for reads**, the
 opposite of Gmail (which is browser-first / OAuth-required for reads
@@ -298,6 +304,14 @@ After a multi-guest fill, the chips commit correctly but Calendar can leave its 
 
 **Fix (chrome-step-driver `blurFocusInPage`, 2026-05-31):** phase 2's reaper also closes an orphaned autocomplete listbox — find a *visible* `[role=listbox]` with an id, find the `[role=combobox]` that owns it via `aria-controls`/`aria-owns`, focus it, dispatch Escape (keyCode 27). Scoped by VISIBILITY + OWNERSHIP, not `aria-expanded` (the orphan can be collapsed yet still rendered). Live-proven safe: Escape on the Guests combobox does NOT discard the event editor even with no dropdown logically open, and Gmail compose has no visible listbox post-commit so the reaper never fires a window-closing Escape there. NOTE: this orphan is timing-dependent in the live runtime (it did not reproduce in synthetic chrome-devtools repros where phase-1 blur closed the listbox first); the reaper is the durable safety net.
 
+### 9. RSVP control: `<button aria-label='Respond Yes|No|Maybe'>`, NOT a `data-response-status` toggle (live-verified 2026-06-08)
+
+On an EventDetail popup for an **invitation** (an event you're a guest of, not organizer), the RSVP control is three plain `<button>`s with `aria-label='Respond Yes'` / `'Respond No'` / `'Respond Maybe'` (visible text `Yes`/`No`/`Maybe`). The API enum (`accepted`/`declined`/`tentative`) appears **NOWHERE** in the DOM. Every selector the old `rsvp_button` widget guessed was dead: `[data-response-status='{{response}}']` (0), `[aria-label*='{{response}}']` (0), and the `responded` signal `[role='button'][aria-pressed='true']` (0 — there is no `aria-pressed`). After clicking, the popup CLOSES + a generic `Loading…` toast fires (no RSVP-specific toast). **Because the enum→label map can't live in a widget, `respond_to_event`'s browser flavor uses the `resolve_rsvp` recipe step** (the map `accepted→Respond Yes` etc. is in the step args). The `rsvp_button` widget was REMOVED (widget-lib 0.9.0). The `responded` outcome = the popup closing (`selector_disappears [role='dialog']`). gapi `events.patch` (self attendee responseStatus) ALSO works for RSVP (proven 200) but needs the full-attendees read-modify-write a recipe can't express — a session_api flavor is a follow-up.
+
+### 10. Deleting an event WITH GUESTS pops a "send cancellation emails?" modal (live-verified 2026-06-08)
+
+Clicking the trash on an event that has guests opens a modal: **"Would you like to send cancellation emails to Google Calendar guests?"** with three plain-text buttons: `Back to editing` / `Don't send` / `Send` (no `aria-label`). It BLOCKS the deletion until resolved. `delete_event`'s browser recipe handles it via the **`resolve_guest_notification`** step (a `notify_guests` input, default `true` → "Send", `false` → "Don't send"); it's best-effort (no-ops when the event has no guests). Buttons are matched by **EXACT** text — "Send" is a substring of "Don't send", so an `includes`-match would pick the wrong one (live-confirmed: exact-match cleanly hits "Send" (1) and "Don't send" (1)). Verified end-to-end: clicking "Don't send" fired the `Event deleted` toast and the event went `status=cancelled`.
+
 ### What's reliable (Google convention)
 
 - `aria-label` (`'Add title'`, `'Start date'`, `'Save'`, `'Edit event'`,
@@ -337,7 +351,17 @@ Two calendar-specific facts that make the ladder work:
 | create_event | "Event saved" | `all:[transient_appears [aria-live='polite'] "Event saved", selector_disappears input[aria-label='Title']]` |
 | update_event | "Event saved" | `all:[transient_appears [aria-live='polite'] "Event saved", selector_disappears input[aria-label='Title']]` |
 | delete_event | "Event deleted" (+ Undo affordance) | `all:[transient_appears [aria-live='polite'] "Event deleted", selector_disappears [role='dialog']]` |
-| respond_to_event | (RSVP reflected in popup) | `selector_appears [role='button'][aria-pressed='true']` — speculative, needs live probe |
+| respond_to_event | (none specific — generic "Loading…" toast) | `selector_disappears [role='dialog']` — the popup closes on a successful RSVP (LIVE-VERIFIED 2026-06-08). NOT `aria-pressed` (no such state) and NO RSVP-specific toast. HITL limitation: dialog-close is shared with Escape/close. |
+
+**v71 update (2026-06-08):** all 9 atoms are now CANONICAL ACTION FORM v71.
+The L4 ladders above are unchanged in BEHAVIOR but are now expressed as the
+spec-70 **signals model**: a per-flavor named `signals:` map + outcomes that
+resolve by `when:`/`not:` predicates (e.g. create `created = when:[saved]`,
+`discarded = when:[editor_closed] not:[saved]`), replacing the flavor-level
+`abandon_signal` + the `all:[...]` composite. `result.outcome:text` (auto from
+the winning action) replaced the per-atom booleans; the `ready_to_*`
+pseudo-outcomes were dropped (the filled-and-ready state is the recipe + the
+HITL pause, not an LLM terminal).
 
 **Regression guard:** each write tester carries a `*_discard` variant
 (commit mode, then cancel/Escape instead of Save) that MUST report

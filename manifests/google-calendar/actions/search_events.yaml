@@ -1,6 +1,6 @@
 _meta:
   name: manifests/google-calendar/actions/search_events.yaml
-  version: 0.3.0
+  version: 0.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-28
@@ -13,6 +13,7 @@ _meta:
     oauth_api + mcp flavors return matched events as structured data.
     Reads prefer session_api > oauth_api > mcp > browser per spec 70 §7.
   changelog:
+    - "0.4.0 (2026-06-08): CANONICAL ACTION FORM v71 (live-hardened with cd2k). result.outcome (auto from the winning action, 'searched') replaces the `searched` boolean; every flavor's `searched: literal:true` extract is dropped. Browser flavor resolves via a named signals: map + when:[searched] (url_matches /r/search). session_api/oauth_api/mcp KEEP their inline signal (a gapi/REST/MCP call needs the signal to gate 'extract ready'). LIVE-VERIFIED 2026-06-08: the search input is input[aria-label='Search'] (a role=combobox), present + unique (does NOT collide with the sidebar 'Search for people'); session_api q-search returned 200 + 15 matches on cd2k's account. Behaviour-preserving."
     - "0.3.0 (2026-05-28): add session_api flavor (gapi events.list with q), live-verified on cd2k's account (200). This is the no-OAuth read path — googleapis.com (oauth_api) 403s on a session cookie. NOTE: session_api omits time_min/time_max because gapi events.list rejects empty-string time bounds and the recipe can't conditionally include them (live-confirmed 2026-05-28); time-windowed search via session_api is a follow-up. oauth_api/mcp still honor the window."
     - "0.2.0 (2026-05-24): add schema-typed result.events list<Event> per v70 signature parity rule. oauth_api populates from .items; mcp from .events; browser nullable (URL change only). Drop result.count which no flavor populated."
     - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.search-events."
@@ -38,7 +39,8 @@ inputs:
     type: text
     description: Optional window end, ISO 8601.
 result:
-  searched: boolean
+  # v71: outcome = the winning action ("searched"), auto-populated by the runtime.
+  outcome: text
   events:
     schema: Event
     cardinality: list
@@ -47,6 +49,11 @@ flavors:
   browser:
     requires_auth: session_cookie
     label: Type the query into the calendar search bar
+    # v71 signals model: `searched` = the tab landed on the /r/search results.
+    signals:
+      searched:
+        type: url_matches
+        pattern: "/r/search"
     recipe:
       - id: search
         type: use_widget
@@ -57,12 +64,8 @@ flavors:
             value: "{{inputs.query}}"
     outcomes:
       - action: searched
-        signal:
-          type: url_matches
-          pattern: "/r/search"
+        when: [searched]
         extract:
-          searched:
-            literal: true
           events:
             literal: null
   session_api:
@@ -96,6 +99,8 @@ flavors:
         # The gapi call runs entirely inside call_platform_api: no
         # post-recipe DOM/URL transition, so url_matches resolves on the
         # first poll; extract then reads the already-extracted items array.
+        # The signal is REQUIRED (a session_api outcome with no signal
+        # never resolves — v71 live-verified 2026-06-08).
         signal:
           type: url_matches
           pattern: "calendar\\.google\\.com"
@@ -103,8 +108,6 @@ flavors:
         extract:
           events:
             from_step: gapi_search
-          searched:
-            literal: true
   oauth_api:
     requires_auth: oauth_token
     label: Search events via the Calendar API (events.list with q)
@@ -124,8 +127,6 @@ flavors:
           events:
             from_api_response: true
             path: items
-          searched:
-            literal: true
   mcp:
     requires_auth: mcp_server
     label: Search events via the google-calendar search-events MCP tool
@@ -144,5 +145,3 @@ flavors:
         extract:
           events:
             from_api_response: ".events"
-          searched:
-            literal: true

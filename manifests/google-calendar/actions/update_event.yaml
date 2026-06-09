@@ -1,6 +1,6 @@
 _meta:
   name: manifests/google-calendar/actions/update_event.yaml
-  version: 0.7.0
+  version: 0.9.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-28
@@ -11,6 +11,8 @@ _meta:
     oauth_api + mcp flavors patch the event directly. commits_changes:true,
     so transport priority is browser > oauth_api > mcp per spec 70 §7.
   changelog:
+    - "0.9.0 (2026-06-09): FLAT TYPED INPUTS (v71 completion) — the fields:{type:object} bag is replaced by flat inputs mirroring the MCP google-calendar.update-event input_schema (Title/StartTime/EndTime/Description/Location/Attendees, all optional for a partial update; string->text, array<email>->list<text>). Recurrence stays a BROWSER-ONLY input. fill_fields drops `from:` (fills the supplied flat fields); oauth/mcp map the scalars. Callers (testers, test_catalog) updated in lockstep. Rationale: an object bag is hard to reason about + diverged from the MCP contract."
+    - "0.8.0 (2026-06-08): CANONICAL ACTION FORM v71 (live-hardened with cd2k). result.outcome:text (auto from the winning action) replaces the `updated` boolean + literals; the `ready_to_update` pseudo-outcome is dropped. SPEC 70 SIGNALS MODEL: the flavor-level abandon_signal is replaced by a named signals: map (saved / editor_closed); updated = when:[saved] (the 'Event saved' toast — the editor's Save emits the SAME toast for create + edit); discarded = when:[editor_closed] not:[saved] (HITL discard, grace-arbitrated). The resolve_recurring_scope commit step is unchanged. No live-behavior change vs 0.7.0 (editor title input[aria-label='Title'] re-confirmed 2026-06-08). No tab_mode (same-tab editor)."
     - "0.7.0 (2026-05-29): spec 72 R1 — add browser `abandon_signal` (selector_disappears Title) so a HITL discard (editor closed, no 'Event saved' toast) resolves as cancelled via the runner's grace-arbitrated race."
     - "0.6.0 (2026-05-28): spec 72 — browser `updated` L4 is now the consequence ladder, replacing the bare `selector_disappears input[aria-label='Title']` (Trap 2 fake-success on DISCARD). Toast is 'Event saved' in a [aria-live='polite'] announcer (the editor Save button emits the same toast for create + edit; live-probed via create). New signal: all:[transient_appears 'Event saved', selector_disappears title]."
     - "0.5.0 (2026-05-28): add occurrence_date input — the EventDetail entry navigates the grid to that day before clicking the chip, so update reaches an event off the currently-shown range (gotcha #2). For a recurring event pass the instance's date. Live-confirmed the day-nav renders an off-week chip."
@@ -34,17 +36,36 @@ inputs:
     type: text
     required: true
     description: Google Calendar event id to update.
-  fields:
-    type: object
-    required: true
+  # v71 flat typed inputs (was fields:{type:object}) — MIRROR the MCP
+  # google-calendar.update-event input_schema (title/startTime/endTime/
+  # description/location/attendees, all OPTIONAL for a partial update). Wire
+  # types map the MCP JSON-schema (string -> text, array<email> -> list<text>);
+  # names follow the Event schema (mcp/oauth map to the camelCase MCP names).
+  # fill_fields fills only the supplied fields (no `from:`); omit a field to
+  # leave it unchanged.
+  Title:
+    type: text
+  StartTime:
+    type: text
+    description: ISO 8601.
+  EndTime:
+    type: text
+    description: ISO 8601.
+  Description:
+    type: text
+  Location:
+    type: text
+  Attendees:
+    type: list<text>
+    description: Attendee email addresses.
+  Recurrence:
+    type: text
     description: |
-      Subset of Event fields to change (Title, StartTime, EndTime,
-      Description, Location, Attendees, Recurrence). Recurrence is an RFC
-      5545 RRULE string (e.g. "RRULE:FREQ=DAILY;INTERVAL=2"). Only the
-      supplied fields change.
+      RFC 5545 RRULE string (e.g. "RRULE:FREQ=DAILY;INTERVAL=2") to change the
+      series' recurrence. BROWSER-ONLY: not in the MCP update-event schema.
   calendar_id:
     type: text
-    description: Calendar id the event belongs to. Defaults to the primary calendar.
+    description: Calendar id the event belongs to. Defaults to the primary calendar (the runtime substitutes an empty calendarId with 'primary').
   occurrence_date:
     type: text
     description: |
@@ -64,7 +85,8 @@ inputs:
       following → "This and following", all → "All events"). Ignored for
       non-recurring events.
 result:
-  updated: boolean
+  # v71: outcome = the winning action ("updated" | "discarded"), auto-populated.
+  outcome: text
   event_id: text
   event:
     schema: Event
@@ -72,12 +94,21 @@ flavors:
   browser:
     requires_auth: session_cookie
     label: Open the editor, fill changed fields; click Save when commit:true
-    # Spec 72 R1: discard detection for the HITL preview — the editor's Title
-    # input disappearing without a success toast is a discard. Raced against
-    # the commit outcome with a grace window so a real Save still wins.
-    abandon_signal:
-      type: selector_disappears
-      selector: input[aria-label='Title']
+    # v71 signals model (replaces the 0.7.0 abandon_signal): saved = the
+    # 'Event saved' toast in [aria-live='polite'] (the editor's Save emits the
+    # SAME toast for create + edit); editor_closed = the Title input disappears
+    # (Save / Cancel navigates editor -> grid). updated = when:[saved];
+    # discarded = when:[editor_closed] not:[saved] (HITL discard, grace-
+    # arbitrated so a real Save still wins). No per-signal timeout_ms — inherit
+    # the caller budget (30s commit / 10min HITL).
+    signals:
+      saved:
+        type: transient_appears
+        selector: "[aria-live='polite']"
+        must_contain_text: "Event saved"
+      editor_closed:
+        type: selector_disappears
+        selector: input[aria-label='Title']
     recipe:
       - id: open_editor
         type: use_widget
@@ -87,8 +118,9 @@ flavors:
       - id: fill
         type: fill_fields
         args:
+          # v71: no `from:` — fill the Event from the action's flat inputs; only
+          # the supplied fields change (the writable-field filter drops the rest).
           object: Event
-          from: "{{inputs.fields}}"
       - id: save
         type: use_widget
         commit: true
@@ -114,36 +146,17 @@ flavors:
           confirm_button: "[role='dialog'] button"
           confirm_label: "OK"
     outcomes:
-      - action: ready_to_update
-        signal:
-          type: selector_appears
-          selector: button[aria-label='Save']
-      # Spec 72 L4 consequence ladder. Rung 1 (positive): the success
-      # toaster — live-probed 2026-05-28 as "Event saved" in a goog-lr-*
-      # [aria-live='polite'] announcer (the editor's Save button emits the
-      # SAME toast for create and edit). Rung 2 (corroborating): the Title
-      # input disappears (Save navigates editor -> grid). all: so a DISCARD
-      # (editor closes, NO toaster) reports NOT committed — was a Trap 2
-      # fake-success.
-      # No per-rung timeout_ms — inherit the caller budget (30s commit /
-      # 10min HITL). An explicit timeout_ms caps the HITL wait (caught live
-      # 2026-05-29 on create_event).
       - action: updated
-        signal:
-          all:
-            - type: transient_appears
-              selector: "[aria-live='polite']"
-              must_contain_text: "Event saved"
-            - type: selector_disappears
-              selector: input[aria-label='Title']
+        when: [saved]
         extract:
-          updated:
-            literal: true
           event_id:
             from_input: event_id
           event:
             Id:
               from_input: event_id
+      - action: discarded
+        when: [editor_closed]
+        not: [saved]
   oauth_api:
     requires_auth: oauth_token
     label: Patch the event via the Calendar API (events.patch)
@@ -152,21 +165,19 @@ flavors:
       method: PATCH
       url: https://www.googleapis.com/calendar/v3/calendars/{{inputs.calendar_id}}/events/{{inputs.event_id}}
       body:
-        summary: "{{inputs.fields.Title}}"
+        summary: "{{inputs.Title}}"
         start:
-          dateTime: "{{inputs.fields.StartTime}}"
+          dateTime: "{{inputs.StartTime}}"
         end:
-          dateTime: "{{inputs.fields.EndTime}}"
-        description: "{{inputs.fields.Description}}"
-        location: "{{inputs.fields.Location}}"
+          dateTime: "{{inputs.EndTime}}"
+        description: "{{inputs.Description}}"
+        location: "{{inputs.Location}}"
     outcomes:
       - action: updated
         extract:
           event_id:
             from_api_response: true
             path: id
-          updated:
-            literal: true
           event:
             Id:
               from_api_response: true
@@ -179,11 +190,11 @@ flavors:
     inputs_map:
       eventId: "{{inputs.event_id}}"
       calendarId: "{{inputs.calendar_id}}"
-      title: "{{inputs.fields.Title}}"
-      startTime: "{{inputs.fields.StartTime}}"
-      endTime: "{{inputs.fields.EndTime}}"
-      description: "{{inputs.fields.Description}}"
-      location: "{{inputs.fields.Location}}"
+      title: "{{inputs.Title}}"
+      startTime: "{{inputs.StartTime}}"
+      endTime: "{{inputs.EndTime}}"
+      description: "{{inputs.Description}}"
+      location: "{{inputs.Location}}"
       recurringUpdateScope: "{{inputs.recurring_scope}}"
     outcomes:
       - action: updated
@@ -194,8 +205,6 @@ flavors:
         extract:
           event_id:
             from_api_response: ".event.id"
-          updated:
-            literal: true
           event:
             Id:
               from_api_response: ".event.id"

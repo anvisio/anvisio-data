@@ -9,6 +9,7 @@ _meta:
     Launchpad for create_event (Create button) and search_events (Search
     button); operating surface for list_events. URL-deeplink entry.
   changelog:
+    - "0.2.0 (2026-06-08): drop the dead identifying_selector [role='button'][aria-label='Create'] (live-confirmed 2026-06-08: the Create button has NO aria-label, count 0 — the widget library already matches it by aria-haspopup + trigger_text). The two [role='grid'] selectors identify the view (live-confirmed 2 grid roles render)."
     - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70)."
 
 name: CalendarGrid
@@ -24,7 +25,6 @@ url_patterns:
   - https://calendar\.google\.com/calendar/u/\d+/r$
   - https://calendar\.google\.com/calendar/
 identifying_selectors:
-  - "[role='button'][aria-label='Create']"
   - "[role='grid']"
   - "[role='main'] [role='grid']"
 widgets:

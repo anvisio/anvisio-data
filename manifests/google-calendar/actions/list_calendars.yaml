@@ -1,6 +1,6 @@
 _meta:
   name: manifests/google-calendar/actions/list_calendars.yaml
-  version: 0.3.0
+  version: 0.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-28
@@ -13,6 +13,7 @@ _meta:
     Reads prefer session_api > oauth_api > mcp > browser per spec 70 §7.
     Used to resolve a calendar_id before create_event / list_events.
   changelog:
+    - "0.4.0 (2026-06-08): CANONICAL ACTION FORM v71 (live-hardened with cd2k). result.outcome:text (auto from the winning action, 'listed') replaces the `listed` boolean + every flavor's literal:true extract. Browser flavor resolves via a named signals: map + when:[listed] (selector_appears the calendar-list sidebar). session_api + mcp keep their inline signal. RE-VERIFIED session_api live 2026-06-08: calendarList.list → 200, 2 calendars (primary + Holidays). Browser sidebar selector [aria-label='My calendars'] → 1 match. Behaviour-preserving."
     - "0.3.0 (2026-05-28): add session_api flavor (gapi calendarList.list). Live-verified on cd2k's account (200, 2 calendars). The no-OAuth read path — googleapis.com (oauth_api) 403s on a session cookie."
     - "0.2.0 (2026-05-24): add schema-typed result.calendars list<Calendar> per v70 signature parity rule. oauth_api populates from .items; mcp from .calendars; browser is nullable (sidebar DOM not structurally surfaced)."
     - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.list-calendars."
@@ -28,7 +29,8 @@ depends_on_view: CalendarGrid
 mcp_tool: google-calendar.list-calendars
 inputs: {}
 result:
-  listed: boolean
+  # v71: outcome = the winning action ("listed"), auto-populated by the runtime.
+  outcome: text
   calendars:
     schema: Calendar
     cardinality: list
@@ -37,6 +39,12 @@ flavors:
   browser:
     requires_auth: session_cookie
     label: Confirm the calendar-list sidebar rendered
+    # v71 signals model: `listed` = the calendar-list sidebar rendered
+    # (live-confirmed 2026-06-08: [aria-label='My calendars'] matches).
+    signals:
+      listed:
+        type: selector_appears
+        selector: "[aria-label='My calendars'], [role='list'][aria-label*='calendars' i]"
     recipe:
       - id: goto_grid
         type: navigate
@@ -51,12 +59,8 @@ flavors:
           timeout_ms: 10000
     outcomes:
       - action: listed
-        signal:
-          type: selector_appears
-          selector: "[aria-label='My calendars'], [role='list'][aria-label*='calendars' i]"
+        when: [listed]
         extract:
-          listed:
-            literal: true
           calendars:
             literal: null
   session_api:
@@ -75,6 +79,8 @@ flavors:
           args: {}
     outcomes:
       - action: listed
+        # The gapi call completes inside the recipe; url_matches resolves on the
+        # first poll, then extract reads the calendarList items. Signal REQUIRED.
         signal:
           type: url_matches
           pattern: "calendar\\.google\\.com"
@@ -82,8 +88,6 @@ flavors:
         extract:
           calendars:
             from_step: gapi_list_cals
-          listed:
-            literal: true
   oauth_api:
     requires_auth: oauth_token
     label: List calendars via the Calendar API (calendarList.list)
@@ -97,8 +101,6 @@ flavors:
           calendars:
             from_api_response: true
             path: items
-          listed:
-            literal: true
   mcp:
     requires_auth: mcp_server
     label: List calendars via the google-calendar list-calendars MCP tool
@@ -113,5 +115,3 @@ flavors:
         extract:
           calendars:
             from_api_response: ".calendars"
-          listed:
-            literal: true

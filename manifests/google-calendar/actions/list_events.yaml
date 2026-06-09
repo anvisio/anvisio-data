@@ -1,6 +1,6 @@
 _meta:
   name: manifests/google-calendar/actions/list_events.yaml
-  version: 0.3.0
+  version: 0.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-22
@@ -13,6 +13,7 @@ _meta:
     google-calendar MCP server. Reads prefer session_api > mcp > browser
     per spec 70 §7.
   changelog:
+    - "0.4.0 (2026-06-08): CANONICAL ACTION FORM v71 (live-hardened with cd2k). result.outcome (auto from the winning action, 'listed') replaces the `listed` boolean; every flavor's `listed: literal:true` extract is dropped (the runtime injects outcome from the winning action via withOutcomeField). The browser flavor resolves via a named signals: map + when:[listed] (selector_appears [role='grid'] — live-confirmed 2 grid roles render). session_api + mcp KEEP their inline signal: a gapi/MCP call completes inside the recipe, so the outcome still needs a signal to gate 'extract ready' (a session_api flavor with no signal times out — verified 2026-06-08). calendar_id default-to-primary is handled at the runtime (platform-api.ts: empty calendarId → 'primary' for events.* methods), so the recipe needs no default. Behaviour-preserving."
     - "0.3.0 (2026-05-24): add schema-typed result.events list<Event> per v70 signature parity rule. session_api and mcp populate from the API response; browser nullable (grid DOM rows are visual, not structured). Drop result.count which no flavor populated (callers can use events.length)."
     - "0.2.0 (2026-05-22): oauth_api to session_api with call_platform_api kind:gapi."
     - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.list-events."
@@ -37,9 +38,10 @@ inputs:
     description: Window end, ISO 8601.
   calendar_id:
     type: text
-    description: Calendar id. Defaults to the primary calendar. The browser flavor ignores it (it shows the default grid).
+    description: Calendar id. Defaults to the primary calendar (the runtime substitutes an empty calendarId with 'primary'). The browser flavor ignores it (it shows the default grid).
 result:
-  listed: boolean
+  # v71: outcome = the winning action ("listed"), auto-populated by the runtime.
+  outcome: text
   events:
     schema: Event
     cardinality: list
@@ -48,6 +50,11 @@ flavors:
   browser:
     requires_auth: session_cookie
     label: Navigate to the calendar grid
+    # v71 signals model: `listed` = the calendar grid rendered.
+    signals:
+      listed:
+        type: selector_appears
+        selector: "[role='grid']"
     recipe:
       - id: goto_grid
         type: navigate
@@ -60,12 +67,8 @@ flavors:
           timeout_ms: 10000
     outcomes:
       - action: listed
-        signal:
-          type: selector_appears
-          selector: "[role='grid']"
+        when: [listed]
         extract:
-          listed:
-            literal: true
           events:
             literal: null
   session_api:
@@ -97,7 +100,8 @@ flavors:
         # start watching after the fetch completed and time out. url_matches
         # on calendar.google.com resolves on the first poll; `extract` then
         # reads the step result (already extracted to the items array via
-        # api_def.extract_path).
+        # api_def.extract_path). The signal is REQUIRED — a session_api
+        # outcome with no signal never resolves (v71 live-verified 2026-06-08).
         signal:
           type: url_matches
           pattern: "calendar\\.google\\.com"
@@ -105,8 +109,6 @@ flavors:
         extract:
           events:
             from_step: gapi_list
-          listed:
-            literal: true
   mcp:
     requires_auth: mcp_server
     label: List events via the google-calendar list-events MCP tool
@@ -125,5 +127,3 @@ flavors:
         extract:
           events:
             from_api_response: ".events"
-          listed:
-            literal: true

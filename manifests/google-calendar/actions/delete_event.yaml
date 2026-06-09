@@ -1,6 +1,6 @@
 _meta:
   name: manifests/google-calendar/actions/delete_event.yaml
-  version: 0.7.0
+  version: 0.8.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-28
@@ -11,6 +11,7 @@ _meta:
     so transport priority is browser > oauth_api > mcp per spec 70 §7: the
     user sees the event removed from their own calendar.
   changelog:
+    - "0.8.0 (2026-06-08): CANONICAL ACTION FORM v71 + GUEST-CANCELLATION handling (live-hardened with cd2k). (1) result.outcome:text (auto from the winning action) replaces the `deleted` boolean + literals; the `ready_to_delete` pseudo-outcome is dropped. (2) SPEC 70 SIGNALS MODEL: abandon_signal → named signals: map (toast_deleted / dialog_closed); deleted = when:[toast_deleted] ('Event deleted' toast); cancelled = when:[dialog_closed] not:[toast_deleted] (popup closed with no toast — grace-arbitrated). (3) NEW: deleting an event WITH GUESTS pops a 'Would you like to send cancellation emails to Google Calendar guests?' modal (Back to editing / Don't send / Send) that BLOCKS the deletion — hit live 2026-06-08, the prior recipe had no handler so a commit delete of a guest event hung. New `notify_guests` input (default true → Send) + a best-effort resolve_guest_notification commit step (sibling of resolve_recurring_scope; no-ops when the modal is absent). LIVE-VERIFY pending: the guest-delete signal timing (the 'Event deleted' toast vs the modal) — flagged in google-calendar.md."
     - "0.7.0 (2026-05-29): spec 72 R1 — add browser `abandon_signal` (selector_disappears [role='dialog']) so closing the EventDetail popup without the 'Event deleted' toast resolves as cancelled via the runner's grace-arbitrated race (same selector as the deleted-composite rung 2; grace disambiguates)."
     - "0.6.0 (2026-05-28): spec 72 — browser `deleted` L4 is now the consequence ladder, replacing the bare `selector_disappears [role='dialog']` (Trap 2: the popup closes on Escape/click-away too). LIVE-PROBED the toast: 'Event deleted' in a goog-lr-* [aria-live='polite'] announcer. New signal: all:[transient_appears 'Event deleted', selector_disappears dialog]. Closing the popup without deleting now correctly reports not-committed."
     - "0.5.0 (2026-05-28): add occurrence_date input — the EventDetail entry navigates the grid to that day before clicking the chip, so delete reaches an event off the currently-shown range (gotcha #2). For a recurring event pass the instance's date."
@@ -35,7 +36,16 @@ inputs:
     description: Google Calendar event id to delete.
   calendar_id:
     type: text
-    description: Calendar id the event belongs to. Defaults to the primary calendar.
+    description: Calendar id the event belongs to. Defaults to the primary calendar (the runtime substitutes an empty calendarId with 'primary').
+  notify_guests:
+    type: boolean
+    default: true
+    description: |
+      When the event has guests, deleting it pops a "send cancellation emails
+      to guests?" modal. true (default) clicks "Send" (guests are emailed the
+      cancellation); false clicks "Don't send" (silent). Browser flavor only —
+      the oauth_api/mcp flavors delete without a guest prompt. No-op on events
+      with no guests (the modal never appears).
   occurrence_date:
     type: text
     description: |
@@ -56,21 +66,27 @@ inputs:
       so resolve scope by id upstream for those flavors. Ignored for
       non-recurring events.
 result:
-  deleted: boolean
+  # v71: outcome = the winning action ("deleted" | "cancelled"), auto-populated.
+  outcome: text
   event:
     schema: Event
 flavors:
   browser:
     requires_auth: session_cookie
     label: Click the trash button in the event popup when commit:true
-    # Spec 72 R1: delete operates on the EventDetail [role='dialog'] popup
-    # (no URL nav), so a discard = the user closing that popup (Escape /
-    # click-away) without the "Event deleted" toast. Same selector as the
-    # `deleted` composite's rung 2 — the grace window disambiguates: toast in
-    # grace -> deleted, else -> cancelled.
-    abandon_signal:
-      type: selector_disappears
-      selector: "[role='dialog']"
+    # v71 signals model (replaces the 0.7.0 abandon_signal): toast_deleted =
+    # the 'Event deleted' toast in [aria-live='polite']; dialog_closed = the
+    # EventDetail [role='dialog'] popup disappears. deleted = when:[toast_deleted];
+    # cancelled = when:[dialog_closed] not:[toast_deleted] (popup closed without
+    # deleting — Escape / click-away; grace-arbitrated so the toast still wins).
+    signals:
+      toast_deleted:
+        type: transient_appears
+        selector: "[aria-live='polite']"
+        must_contain_text: "Event deleted"
+      dialog_closed:
+        type: selector_disappears
+        selector: "[role='dialog']"
     recipe:
       - id: delete
         type: use_widget
@@ -79,8 +95,7 @@ flavors:
           widget: google-calendar.event_delete_button
           op: invoke
       # Recurring instances pop a "Delete recurring event" scope dialog on
-      # trash (commit mode only). Best-effort: no-ops on single events. In
-      # preview mode (trash skipped) the user picks the scope themselves.
+      # trash (commit mode only). Best-effort: no-ops on single events.
       - id: scope
         type: resolve_recurring_scope
         commit: true
@@ -96,35 +111,32 @@ flavors:
             all: "All events"
           confirm_button: "[role='dialog'] button"
           confirm_label: "OK"
+      # Events WITH GUESTS pop a "send cancellation emails to guests?" modal on
+      # trash (commit mode only). Best-effort: no-ops when there are no guests.
+      # notify_guests (default true) → "Send"; false → "Don't send". Runs after
+      # the recurring-scope step (for a recurring guest event the scope dialog
+      # comes first, then the cancellation modal).
+      - id: guest_notify
+        type: resolve_guest_notification
+        commit: true
+        args:
+          notify: "{{inputs.notify_guests}}"
+          dialog: "[role='dialog']"
+          button_target:
+            - "[role='dialog'] button"
+            - button
+          send_label: "Send"
+          dont_send_label: "Don't send"
     outcomes:
-      - action: ready_to_delete
-        signal:
-          type: selector_appears
-          selector: "[role='dialog'] button[aria-label*='Delete']"
-      # Spec 72 L4 consequence ladder. Rung 1 (positive): the success
-      # toaster — live-probed 2026-05-28 as "Event deleted" in a goog-lr-*
-      # [aria-live='polite'] announcer (NOT [role='alert']). Rung 2
-      # (corroborating): the EventDetail [role='dialog'] popup disappears.
-      # all: so closing the popup WITHOUT deleting (Escape / click-away —
-      # the discard path) reports NOT committed (no toaster), where the bare
-      # dialog-disappears was a Trap 2 fake-success.
-      # No per-rung timeout_ms — inherit the caller budget (30s commit /
-      # 10min HITL). An explicit timeout_ms caps the HITL wait (caught live
-      # 2026-05-29 on create_event).
       - action: deleted
-        signal:
-          all:
-            - type: transient_appears
-              selector: "[aria-live='polite']"
-              must_contain_text: "Event deleted"
-            - type: selector_disappears
-              selector: "[role='dialog']"
+        when: [toast_deleted]
         extract:
-          deleted:
-            literal: true
           event:
             Id:
               from_input: event_id
+      - action: cancelled
+        when: [dialog_closed]
+        not: [toast_deleted]
   oauth_api:
     requires_auth: oauth_token
     label: Delete the event via the Calendar API (events.delete)
@@ -135,8 +147,6 @@ flavors:
     outcomes:
       - action: deleted
         extract:
-          deleted:
-            literal: true
           event:
             Id:
               from_input: event_id
@@ -155,8 +165,6 @@ flavors:
           url_pattern: "*/mcp/*"
           status: 200
         extract:
-          deleted:
-            literal: true
           event:
             Id:
               from_input: event_id

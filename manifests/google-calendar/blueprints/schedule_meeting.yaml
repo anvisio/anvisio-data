@@ -53,8 +53,7 @@ do:
                 call: google-calendar.atom.create_event
                 commit: false
                 with:
-                  fields:
-                    Title: Meeting
-                    StartTime: '${ .slot.start }'
-                    EndTime: '${ .slot.end }'
+                  Title: Meeting
+                  StartTime: '${ .slot.start }'
+                  EndTime: '${ .slot.end }'
                   calendar_id: primary

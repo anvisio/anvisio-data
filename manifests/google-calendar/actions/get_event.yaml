@@ -1,6 +1,6 @@
 _meta:
   name: manifests/google-calendar/actions/get_event.yaml
-  version: 0.4.0
+  version: 0.5.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-28
@@ -14,6 +14,7 @@ _meta:
     flavors fetch the event resource directly. Reads prefer
     session_api > oauth_api > mcp > browser per spec 70 §7.
   changelog:
+    - "0.5.0 (2026-06-08): CANONICAL ACTION FORM v71 + browser signal FIX (live-hardened with cd2k). (1) FIX: the browser outcome signal was selector_appears input[aria-label='Add title'] — DEAD. Live-confirmed 2026-06-08 in the full editor: the title input's aria-label is 'Title' (count 1); 'Add title' is only the PLACEHOLDER (input[aria-label='Add title'] matches 0). The stale signal never fired → the browser flavor always timed out → heal. Now input[aria-label='Title'] (matches the event_edit_button widget verify_target). (2) v71: add result.outcome:text (auto from the winning action 'read'); browser resolves via a named signals: map + when:[read]. session_api/oauth_api/mcp unchanged (they already carry the right signal / api-response completion). (3) Doc: for a RECURRING event pass the specific INSTANCE id — events.get on <base>_<UTCstamp> returns that occurrence (live-verified 2026-06-08, 200); the bare recurringEventId returns the series master. calendar_id default-to-primary is handled at runtime (platform-api.ts)."
     - "0.4.0 (2026-05-28): add optional occurrence_date input (browser-flavor only — navigates the grid to the day so the chip renders, gotcha #2). The default session_api flavor reads by id and ignores it."
     - "0.3.0 (2026-05-28): add session_api flavor (gapi events.get). The no-OAuth read path (googleapis.com/oauth_api 403s on a session cookie) AND it needs no grid chip — the browser flavor's event_chip[data-eventid] only matches the eid form, not the API id (live-confirmed 2026-05-28), so session_api is the robust by-id read. NOTE: calendar_id passed through; if the caller omits it, gapi events.get 404s (shared default-to-primary gap with oauth_api; follow-up)."
     - "0.2.0 (2026-05-24): add schema-typed result.event per v70 signature parity rule (all 3 flavors populate event.Id at minimum). FIXED mcp flavor: it previously stopped at EndTime, dropping Location + Description even though the same MCP response carries them (.event.location / .event.description) - added the missing extracts."
@@ -32,10 +33,14 @@ inputs:
   event_id:
     type: text
     required: true
-    description: Google Calendar event id.
+    description: |
+      Google Calendar event id. For a RECURRING event pass the specific
+      instance id (e.g. <baseId>_<UTCstamp> like 6n76..._20260609T210000Z):
+      events.get returns that occurrence (live-verified 2026-06-08); the
+      bare recurringEventId returns the series master.
   calendar_id:
     type: text
-    description: Calendar id the event belongs to. Defaults to the primary calendar.
+    description: Calendar id the event belongs to. Defaults to the primary calendar (the runtime substitutes an empty calendarId with 'primary' for events.* methods).
   occurrence_date:
     type: text
     description: |
@@ -44,6 +49,8 @@ inputs:
       (gotcha #2); the default session_api (gapi events.get) reads by id and
       ignores it.
 result:
+  # v71: outcome = the winning action ("read"), auto-populated by the runtime.
+  outcome: text
   Title: text
   StartTime: datetime
   EndTime: datetime
@@ -55,6 +62,13 @@ flavors:
   browser:
     requires_auth: session_cookie
     label: Open the event in the editor and read its fields
+    # v71 signals model: `read` = the event editor opened (Title input present).
+    # FIX 0.5.0: aria-label is 'Title', NOT 'Add title' (that is the placeholder
+    # — input[aria-label='Add title'] matched 0 elements live 2026-06-08).
+    signals:
+      read:
+        type: selector_appears
+        selector: input[aria-label='Title']
     recipe:
       - id: open_editor
         type: use_widget
@@ -73,9 +87,7 @@ flavors:
             - Description
     outcomes:
       - action: read
-        signal:
-          type: selector_appears
-          selector: input[aria-label='Add title']
+        when: [read]
         extract:
           Title:
             from_step: read_event
