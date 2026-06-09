@@ -1,0 +1,36 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: send-email-tester
+  version: '2.0.0'
+  title: Gmail send_email tester (full end-to-end with ID extraction)
+  summary: |
+    Auto-fills compose with throwaway values, auto-clicks Send,
+    auto-clicks "View message" on the post-send snackbar, then reads
+    the canonical 16-hex thread_id from ThreadView's
+    h2.hP[data-legacy-thread-id]. Result is a populated
+    {sent, message_id, thread_id, message: { Id, ThreadId }} that
+    downstream atoms (apply_label, archive_email, …) can consume
+    directly.
+
+    **WILL ACTUALLY SEND** an email to test@anvisio.com each time —
+    the v1.0.0 commit:false preview mode is incompatible with the
+    new 5-step recipe (the post-Send extract steps already complete
+    the commit by the time the HITL probe-mask logic runs, causing
+    a 600s wait that times out). A future runtime fix to the HITL
+    branch will restore the preview option; for now this tester
+    verifies the full end-to-end path.
+
+do:
+  - fill_compose:
+      label: Filling, sending, and extracting message_id from the open thread
+      call: gmail.atom.send_email
+      commit: true
+      with:
+        To: ['test@anvisio.com']
+        Subject: 'Anvisio Smoke Test (do not send)'
+        Body: |
+          This compose dialog was filled by the gmail send_email_tester
+          blueprint. The recipe auto-clicks Send, auto-clicks View
+          message, and extracts the 16-hex thread_id from the
+          resulting ThreadView.

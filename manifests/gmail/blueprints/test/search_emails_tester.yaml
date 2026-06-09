@@ -1,0 +1,16 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: search-emails-tester
+  version: '1.0.0'
+  title: Gmail search_emails tester
+  summary: |
+    Migrated from manifests/gmail/blueprints/search_smoke.yaml (v60 PR #14).
+    Searches for 'anvisio' via Gmail's global search bar.
+
+do:
+  - search_for_anvisio:
+      label: Searching messages for anvisio
+      call: gmail.atom.search_emails
+      with:
+        query: anvisio

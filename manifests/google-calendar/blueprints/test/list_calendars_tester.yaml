@@ -1,0 +1,16 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: list-calendars-tester
+  version: '1.0.0'
+  title: Google Calendar list_calendars tester (gapi read)
+  summary: |
+    Calls list_calendars (no inputs). Default posture uses session_api
+    (gapi calendarList.list) — no OAuth. Result carries the user's
+    calendars (primary, Birthdays, Tasks, subscribed, …).
+
+    Drive via: /run-blueprint google-calendar list_calendars_tester
+do:
+  - list:
+      label: List the user's calendars (gapi)
+      call: google-calendar.atom.list_calendars

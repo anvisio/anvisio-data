@@ -1,0 +1,56 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: rsvp-smoke
+  version: '1.0.0'
+  title: Google Calendar RSVP smoke (respond_to_event, browser resolve_rsvp)
+  summary: |
+    End-to-end smoke for respond_to_event's browser flavor (the resolve_rsvp
+    step). Self-discovers INVITATIONS — events you are a GUEST of, not the
+    organizer (RSVP buttons only render on invitations) — then RSVPs to each via
+    the EventDetail popup's Respond Yes/No/Maybe buttons (commit:true).
+    Exercises the enum->label map (accepted -> "Respond Yes") and the
+    popup-close `responded` signal.
+
+    REQUIRES a real invitation in the window: another account must have invited
+    this one to an event. list_events returns every event; the synthesize step
+    keeps only those where the current user is an attendee but NOT the organizer.
+    (Needs the LLM — BYOK or the bridge — for that filter.)
+
+    ⚠️ COMMIT MODE — sends a real RSVP (accept). DETACH chrome-devtools MCP
+    first: the runtime's trusted click on the Respond button needs the CDP socket.
+    Drive via: /run-blueprint google-calendar rsvp_smoke
+do:
+  - find:
+      label: Find events in a window
+      call: google-calendar.atom.list_events
+      with:
+        time_min: '2026-06-08T00:00:00-07:00'
+        time_max: '2026-06-30T23:59:59-07:00'
+
+  - pick_invites:
+      label: Keep only invitations (you are a guest, not the organizer)
+      synthesize: |
+        From the events, return ONLY the ones that are INVITATIONS to the
+        signed-in user: an event that has an attendee with `self: true` while
+        the `organizer` is someone else (organizer.self is false). Return JSON:
+        { "invitations": [ { "id": <event id>, "summary": <title>,
+          "occurrence_date": <start.dateTime> } ] }
+        Return an empty list if none qualify.
+      with:
+        events: '${ .find.events }'
+
+  - rsvp_each:
+      for:
+        each: inv
+        in: '${ .pick_invites.invitations }'
+        item_label: '${ $inv.summary }'
+      do:
+        - rsvp:
+            label: RSVP "accepted" via the Respond buttons (auto-click)
+            call: google-calendar.atom.respond_to_event
+            commit: true
+            with:
+              event_id: '${ $inv.id }'
+              response: accepted
+              occurrence_date: '${ $inv.occurrence_date }'

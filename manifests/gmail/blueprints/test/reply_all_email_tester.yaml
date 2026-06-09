@@ -1,0 +1,68 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: reply-all-email-tester
+  version: '1.2.0'
+  title: Gmail reply_all_email browser-flavor tester
+  summary: |
+    Live-verifies the reply_all_email browser flavor end-to-end.
+    Same shape as reply_email_tester but uses
+    gmail.thread_reply_all_button which clicks the More menu and
+    picks "Reply all" — Gmail HIDES that menuitem on
+    single-recipient threads (limitation documented in
+    reply_all_email atom v0.8.0 changelog + [[project-pickup-2026-
+    05-26]] follow-up #8).
+
+    v1.2.0 (2026-05-26): force `flavor: browser` on the search step —
+    same rationale as reply_email_tester 1.2.0 (BYOK accounts default
+    to oauth_api which returns thread.id ids that fail Gmail's
+    cold-load `#all/<id>` URL routing).
+
+    v1.1.0 (2026-05-26): self-discover via search_emails. Wrapped
+    in a `for: each in:` loop with maxResults:1 (expression
+    evaluator slice 2 doesn't support array indexing). NOTE: Gmail
+    search has no recipient-count filter, so the picked thread may
+    be single-recipient — in which case the recipe will fail at
+    open_composer with "use_widget: invoke failed". That failure
+    mode IS the test — confirms the atom correctly relies on the
+    gated affordance. For a clean positive-path test, manually edit
+    the search query below to one that targets known multi-recipient
+    threads (e.g. `from:meetingapp.com`).
+
+    Drive via: /run-blueprint gmail reply_all_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to reply-all
+      call: gmail.atom.search_emails
+      flavor: browser  # see v1.2.0 changelog above
+      with:
+        # NOTE: Gmail has no recipient-count filter, so this generic query may
+        # pick a single-recipient thread, where reply_all fails at open_composer
+        # (Gmail hides the Reply-all menuitem — atom 0.8.0 limitation). For a
+        # clean positive-path drive, temporarily narrow this to a known
+        # multi-recipient thread (see the summary above).
+        query: 'newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - reply_all_throwaway:
+      label: Reply-all to the picked thread (preview mode — no Send)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'reply-all to thread'
+        item_link:
+          view: ThreadView
+          with:
+            messageId: '${ $tid }'
+      do:
+        - reply_all:
+            call: gmail.atom.reply_all_email
+            commit: false
+            with:
+              messageId: '${ $tid }'
+              Body: |
+                This reply-all was drafted by the gmail
+                reply_all_email_tester blueprint. The Send step is
+                skipped (commit:false) so no email leaves your
+                account.

@@ -1,0 +1,25 @@
+# Test/demo fixture — a linear call followed by an ask task. No
+# title/summary, so excluded from the picker inventory. Exercises the
+# BlueprintFeed's interactive ask card (needs a registered AskResolver).
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: smoke-ask
+  version: '1.0.0'
+
+do:
+  - listOpps:
+      label: Listing opportunities
+      call: salesforce.atom.query_records
+      with:
+        object_type: Opportunity
+        list_view: AllOpportunities
+
+  - pickFocus:
+      label: Picking an opportunity
+      ask:
+        prompt: Which opportunity should we prep first?
+        options:
+          - Acme Corp
+          - Globex Industries
+          - Skip

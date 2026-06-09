@@ -1,0 +1,74 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: reply-email-tester
+  version: '1.2.0'
+  title: Gmail reply_email browser-flavor tester
+  summary: |
+    Live-verifies the reply_email browser flavor end-to-end through
+    the runtime. Specifically exercises:
+      - depends_on_view: ThreadView pre-nav (URL deeplink to
+        #all/{messageId}, per-instance verify via h2.hP
+        [data-legacy-thread-id={messageId}])
+      - open_composer step (use_widget gmail.thread_reply_button) —
+        the post-A3-audit pattern where each compose atom owns its
+        composer trigger
+      - fill_fields step with Reply schema's Body input (To is
+        implicit on reply — Gmail auto-fills the sender)
+      - commit-marked Send step skipped (commit:false); user clicks
+        Send manually in the open compose if they want to actually
+        send, OR closes the tab to skip
+
+    v1.2.0 (2026-05-26): force `flavor: browser` on the search step.
+    On a BYOK-configured account, the default flavor priority picks
+    oauth_api for reads, and Gmail's REST `users.threads.list`
+    returns thread-level ids (per docs: "the id of the first message
+    in the thread, although it can change"). Cold-load (fresh tab)
+    deep-linking to `#all/<that-id>` SILENTLY strips the fragment —
+    URL becomes `#all/`, no thread loads, pre-nav verify times out
+    at 15s. The browser flavor instead scrapes data-legacy-thread-id
+    from rendered `tr.zA` rows; those ARE valid cold-load fragments
+    (Gmail's URL rewrites to the canonical FMfc/Qgrc routable form
+    and the thread opens). Forcing browser here keeps the tester
+    deterministic across BYOK/non-BYOK setups. Surfaced via live
+    drive 2026-05-26.
+
+    v1.1.0 (2026-05-26): self-discover the thread_id via
+    search_emails so the tester doesn't rot when a previously-
+    hardcoded id is archived/deleted. Wrapped in `for: each in:`
+    with maxResults:1 since the expression evaluator (slice 2)
+    only supports dot paths, not array indexing.
+
+    Drive via: /run-blueprint gmail reply_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to reply to
+      call: gmail.atom.search_emails
+      flavor: browser  # see v1.2.0 changelog above re: cold-load id rejection
+      with:
+        query: 'newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - reply_throwaway:
+      label: Reply to the picked thread (preview mode — no Send)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'reply to thread'
+        item_link:
+          view: ThreadView
+          with:
+            messageId: '${ $tid }'
+      do:
+        - reply:
+            call: gmail.atom.reply_email
+            commit: false
+            with:
+              messageId: '${ $tid }'
+              Body: |
+                This reply was drafted by the gmail reply_email_tester
+                blueprint. The Send step is skipped (commit:false) so
+                no email leaves your account; click Send manually to
+                verify the post-commit sent outcome, or close the tab
+                to skip.

@@ -1,0 +1,24 @@
+# Test/demo fixture — a linear call followed by a for-loop over its
+# results. No title/summary, so excluded from the picker inventory.
+# Exercises the BlueprintFeed's indented per-iteration entry rendering.
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: smoke-loop
+  version: '1.0.0'
+
+do:
+  - listOpps:
+      label: Listing opportunities
+      call: salesforce.atom.query_records
+      with:
+        object_type: Opportunity
+        list_view: AllOpportunities
+
+  - perOpp:
+      label: Reviewing each opportunity
+      for:
+        each: opp
+        in: '${ .listOpps.records }'
+        item_label: '${ $opp.Name }'
+      do: []

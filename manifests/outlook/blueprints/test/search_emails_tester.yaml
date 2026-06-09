@@ -1,0 +1,20 @@
+document:
+  dsl: '1.0.0'
+  namespace: outlook
+  name: search-emails-tester
+  version: '1.0.0'
+  title: Outlook search_emails tester
+  summary: |
+    Searches the mailbox for 'pilot' via OWA's global search bar and
+    returns the matching conversation ids. Harden item #1 driver: verify
+    the scrape is scoped to the live results listbox (no stale inbox rows)
+    and returns the right count. Drive via: /run-blueprint outlook
+    search_emails_tester
+
+do:
+  - search_for_pilot:
+      label: Searching messages for pilot
+      call: outlook.atom.search_emails
+      flavor: browser
+      with:
+        query: pilot

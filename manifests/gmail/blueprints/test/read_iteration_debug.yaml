@@ -1,0 +1,42 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: read-iteration-debug
+  version: '1.0.0'
+  title: Debug — verify read_email returns DIFFERENT data per thread_id
+  summary: |
+    Browser-flavor hardening debug blueprint #2. Runs search_emails to
+    get 3 thread_ids, then read_email on each via a for-loop, then
+    dumps each iteration's result via its own synthesize step. Reading
+    the 3 synthesize prompt JSONs back-to-back lets you confirm whether
+    each iteration actually navigated to a different thread and scraped
+    different data, OR whether they all return the same email (the
+    triage_inbox stale-DOM bug).
+
+do:
+  - recent:
+      label: Searching for recent messages (only 3)
+      call: gmail.atom.search_emails
+      with:
+        query: 'newer_than:1d -category:promotions -category:social'
+        maxResults: 3
+
+  - perThread:
+      label: Reading each thread
+      for:
+        each: tid
+        in: '${ .recent.thread_ids }'
+      do:
+        - details:
+            call: gmail.atom.read_email
+            with:
+              messageId: '${ $tid }'
+
+        - dump_one:
+            synthesize: |
+              Return a one-line JSON object capturing this iteration's
+              data. Format: {"tid":"<input>","subject":"<from .details.subject>","from":"<from .details.from>"}. No prose.
+            with:
+              tid: '${ $tid }'
+              subject: '${ .details.subject }'
+              from: '${ .details.from }'

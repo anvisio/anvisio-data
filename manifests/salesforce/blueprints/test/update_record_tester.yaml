@@ -1,0 +1,75 @@
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: update-record-tester
+  version: '1.1.0'
+  title: SF write-ladder HITL test (spec 72 Trap-2 discard proof)
+  summary: |
+    Runtime proof of the spec-72 L4 consequence ladder on all three SF
+    write atoms, with the update step as the decisive Trap-2 assertion:
+    a HITL discard must report `cancelled`, NOT `updated`. The old
+    `updated` outcome was a bare `selector_disappears SaveEdit`, which
+    ALSO fires on Cancel, so a discarded edit reported a fake success.
+    The atom now requires the success toaster too and declares an
+    abandon_signal, so a Cancel resolves as `cancelled`.
+
+    Every write task is `commit: false` (spec 71 HITL): the recipe FILLS
+    the form but does NOT click the destructive button. YOU act in the
+    Salesforce tab, the runtime watches the consequence. This mirrors the
+    real product flow (recipes fill, the user commits). Self-fixturing and
+    self-cleaning: create the fixture, discard an edit, delete the fixture.
+    A cancelled step is state:completed (runner.ts), so the chain continues
+    to delete even after you discard the update.
+
+    DRIVE IT (act in the SF tab, NOT the side panel's Skip button):
+      1. create  -> a "review & Save" panel appears; click SAVE in SF's
+                    New modal. Expect feed: `created` (catches the
+                    "<Obj> was created" toast on the cross-SPA-nav).
+      2. open     -> no action; navigates to the record.
+      3. UPDATE   -> the recipe fills NextStep, SF's edit modal is up.
+                    *** Click CANCEL in SF (do NOT click Save, do NOT
+                    click Skip in the panel). ***
+                    PASS = feed shows a muted `cancelled` dot.
+                    FAIL = feed shows `updated` (Trap-2 regressed).
+      4. delete   -> click the overflow Delete, then CONFIRM in the
+                    dialog. Expect feed: `deleted` (cleans up the fixture).
+
+    Run with: /run-blueprint salesforce update_record_tester
+    Pre-req: an active, signed-in Salesforce Lightning tab (writes-OK org).
+
+do:
+  - create_fixture_opp:
+      label: 'Create a throwaway Opportunity (click SAVE in SF)'
+      call: salesforce.atom.create_record
+      commit: false
+      with:
+        object_type: Opportunity
+        fields:
+          Name: Anvisio Discard-Test Opp
+          StageName: Prospecting
+          CloseDate: 12/31/2026
+
+  - open_fixture_opp:
+      label: 'Open the throwaway Opportunity'
+      call: salesforce.atom.open_record
+      with:
+        object_type: Opportunity
+        record_id: '${ .create_fixture_opp.record_id }'
+
+  - update_then_cancel:
+      label: 'Fill NextStep, then CLICK CANCEL in SF (discard test, expect cancelled)'
+      call: salesforce.atom.update_record
+      commit: false
+      with:
+        object_type: Opportunity
+        record_id: '${ .create_fixture_opp.record_id }'
+        fields:
+          NextStep: This edit should be DISCARDED. Click Cancel, not Save.
+
+  - delete_fixture_opp:
+      label: 'Delete the throwaway Opportunity (CONFIRM Delete in SF, cleanup)'
+      call: salesforce.atom.delete_record
+      commit: false
+      with:
+        object_type: Opportunity
+        record_id: '${ .create_fixture_opp.record_id }'

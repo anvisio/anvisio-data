@@ -1,0 +1,38 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: create-event-tester
+  version: '1.0.0'
+  title: Google Calendar create_event tester (single event, preview)
+  summary: |
+    Drives create_event's browser flavor in PREVIEW mode (commit:false):
+    Create -> Event -> "More options" -> the FULL editor, fills
+    Title/Start/End, then STOPS at Save for you to review and click Save
+    (the launch HITL contract). Verifies the live-fixed create-flow
+    selectors (the Create / Event / More options buttons have no aria-label;
+    matched via trigger_text / data-key as of widget lib 0.5.0) and that the
+    full editor is reached via More options (title input[aria-label='Title']).
+
+    Drive via: /run-blueprint google-calendar create_event_tester
+    (DETACH chrome-devtools MCP first — it holds the CDP socket the runtime's
+    trusted clicks need.)
+
+    SPEC 72 DISCARD TEST (the regression guard — run BOTH paths):
+      - HAPPY PATH: at the Save stop, click Save -> expect action=created
+        (the "Event saved" toaster fires the new composite L4).
+      - DISCARD PATH: at the Save stop, DISCARD instead (click "Cancel event
+        creation" / press Escape; do NOT Save) -> expect action=discarded /
+        not-committed (v71: the `discarded` outcome = when:[editor_closed]
+        not:[saved]). The OLD bare selector_disappears false-reported
+        `created` here (the editor closed either way; Trap 2). The signals model
+        now needs the "Event saved" toast (the `saved` signal), which a discard
+        never fires — so `created` loses the grace race and `discarded` wins.
+do:
+  - create:
+      label: Fill a single event in the full editor (you click Save)
+      call: google-calendar.atom.create_event
+      commit: false
+      with:
+        Title: 'Anvisio create_event smoke'
+        StartTime: '2026-05-29T14:00:00-07:00'
+        EndTime: '2026-05-29T14:30:00-07:00'

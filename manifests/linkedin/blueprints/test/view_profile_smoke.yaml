@@ -1,0 +1,29 @@
+document:
+  dsl: '1.0.0'
+  namespace: linkedin
+  name: view-profile-smoke
+  version: '1.0.0'
+  title: LinkedIn view_profile smoke (read a member profile)
+  summary: |
+    Drives view_profile's browser flavor against a real profile: navigates
+    to /in/<profile_slug>/ and reads the hero card + About into a Person.
+    READ atom (no commit, no discard test): success = url_matches
+    linkedin.com/in/ + populated person fields.
+
+    Drive via: /run-blueprint linkedin view_profile_smoke
+    (DETACH chrome-devtools MCP first if attached: it holds the CDP socket
+    the runtime needs.)
+
+    Selectors are xpath (LinkedIn DOM ships hashed classes + no id anchors);
+    see linkedin.md. Live-validated 2026-06-01: 7 hero fields extract clean;
+    `about` carries an "About" heading prefix (flagged).
+
+    The default slug is the signed-in user's OWN profile (chanudamarla, no
+    notification). Swap in a prospect slug to enrich a real lead -- note that
+    viewing a non-self profile notifies that member.
+do:
+  - read_profile:
+      label: Read the member's profile hero + About into a Person
+      call: linkedin.atom.view_profile
+      with:
+        profile_slug: 'chanudamarla'

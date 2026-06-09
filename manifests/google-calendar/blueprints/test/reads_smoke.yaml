@@ -1,0 +1,48 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: reads-smoke
+  version: '1.0.0'
+  title: Google Calendar reads smoke (every read atom, one pass)
+  summary: |
+    End-to-end smoke for the READ cluster — runs each read atom through its
+    preferred session_api (gapi MAIN-world) flavor in one pass. Read-only and
+    safe (no mutation). Verifies the v71 reads return structured data and chain:
+      list_calendars -> list_events -> search_events -> get_event (per match).
+
+    get_freebusy is intentionally OMITTED: it has no session_api flavor yet, and
+    its oauth_api/mcp items handling needs the list->[{id}] transform follow-up
+    (see get_freebusy 0.2.0 / google-calendar.md), so it cannot run on a session
+    cookie alone. Add it here once that follow-up lands.
+
+    Drive via: /run-blueprint google-calendar reads_smoke
+    (chrome-devtools MCP can stay attached — reads need no trusted clicks.)
+do:
+  - calendars:
+      label: List the user's calendars (gapi calendarList.list)
+      call: google-calendar.atom.list_calendars
+
+  - events:
+      label: List events in a window (gapi events.list)
+      call: google-calendar.atom.list_events
+      with:
+        time_min: '2026-06-01T00:00:00-07:00'
+        time_max: '2026-06-30T23:59:59-07:00'
+
+  - search:
+      label: Search events by free text (gapi events.list + q)
+      call: google-calendar.atom.search_events
+      with:
+        query: 'Anvisio'
+
+  - read_each:
+      for:
+        each: ev
+        in: '${ .search.events }'
+        item_label: '${ $ev.summary }'
+      do:
+        - get:
+            label: Read one matched event by id (gapi events.get)
+            call: google-calendar.atom.get_event
+            with:
+              event_id: '${ $ev.id }'

@@ -1,0 +1,29 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: create-recurring-event-tester
+  version: '1.0.0'
+  title: Google Calendar create_event tester (RECURRING, preview)
+  summary: |
+    The headline recurrence verification. Drives create_event in PREVIEW
+    (commit:false) with a Recurrence RRULE, so fill_fields runs the
+    event_recurrence widget -> the set_recurrence primitive, which drives
+    the Custom recurrence dialog (frequency / interval / weekday toggles
+    reconciled to BYDAY / end condition). When it finishes, the editor's
+    Recurrence combobox should read "Weekly on Tuesday, Thursday, 6 times" —
+    review and click Save. Edit the RRULE to test other rules, e.g.
+    'RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20260815'.
+
+    Live-validated 2026-05-28 (chrome-devtools); this is the through-the-engine
+    version. Drive via: /run-blueprint google-calendar create_recurring_event_tester
+    (DETACH chrome-devtools MCP first.)
+do:
+  - create_recurring:
+      label: Fill a recurring event (set_recurrence drives the Custom dialog)
+      call: google-calendar.atom.create_event
+      commit: false
+      with:
+        Title: 'Anvisio recurring smoke'
+        StartTime: '2026-05-29T14:00:00-07:00'
+        EndTime: '2026-05-29T14:30:00-07:00'
+        Recurrence: 'RRULE:FREQ=WEEKLY;BYDAY=TU,TH;COUNT=6'

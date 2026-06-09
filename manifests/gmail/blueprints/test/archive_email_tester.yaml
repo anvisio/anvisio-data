@@ -1,0 +1,51 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: archive-email-tester
+  version: '2.0.0'
+  title: Gmail archive_email browser-flavor tester
+  summary: |
+    Live-verifies the archive_email browser flavor end-to-end via
+    the right-click context menu's Archive item (rewritten from the
+    toolbar in archive_email 0.8.0, 2026-05-28 — works in all list
+    views). Proof of success: archive_email's
+    positive snackbar outcome (`selector_appears [role='alert']`
+    + `must_contain_text: 'Conversation archived.'`). The snackbar
+    IS the L4 proof — no separate verify_archived read-back step
+    per /debug-atom skill (atom's positive snackbar is already
+    independent backend confirmation).
+
+    v2.0.0 (2026-05-27): rewritten from oauth_api flavor (1.0.0)
+    to browser flavor, matching the apply_label_tester / send_email_tester
+    pattern. Tests the user-facing path per spec 70 §7 (browser >
+    mcp > oauth_api for writes). Self-discovers a recent inbox
+    thread via search_emails (no rotting hardcoded thread_id).
+
+    Re-run safe: archive is reversible. The thread goes to All Mail
+    (still searchable + restorable). The user may click the Undo
+    button in Gmail's snackbar during the 5-second window OR find
+    the thread in All Mail and Move-to-Inbox manually.
+
+    Drive via: /run-blueprint gmail archive_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to archive
+      call: gmail.atom.search_emails
+      flavor: browser
+      with:
+        query: 'in:inbox newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - archive_throwaway:
+      label: Archive the picked thread (proof = positive snackbar in atom outcome)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'archive'
+      do:
+        - archive_call:
+            call: gmail.atom.archive_email
+            flavor: browser
+            with:
+              thread_id: '${ $tid }'
