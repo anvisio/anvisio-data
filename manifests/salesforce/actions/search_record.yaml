@@ -1,19 +1,27 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 3.3.0
+  version: 3.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    search_record atom: per-object record search via Aura
-    postListRecordsByName + the call_platform_api `filter` primitive.
-    Spec 70 reads prefer session_api > mcp.
+    search_record atom. TWO live flavors:
+      - session_api (default for reads): per-object Aura
+        postListRecordsByName + the call_platform_api `filter` primitive.
+        Needs object_type + list_view_api_name; Name-keyed objects only.
+      - browser (3.4.0): GLOBAL, CROSS-OBJECT search — navigate to the
+        forceSearch:searchPageDesktop one.app route and scrape the result
+        grid. Finds Subject-keyed objects (Task/Event/Case) the
+        session_api Name filter structurally cannot. object_type +
+        list_view_api_name are ignored. (mcp is declarative only — no MCP
+        transport in the v70/v71 runtime.)
 
-    Browser flavor removed 2026-05-30: /lightning/search/?q= deep-link
-    redirects to /home (live-confirmed on a healthy dev org, not a
-    session-degradation artifact). No DOM scrape salvages it; a future
-    search-box-driven recipe (click search, type, Enter, scrape) would
-    be a separate atom.
+    Browser flavor history: the ORIGINAL browser flavor was removed
+    2026-05-30 (the /lightning/search/?q= deep-link redirects to /home).
+    DRIVING the search box also fails (modern SF ignores synthetic
+    dispatch — chrome-step-driver pressKey note). The 3.4.0 browser flavor
+    sidesteps both by NAVIGATING to the one/one.app#<b64-json> forceSearch
+    route (no keystroke); live-proven 2026-06-16. See salesforce.md §6d.
 
     Cross-object SOSL via session cookie ruled out 2026-05-30: every
     Aura search descriptor (`LightningExperienceFinder/searchEntities`,
@@ -24,6 +32,7 @@ _meta:
     filter client-side. The caller MUST supply `object_type` and a
     `list_view_api_name`.
   changelog:
+    - "3.4.0 (2026-06-16): ADD a `browser` flavor — GLOBAL, CROSS-OBJECT search that finds Subject-keyed objects (Task/Event/Case) the session_api Name filter cannot. Mechanism: navigate goto_home → goto_search (one/one.app#<b64-json> forceSearch:searchPageDesktop route, built by navigate's new `hash_b64_json` arg) → scrape the result grid via the new `from_dom_records` extractor into {Id, Name} objects (schema-consistent with session_api's matches). WHY navigate not drive the box: the SF search box ignores synthetic dispatch (the runtime is CDP-free); the route renders identically when reached by URL. WHY goto_home first: record-view→forceSearch leaves the component unrendered; home→forceSearch renders (live 2026-06-16). CAVEAT: SF global search indexes asynchronously (~tens of seconds, measured ~26-68s for a fresh record) so it is NOT for finding a JUST-created record — the session_api + __Recent path (the CRUDS chain) handles fresh records via LDS. Live-proven end-to-end via tools/sf-search-browser-verify.mjs (create Task → poll → found 00T cross-object → cleanup). Removes search_record from the integration-completeness check-10 no-browser-flavor allowlist. session_api/mcp flavors unchanged."
     - "3.3.0 (2026-06-16): drop the `{{object_type}}.Name` entries from session_api listRecordsQuery `fields` + remove `sortBy` entirely. SF UI-API postListRecordsByName VALIDATES the query field refs, so an object with no `Name` field (Task/Event — name field is `Subject`) failed `aura: non-success`, breaking activity search (live, the Task CRUDS chain). `Id` is universal + the listview returns its full column set regardless (changelog 3.1.0), so matches are unchanged for the 6 Name-bearing objects; Task/Event now resolve `searched` cleanly (the client-side Name filter finds no Name on an activity row → 0 matches = the correct lenient result). Caller-safe: no input/output shape change, only the unsorted order differs (irrelevant to the chain + upsert_contact, which filter+pick by name)."
     - "3.2.0 (2026-06-09): CANONICAL ACTION FORM v71. result.outcome:text (auto from the winning action, 'searched') replaces the `searched` boolean; the `searched: literal:true` extract is dropped from both flavors (session_api + mcp). No browser flavor exists (removed 3.0.0), so there is no named-signals conversion — the two API flavors KEEP their inline signal: (synchronous; the Aura/MCP call completes inside the recipe). result.matches (consumed by upsert_contact + search_and_summarize) unchanged. Behaviour-preserving."
     - "3.1.0 (2026-05-31): flatten matches via from_aura_records (was from_step) → flat {Id, Name, Email, Title, ...} matching the declared schema_union, so callers read ${ $item.Name } / ${ $item.Id } directly (not raw {id, fields:{Name:{value}}}). Live finding (probed against the org): postListRecordsByName returns the listview's FULL column set regardless of listRecordsQuery.fields, so matches are already rich (AllContacts → Name/Email/Phone/Title/Account) with no per-object field list needed. The 0-matches symptom seen while wiring upsert_contact was NOT this atom — it was step-executor passing api_def RAW, so the client-filter's contains stayed the literal '{{inputs.query}}' and excluded everything; fixed in step-executor.ts the same day. fields/sortBy unchanged here."
@@ -139,3 +148,78 @@ flavors:
         extract:
           matches:
             from_api_response: ".matches"
+  browser:
+    requires_auth: session_cookie
+    label: SF GLOBAL search — navigate to the forceSearch route (cross-object; finds Subject-keyed objects)
+    # Genuinely CROSS-OBJECT global search (TOP_RESULTS) — finds Subject-keyed
+    # objects (Task / Event / Case) the session_api Name filter structurally
+    # cannot. object_type + list_view_api_name are IGNORED here (global search
+    # needs neither; kept required at the atom level for the session_api flavor).
+    #
+    # WHY NAVIGATE, not drive the search BOX: the global search box is a "strict"
+    # surface that IGNORES synthetic dispatch — typing + a synthetic Enter never
+    # submit it (chrome-step-driver pressKey note: "modern SF ignores synthetic
+    # dispatch"; live-confirmed 2026-06-16 — the box-driving recipe reached the
+    # input but never navigated). A trusted keystroke is unavailable to the
+    # runtime by design (CDP-free). BUT the results ROUTE renders identically when
+    # reached by URL: SF's one.app router decodes #<b64-json> into the
+    # forceSearch:searchPageDesktop component. The old /lightning/search/?q= path
+    # is dead (redirects to /home, why 3.0.0 dropped the browser flavor); this NEW
+    # one.app#<b64> route renders — live-proven 2026-06-16 (a minimal
+    # {term, scopeMap, groupId} payload returned the exact record).
+    recipe:
+      - id: goto_home
+        type: navigate
+        args:
+          # Reset to a clean SPA route FIRST. Navigating straight to
+          # one/one.app#<hash> from a /lightning/r/ record view (or a prior
+          # forceSearch page) leaves the forceSearch component UNRENDERED — no
+          # results grid appears (live 2026-06-16: record-view→forceSearch
+          # returned 0 grid anchors on every poll; home→forceSearch renders
+          # immediately). Home forces a clean mount, so the flavor works
+          # regardless of the caller's current page.
+          url: "{instance.origin}/lightning/page/home"
+      - id: goto_search
+        type: navigate
+        args:
+          url: "{instance.origin}/one/one.app"
+          # hash_b64_json base64-encodes this (with {{inputs.query}} templated into
+          # `term`) as the one.app hash → forceSearch results. No search box, no
+          # keystroke. TOP_RESULTS = cross-object.
+          hash_b64_json:
+            componentDef: "forceSearch:searchPageDesktop"
+            attributes:
+              term: "{{inputs.query}}"
+              scopeMap:
+                type: TOP_RESULTS
+              groupId: DEFAULT
+            state: {}
+      - id: await_results
+        type: wait_for_element
+        args:
+          # A record-link anchor inside a results grid = results rendered.
+          selector: "table[role='grid'] a[href*='/lightning/r/']"
+          timeout_ms: 20000
+    outcomes:
+      - action: searched
+        # Results-specific: a record-link anchor inside the results grid. Absent
+        # on /home (the dashboard has no record-link grid), so this gates against
+        # scraping pre-search chrome. A unique-token search yields >=1 row; a
+        # 0-result search times out (correct for a STRICT find — there is no row).
+        signal:
+          type: selector_appears
+          selector: "table[role='grid'] a[href*='/lightning/r/']"
+          timeout_ms: 20000
+        extract:
+          # {Id, Name} objects — schema-consistent with the session_api flavor's
+          # matches, so callers read ${ $item.Id } / ${ $item.Name } uniformly.
+          # from_dom_records scrapes each forceSearch result anchor: Id from the
+          # /lightning/r/{Id}/view href (id_pattern's capture group), Name from
+          # the link text. The global-search grid exposes only Id + display name;
+          # deeper fields need a record fetch (session_api returns the listview's
+          # full column set — the documented flavor difference).
+          matches:
+            from_dom_records:
+              selector: "table[role='grid'] a[href*='/lightning/r/']"
+              id_attr: href
+              id_pattern: "/lightning/r/(?:[A-Za-z]+/)?([A-Za-z0-9]{15,18})/view"

@@ -1,10 +1,10 @@
 ---
 name: manifests/salesforce/salesforce.md
-version: 0.2.0
+version: 0.3.0
 cdn_schema_version: 70.0.0
 authored_by: cd2k + claude
 authored_at: 2026-05-29
-verified_at: 2026-05-31
+verified_at: 2026-06-16
 ---
 
 # Salesforce (Lightning Experience)
@@ -196,6 +196,17 @@ Implications for `search_record`:
       of whether the blueprint opened the record), but needs a new recipe
       primitive (`retry_on_empty` or a `loop_until` construct). Deferred
       until more blueprints hit the lag.
+- **STRICT CRUDS search (LANDED 2026-06-16).** The self-fixturing CRUDS
+  chain (`tools/sf-crud-catalog.mjs`) switches the 4 Name-keyed objects
+  (Contact/Account/Opportunity/Lead) to `__Recent` — the universal
+  Recently-Viewed listview, warmed by the chain's open-before-search step —
+  and asserts STRICTLY that the just-created `record_id` is in `matches`
+  (`result_includes {Id}`), where it was previously lenient (only that the
+  `searched` outcome fired). Live-verified all 4. `__Recent` is the universal
+  generalization of option (1)'s per-object `RecentlyViewed<Object>`.
+  Case/Task/Event stay LENIENT on session_api (Subject-keyed, no `Name`
+  field → the client Name filter returns 0 by construction); their strict,
+  cross-object search is the `browser` flavor (§6d).
 - The per-object recipe shape is correct, but the RUNTIME silently dropped
   the filter until 2026-05-31 (commit a3e22f1c). The recipe's
   `filter.contains` is a template (`{{inputs.query}}`); `call_platform_api`
@@ -226,6 +237,41 @@ Live-probed 2026-05-31 against the dev org:
   scalar you need. Seen 2026-05-31 in pipeline_review's synthesize
   `with: { selected: ${ .chosen.selected } }`, which dumped the full nested
   Account/Owner records into the prompt (noisy but harmless).
+
+### 6d. GLOBAL search — the `browser` flavor (cross-object, no listview)
+`search_record` v3.4.0 adds a `browser` flavor: a GLOBAL, CROSS-OBJECT search
+that finds Subject-keyed objects (Task/Event/Case) the session_api Name filter
+structurally cannot (§6a). It is the only general search path in the
+browser-first runtime (the `mcp`/SOSL flavor is declarative — there is no MCP
+transport in v70/v71).
+
+- **Navigate, do NOT drive the search box.** The global search box is a strict
+  surface that IGNORES synthetic dispatch (the runtime is CDP-free; see
+  `chrome-step-driver.ts` pressKey note) — typing + a synthetic Enter never
+  submit it (live-confirmed 2026-06-16: the box-driving recipe reached the input
+  but never navigated). The OLD `/lightning/search/?q=` deep-link is also dead
+  (redirects to `/home`). What WORKS: navigate to the one.app route SF itself
+  builds on Enter — `{origin}/one/one.app#<base64-json>` where the JSON is
+  `{componentDef:"forceSearch:searchPageDesktop", attributes:{term, scopeMap:{type:"TOP_RESULTS"}, groupId:"DEFAULT"}, state:{}}`.
+  Built by navigate's `hash_b64_json` arg (templates `term` from the query, then
+  base64-encodes). `TOP_RESULTS` = cross-object.
+- **goto_home FIRST.** Navigating straight to the forceSearch route from a
+  `/lightning/r/{id}/view` record view (or a prior search page) leaves the
+  component UNRENDERED — no result grid (live 2026-06-16). The recipe navigates
+  `goto_home` → `goto_search` so it works from any caller page.
+- **Extraction.** Result rows are `table[role='grid'] a[href*='/lightning/r/']`;
+  `from_dom_records` scrapes each into `{Id, Name}` (Id from the href, Name from
+  the link text) — schema-consistent with the session_api flavor's matches.
+  The grid exposes only Id + display name; deeper fields need a record fetch.
+- **INDEX LAG — not for just-created records.** SF global search (SOSL-backed)
+  indexes asynchronously: a just-created record takes ~tens of seconds to ~1 min
+  to become searchable (measured ~26–68s for a fresh Task, 2026-06-16). So the
+  browser flavor is for finding EXISTING records cross-object; the CRUDS chain's
+  fresh-record search stays session_api + `__Recent` (§6a, LDS-fresh, no lag).
+- **Proof:** `tools/sf-search-browser-verify.mjs` (create a Task → poll the
+  browser search through the real runtime until indexed → assert the `00T`
+  cross-object hit → self-clean). The `mcp` flavor stays in `_mcp_tools` parity
+  but is unreachable at runtime.
 
 ### 6b. Modal DOM lives 6+ shadow roots deep — probe with a piercing helper
 The New/Edit Opportunity modal renders as standard LWC: every
