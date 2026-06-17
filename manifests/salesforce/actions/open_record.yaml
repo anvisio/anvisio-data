@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/actions/open_record.yaml
-  version: 2.0.1
+  version: 2.1.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
@@ -10,6 +10,7 @@ _meta:
     don't drive navigation). Used by blueprints that need to land on
     RecordView before calling update_record / delete_record.
   changelog:
+    - "2.1.0 (2026-06-09): CANONICAL ACTION FORM v71. result.outcome:text (auto from the winning action, 'opened') replaces the `opened` boolean; the browser flavor resolves via a named signals: map + when:[opened] (was the inline signal:). The `opened: literal:true` extract is dropped. object_types kept (templated object:). Behaviour-preserving."
     - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when. Live-verified recipe + sample carry over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
@@ -28,11 +29,17 @@ inputs:
     required: true
     sample: 006dM00000fJSAMPLE
 result:
-  opened: boolean
+  # v71: outcome = the winning action ("opened"), auto-populated by the runtime.
+  outcome: text
 flavors:
   browser:
     requires_auth: session_cookie
     label: Open the record detail page
+    # v71 signals model: `opened` = the URL settled on the record detail page.
+    signals:
+      opened:
+        type: url_matches
+        pattern: /lightning/r/.+/view
     recipe:
       - id: nav_record
         type: navigate
@@ -40,9 +47,4 @@ flavors:
           url: "{instance.origin}/lightning/r/{{inputs.object_type}}/{{inputs.record_id}}/view"
     outcomes:
       - action: opened
-        signal:
-          type: url_matches
-          pattern: /lightning/r/.+/view
-        extract:
-          opened:
-            literal: true
+        when: [opened]

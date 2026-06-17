@@ -1,0 +1,139 @@
+_meta:
+  name: manifests/salesforce/actions/create_note.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-16
+  description: |
+    create_note atom — create a Lightning Note (ContentNote, key prefix
+    069) attached to a parent record. DEDICATED atom because the
+    object-generic create_record CANNOT make a ContentNote:
+    /lightning/o/Note/new renders NO form (the legacy Note object, prefix
+    002, has no Lightning create UI; the modern Lightning Note is a
+    ContentNote that is only ever created from a record's "New Note" quick
+    action). So this atom opens a PARENT record (Contact or Opportunity —
+    both reliably creatable), clicks the top-level "New Note" button, fills
+    the Chatter-publisher "New Note" modal (Title + Body), and Saves.
+
+    Browser-only flavor: the modal save fires a ContentNote insert +
+    ContentDocumentLink to the parent under the hood; there is no clean
+    session/MCP single-call equivalent that also links to the parent, and
+    the create UI is the supported path. Live-probed end-to-end on
+    2026-06-16 against a Contact /view (Title input.input[maxlength=80],
+    Body textarea.textarea, Save button.cuf-publisherShareButton; success
+    toast `Note "<title>" was created.` in .toastMessage; modal then
+    closes). The committed step is the Save click (HITL pause point).
+
+    record_id (the new ContentNote's 069 id) is NOT surfaced: the save is a
+    modal on the parent page with no /r/{id}/view redirect, and the toast
+    carries only the title. The `created` outcome echoes the title +
+    parent_id; a follow-up open/update/delete would resolve the ContentNote
+    by listing the parent's notes (out of scope for this CREATE atom — see
+    salesforce.md).
+  changelog:
+    - "1.0.0 (2026-06-16): initial. Dedicated ContentNote create via a parent record's New Note modal. Live-verified Title+Body fill + Save + the `was created` toast on a Contact."
+
+description: Create a Lightning Note (ContentNote) on a parent record via its New Note modal.
+object: Note
+object_types: [Note]
+commits_changes: true
+# ParentRecordView (NOT `any` + a recipe navigate): create_note is a write, so
+# the runner opens a fresh blank edit tab; a recipe navigate step would resolve
+# {instance.origin} from that chrome://newtab tab and fail. The VIEW entry uses
+# the home tab's instanceOrigin to land the fresh tab on the parent record
+# ({parent_type}/{parent_id} bound from this atom's inputs). See the view's note.
+depends_on_view: ParentRecordView
+inputs:
+  parent_type:
+    type: text
+    required: false
+    description: The parent record's object type (Contact, Opportunity, Account, …). Default Contact.
+    sample: Contact
+  parent_id:
+    type: id
+    required: true
+    description: The parent record Id the note attaches to (a ContentDocumentLink is created to it).
+    sample: 003dM00000fXSAMPLE
+  title:
+    type: text
+    required: true
+    sample: Pilot kickoff notes
+  body:
+    type: text
+    required: false
+    sample: Discussed rollout timeline and success metrics.
+result:
+  # v71: outcome = the winning action ("created" | "cancelled"), auto-populated.
+  outcome: text
+  record_name: text
+  # record is schema-typed but NULLABLE: the New Note modal save fires no
+  # /r/{id}/view redirect and the success toast carries only the title, so the
+  # browser flavor cannot surface the new ContentNote's Id (the schema's
+  # primary_key). Per the v70 signature-parity rule a nullable schema-typed
+  # entry may be omitted by a flavor that can't populate it — so the `created`
+  # outcome surfaces record_name only (a future session_api/MCP ContentNote
+  # create could populate record.Id).
+  record:
+    schema: Note
+    nullable: true
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open parent record, click New Note, fill Title + Body, Save when commit:true
+    # Signals (live-probed 2026-06-16):
+    #  - created_toast: the success toaster `Note "<title>" was created.` in
+    #    .toastMessage (.slds-theme--success) — specific + sufficient. The
+    #    modal save has no record-view redirect, so the toast is the create
+    #    proof (mirrors create_record's captured SF toast, but used as the
+    #    POSITIVE here since there is no /r/{id}/view nav to watch).
+    #  - modal_closed: the New Note modal's Title input disappears. cancelled
+    #    = modal dismissed with no toast (the HITL discard / Cancel click).
+    signals:
+      created_toast:
+        type: transient_appears
+        selector: ".toastMessage"
+        must_contain_text: "was created"
+      modal_closed:
+        type: selector_disappears
+        selector: "div[role='dialog'] input.input[maxlength='80']"
+    recipe:
+      # No nav step: depends_on_view=ParentRecordView already landed the (fresh,
+      # for a write) tab on the parent record via the view entry (instanceOrigin
+      # path). The recipe starts at the New Note affordance.
+      - id: open_new_note
+        type: use_widget
+        args:
+          widget: salesforce.new_note_button
+          op: invoke
+      - id: fill_title
+        type: use_widget
+        args:
+          widget: salesforce.note_title_input
+          op: fill
+          inputs:
+            value: "{{inputs.title}}"
+      - id: fill_body
+        type: use_widget
+        args:
+          widget: salesforce.note_body_input
+          op: fill
+          inputs:
+            value: "{{inputs.body}}"
+      - id: save_note
+        type: use_widget
+        commit: true
+        args:
+          widget: salesforce.note_save_button
+          op: invoke
+    outcomes:
+      - action: created
+        when: [created_toast]
+        # record (nullable schema-typed) is NOT extracted: the modal save gives
+        # no ContentNote Id, and the parity rule forbids a nested record extract
+        # missing the primary_key. Surface record_name (the title) only.
+        extract:
+          record_name:
+            from_input: title
+      - action: cancelled
+        when: [modal_closed]
+        not: [created_toast]

@@ -67,21 +67,28 @@ captured by committing throwaway records and reading the toast.**
 | update | `was saved` | `Opportunity "X" was saved.` | → org **Welcome page** unless `backgroundContext` (gotcha 2) |
 | delete | `was deleted` | `Opportunity "X" was deleted. Undo` | → `/lightning/o/{Object}/list` |
 
-The atoms compose this as `all:[transient_appears .toastMessage <text>,
-<corroborating rung>]`. The toast fires regardless of where Save lands
-(it's app-shell-level), so the ladder is welcome-redirect-robust AND not a
-Trap-2 fake-success.
+v71 (2026-06-09) keys each positive terminal off the toast ALONE
+(`when:[saved_toast]` / `when:[deleted_toast]`); the surface-disappear that was
+the 2.x `all:` composite's corroborating rung is now the `cancelled` guard (see
+below). **create_record is the exception** — its positive keys off the
+`/r/{id}/view` redirect (`created_nav`), the only source of the server-assigned
+record_id, with no toast rung. The toast fires regardless of where Save lands
+(app-shell-level), so keying off it is welcome-redirect-robust AND not a Trap-2
+fake-success.
 
-## `abandon_signal` per write atom (spec 72 R1)
+## Discard detection per write atom (v71 signals model; was the spec-72 `abandon_signal`)
 
-The HITL discard detector, raced against the commit outcome with a grace
-window (`raceWithGrace`).
+v71 (2026-06-09) replaced the flavor-level `abandon_signal` with an explicit
+`cancelled` outcome: a named surface-disappear signal in `when:`, vetoed by the
+positive terminal's signal in `not:` (grace-arbitrated, so a real commit whose
+toast/redirect lands a beat later still wins). The surfaces watched are the same
+ones the old `abandon_signal` used:
 
-| Atom | `abandon_signal` | Discard behavior (live-confirmed) |
-|---|---|---|
-| create_record | `selector_disappears button[name='SaveEdit']` | cancel New modal → Save gone, no toast, nav to list |
-| update_record | `selector_disappears button[name='SaveEdit']` | cancel edit modal → Save gone, no "was saved" toast |
-| delete_record | `selector_disappears div[role='dialog']` | Cancel confirm → dialog closes, no toast, stays on `/view` |
+| Atom | cancelled `when:` (surface gone) | vetoed by `not:` | Discard behavior (live-confirmed) |
+|---|---|---|---|
+| create_record | `selector_disappears button[name='SaveEdit']` (`abandon`) | `created_nav` (`/r/{id}/view`) | cancel New modal → Save gone, no record-view nav |
+| update_record | `selector_disappears button[name='SaveEdit']` (`editor_closed`) | `saved_toast` (`was saved`) | cancel edit modal → Save gone, no "was saved" toast |
+| delete_record | `selector_disappears div[role='dialog']` (`dialog_closed`) | `deleted_toast` (`was deleted`) | Cancel confirm → dialog closes, no toast, stays on `/view` |
 
 ## DOM gotchas
 
@@ -137,6 +144,17 @@ excludes `display:none`); regression test in chrome-signal-driver.test.ts
 modal AND toaster — the success toasts (`.toastMessage`) only dodged it because
 `transient_appears` catches them via the mutation-observer path, which skips the
 visibility check.
+
+### 5a. Browser list-view landmark is `lst-list-view-manager` (`records-base-list` is dead)
+Live-verified 2026-06-09 on `/lightning/o/Opportunity/list`: the list renders 23
+`tbody tr` rows, but **NOT** inside a `records-base-list` custom element (0 matches
+piercing all shadow roots). The list container is `lst-list-view-manager` (1 match,
+the same landmark `list_records` uses). `list_records.listed` + `query_records`'s
+browser-fallback `queried` signal + its wait step all anchor on
+`lst-list-view-manager`. (query_records' browser flavor only proves the list
+rendered; structured rows come from the session_api Aura path, not a DOM scrape —
+so the dead `records-base-list` selector was a slow-timeout, not a data bug. Fixed
+in query_records 0.5.0.)
 
 ### 6. "Sorry to interrupt / CSS Error" interstitial
 A `ignoreCache` / hard reload of a Lightning page can desync the loaded
@@ -269,6 +287,63 @@ separate edit surface), so they do **NOT** set `runs_in_home_tab` — the
 runtime's own-tab gate (`commits_changes && browser && !runs_in_home_tab`)
 correctly spawns the edit tab for them. (Contrast Gmail's in-place row
 actions, which DO set it.)
+
+### 9. Task / Event `/new` is the ACTIVITY COMPOSER, not the standard modal
+Live-probed 2026-06-16 (cd2k dev org). `/lightning/o/Task/new` and
+`/lightning/o/Event/new` render the **Aura activity composer**, a different
+surface from the LWC New-record modal the 6 core objects use. Consequences:
+- **Subject** is `<input role='combobox' aria-label='Subject'
+  class='slds-combobox__input slds-input' maxlength='255'>` — it sits
+  OUTSIDE `records-record-layout-item`, has NO `name=` attr, and NO
+  placeholder. The discriminator is `aria-label='Subject'` (the on-page
+  schema label). Added `input[aria-label='{{field_label}}']` +
+  `textarea[aria-label='{{field_label}}']` fallbacks to `salesforce.text`
+  (widget-libraries 4.5.0) so the generic fill_fields lands it.
+- **Save** is `<button title='Save'>Save</button>` (also "Save & New") with
+  NO `name='SaveEdit'`. The standard modal's Save is `button[name='SaveEdit']`
+  with an EMPTY title — mutually exclusive, so adding `button[title='Save']`
+  to `salesforce.save_button` (widget-libraries 4.6.0, trigger + verify_target)
+  covers both surfaces with no collision. Exact `title='Save'` never matches
+  'Save & New'.
+- **Post-Save nav is identical to the standard modal**: clicking the
+  composer Save redirects to `/lightning/r/{id}/view`, so
+  create_record's `created_nav` signal fires + captures the record_id. Task/
+  Event therefore need **NO dedicated atom** — only the two selector fallbacks
+  above. Confirmed: a Task create landed `00TdM0…/view`.
+- **Event date/time are PRE-DEFAULTED**: the composer is a modal ("New Event")
+  with Start/End *Date + *Time required but pre-filled (e.g. today 7:00–8:00 PM).
+  So a Subject-only fixture satisfies Save — no date-picker wiring needed for
+  the CRUDS proof. (The date inputs are unlabeled `lightning-datepicker` /
+  time-combobox inputs; filling a SPECIFIC datetime would need a dedicated
+  widget, out of scope here.)
+- **Update/Delete** go through the STANDARD `/r/{id}/edit` modal +
+  RecordView overflow → so they use the normal `records-record-layout-item`
+  + `button[name='SaveEdit']` + overflow-delete path with no special handling.
+- **Search**: Task/Event have NO `Name` field (their name field is `Subject`).
+  SF's UI-API `postListRecordsByName` VALIDATES `listRecordsQuery` field refs,
+  so the old `fields:[{obj}.Id, {obj}.Name]` + `sortBy:[{obj}.Name]` made the
+  Aura call fail `aura: non-success`. search_record 3.3.0 drops the `.Name`
+  field + `sortBy` (the listview returns its full columns regardless), so
+  activity search resolves `searched` cleanly. List view API names:
+  `RecentlyViewedTasks` / `RecentlyViewedEvents` (the chain opens the record
+  first so RecentlyViewed populates via LDS).
+
+### 10. Note (`/lightning/o/Note/new`) has NO usable form — generic create CANNOT do it
+Live-probed 2026-06-16: `/lightning/o/Note/new` renders ZERO inputs and only a
+"Cancel and close" button (no Save, no Title/Body fields). Reasons:
+- Modern Lightning "Notes" = **ContentNote** (key prefix 069), created from a
+  parent record's **Notes related list** composer panel, never a standalone
+  `/new` page.
+- Even the legacy `Note` object (002, what `schemas/Note.yaml` targets) requires
+  a polymorphic `ParentId` — it cannot exist standalone.
+So the object-generic `create_record` (which deeplinks `/lightning/o/{Object}/new`)
+is **structurally incapable** of creating a Note. A working Note create needs a
+**dedicated related-list atom**: open a parent record (Contact/Opportunity) →
+open its Notes related list → click New → fill Title + Body in the ContentNote
+composer → Save. That is real new-atom work (a parent-scoped, related-list-driven
+recipe), distinct from the generic create. Until authored, Note create is
+BLOCKED-by-design for the CRUDS chain (open/search/update/delete would also need
+a real Note id, which only the create atom can mint).
 
 ## Heal hints
 

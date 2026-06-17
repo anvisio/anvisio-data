@@ -1,12 +1,13 @@
 _meta:
   name: manifests/salesforce/views/RecordNewModal.yaml
-  version: 1.1.0
+  version: 1.2.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
     RecordNewModal view — new-record modal opened from the object's list view + 'New' button. URL deeplink /lightning/o/{object_type}/new.
   changelog:
+    - "1.2.0 (2026-06-12): verify ALSO waits for a record-layout field input — the dialog + SaveEdit (1.1.0) confirm the modal SHELL but render BEFORE the field inputs hydrate, so a create_record fill gated only on them ran too early: the native-set value was reset by hydration, the field ended up empty + required-flagged, and Save blocked (surfacing as a SaveEdit-never-disappears 60s timeout, three altitudes from the cause). Live-diagnosed 2026-06-12 (LastName value=None + flagged after a fill that reported ok in 65ms; A/B proved native_set commits fine on a settled form, so it was readiness, not the fill technique). The added `records-record-layout-item input` landmark is the same fields-interactive signal characterize uses to enumerate the full form. The 1.1.0 'SaveEdit confirms the form is interactive' claim was the bug: SaveEdit is the footer, not the fields."
     - "1.1.0 (2026-05-30): verify anchors on `div[role='dialog'][aria-label^='New ']` + `button[name='SaveEdit']` instead of `records-record-layout-item`. Both are reliable landmarks once the tab is on the URL; the dialog selector is in the top DOM (no shadow walk) so verify resolves faster. SaveEdit confirms the form is interactive. cdn_schema_version 60.4.2 → 70.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
@@ -23,6 +24,16 @@ verify:
     timeout_ms: 12000
   - type: selector_appears
     selector: button[name='SaveEdit']
+    timeout_ms: 12000
+  # The dialog + SaveEdit (footer) render BEFORE the field inputs are
+  # interactive. Gating only on them lets a fill run before the fields hydrate,
+  # so the native-set value is reset and the field ends up empty + required-
+  # flagged (Save then blocks, surfacing as a SaveEdit-never-disappears timeout
+  # 60s later). Also wait for an actual record-layout field input — the same
+  # "fields rendered + interactive" signal that lets characterize enumerate the
+  # full form — so the recipe fills a hydrated form.
+  - type: selector_appears
+    selector: records-record-layout-item input, records-record-layout-item textarea
     timeout_ms: 12000
 placeholders:
   object_type:

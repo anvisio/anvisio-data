@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/actions/query_records.yaml
-  version: 0.4.0
+  version: 0.5.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
@@ -8,6 +8,7 @@ _meta:
     query_records atom: list the records of an SF listview. Read-only;
     reads prefer session_api > mcp > browser per spec 70 §7.
   changelog:
+    - "0.5.0 (2026-06-09): CANONICAL ACTION FORM v71. Add result.outcome:text (auto from the winning action, 'queried') — there was no per-terminal boolean to drop here (result was just `records`). The browser fallback flavor resolves via a named signals: map + when:[queried] (was the inline signal:); session_api + mcp KEEP their inline signal: (synchronous API flavors — the gapi/MCP call completes inside the recipe, so the outcome still needs a signal to gate 'extract ready'). result.records (consumed by pipeline_prep/_review/_smoke_loop) unchanged. object_types kept. LIVE-VERIFY 2026-06-09: the browser fallback's `records-base-list tbody tr` selector was DEAD on the org (0 matches; the 23 rows render under lst-list-view-manager, not records-base-list) — retargeted the `queried` signal + the wait step to lst-list-view-manager (the proven list_records landmark, confirmed 1 match live). The fallback still returns records:[] (session_api is the structured source); this only makes the outcome resolve instead of timing out. Pre-existing staleness (same selector since 0.3.0), surfaced by the v71 live-verify pass. Otherwise behaviour-preserving."
     - "0.4.0 (2026-05-29): add the missing mcp `inputs_map` (objectName/fields/where/orderBy/limit). The query_records MCP tool requires objectName+fields (_mcp_tools.yaml) but the flavor passed nothing — surfaced by the /harden-browser-flavor step-0 MCP parity check. Mirrors update_record.mcp's inputs_map shape. No effect on the session_api/browser paths the browser-first runtime uses."
     - "0.3.0 (2026-05-24): add Case + Event to object_types (8 SF schemas now exist). Add schema-typed result.records: schema_union list per v70 signature parity rule. browser still returns literal:[] (the listview DOM scrape is brittle; session_api Aura path is the real source). session_api uses from_aura_records which flattens to {Id, ...} matching the schema field names; mcp returns SOQL records (also {Id, ...})."
     - "0.2.0 (2026-05-21): session_api rewritten to Aura ListUiController.postListRecordsByName (the ONLY SF read proven to work statelessly on the Lightning session cookie). SOQL where/orderBy dropped — list controllers ignore filters."
@@ -56,6 +57,8 @@ inputs:
     type: integer
     required: false
 result:
+  # v71: outcome = the winning action ("queried"), auto-populated by the runtime.
+  outcome: text
   records:
     schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
     cardinality: list
@@ -117,21 +120,29 @@ flavors:
   browser:
     requires_auth: session_cookie
     label: Navigate to list view; read visible rows
+    # v71 signals model: `queried` = the list view rendered. (Browser is a
+    # last-resort fallback; the listview DOM scrape is brittle so records stays
+    # literal:[] — the session_api Aura path is the real structured source.)
+    # Landmark is lst-list-view-manager (live-confirmed 2026-06-09, 1 match): the
+    # prior records-base-list element is DEAD on the org (rows render directly
+    # under lst-list-view-manager). Same landmark list_records uses.
+    signals:
+      queried:
+        type: selector_appears
+        selector: lst-list-view-manager
     recipe:
       - id: goto_list
         type: navigate
         args:
           url: "{instance.origin}/lightning/o/{{inputs.object_type}}/list"
-      - id: wait_rows
+      - id: wait_list
         type: wait_for_element
         args:
-          selector: records-base-list tbody tr
+          selector: lst-list-view-manager
           timeout_ms: 10000
     outcomes:
       - action: queried
-        signal:
-          type: selector_appears
-          selector: records-base-list tbody tr
+        when: [queried]
         extract:
           records:
             literal: []

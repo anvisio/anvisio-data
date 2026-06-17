@@ -1,6 +1,6 @@
 _meta:
   name: widget-libraries/salesforce.widgets.yaml
-  version: 4.4.0
+  version: 4.6.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
@@ -35,6 +35,8 @@ _meta:
   archetypes_used: [text_input, picklist_select, typeahead_lookup, click_reveals, click_dismisses, click_navigates, click_toggles, typeahead_search]
 
   changelog:
+    - "4.6.0 (2026-06-16): salesforce.save_button gains the ACTIVITY-COMPOSER Save rung `button[title='Save']` (trigger + verify_target). Task/Event create via `/lightning/o/<Obj>/new` is the Aura activity composer, whose Save is `<button title='Save'>` with NO `name='SaveEdit'` — so the prior trigger missed and create failed at click_save (`no selector matched (visible+settled)`, live 2026-06-16). The standard New/Edit modal's Save is `button[name='SaveEdit']` with an EMPTY title attr, so the two selectors are mutually exclusive (and exact `title='Save'` never matches the sibling 'Save & New'). verify_target is now a 2-element list; click_dismisses' selector_disappears fires on ANY-of absent (no seedPresent), correct for both surfaces. Live-confirmed the composer Save redirects to /lightning/r/{id}/view (create_record.created_nav fires + captures record_id), so Task/Event create needs NO dedicated atom — just this selector. Additive; the 6 core objects keep the SaveEdit primary."
+    - "4.5.0 (2026-06-16): salesforce.text gains `input[aria-label='{{field_label}}']` + `textarea[aria-label='{{field_label}}']` fallback selectors for the ACTIVITY COMPOSER (Task/Event `/lightning/o/<Obj>/new`). Unlike standard objects, Activities render their create form OUTSIDE `records-record-layout-item` (it's the Aura activity-panel composer), and the inputs carry NO `name=` attr and NO matching `placeholder` — so all four prior selectors miss. Live-probed 2026-06-16 (cd2k dev org): the Task Subject input is `<input class='slds-combobox__input slds-input' role='combobox' aria-label='Subject' maxlength='255'>` — `aria-label` IS the on-page schema label, so it's the stable discriminator. Ordered AFTER the name selectors (standard modals still win their records-record-layout-item/name primaries) and BEFORE placeholder. Additive; behaviour-preserving for the 6 core objects."
     - "4.4.0 (2026-05-30): salesforce.text gains an `input[placeholder='{{field_label}}']` fallback selector to handle SF's COMPOUND-FIELD sub-inputs. Contact / Lead / Person Account group Salutation + FirstName + LastName under a single `records-record-layout-item[field-label='Name']` wrapper — the per-sub-field selectors (records-record-layout-item by field_label, input[name=]) all miss because there's no per-sub-field wrapper AND the sub-inputs carry camelCase lowercase `name='lastName'`/`firstName'` instead of the schema's `LastName`/`FirstName`. Placeholder attr matches the schema label (live-probed 2026-05-30, cd2k dev org). Same fallback unblocks compound Address sub-fields."
     - "4.3.0 (2026-05-30): add salesforce.number widget for currency/number/percent fields. SF's Amount / Probability inputs are `<input type='text' role='spinbutton' inputmode='decimal'>` with an immediate display-formatter (typed `50000` → `$50,000.00`); the default text_input archetype's strict-value verify times out because no input shape survives the formatter. New widget reuses text_input + sets `overrides.verify_value_contains: \"\"` (requires the archetype-templates 1.3.0 add of that override knob). Routes number / currency / percent in defaults_by_type to salesforce.number; salesforce.text continues to handle text/textarea/id."
     - "4.2.0 (2026-05-29): spec 72 hardening (live-probed on a dev org). delete_confirm_button: drop the stale `button.slds-button_brand` fallback — the live confirm button is `slds-button_neutral` (so a neutral-class fallback would ambiguously match Cancel); the `button[title='Delete']` primary is reliable and confirmed. save_button: rewrite the comment — its `selector_disappears SaveEdit` verify is the L3 click-landed gate, NOT the L4 commit proof; the commit signal now lives in the create/update/delete atoms as the spec-72 toaster ladder (transient_appears .toastMessage), which fires regardless of the welcome-redirect landing."
@@ -76,11 +78,14 @@ widgets:
         - records-record-layout-item[field-label='{{field_label}}'] textarea
         - input[name='{{field_name}}']
         - textarea[name='{{field_name}}']
+        - input[aria-label='{{field_label}}']
+        - textarea[aria-label='{{field_label}}']
         - input[placeholder='{{field_label}}']
       read_target:
         - records-record-layout-item[field-label='{{field_label}}'] input
         - records-record-layout-item[field-label='{{field_label}}'] textarea
         - input[name='{{field_name}}']
+        - input[aria-label='{{field_label}}']
         - input[placeholder='{{field_label}}']
 
   # Currency / number / percent inputs on SF Lightning are
@@ -186,6 +191,18 @@ widgets:
   # 'the disappear is the only guaranteed signal' rationale; the toaster is
   # guaranteed too, and the welcome redirect itself is now fixed in
   # RecordEditModal.entry.url via backgroundContext.)
+  # `button[title='Save']` is the ACTIVITY-COMPOSER Save (Task/Event
+  # `/lightning/o/<Obj>/new` render the Aura activity composer, not the standard
+  # New-record modal). Its Save button is `<button title='Save'>Save</button>`
+  # with NO `name='SaveEdit'` (live-probed 2026-06-16). The standard modal's
+  # Save is `button[name='SaveEdit']` with an EMPTY title, so the two are
+  # mutually exclusive and the exact `title='Save'` never matches 'Save & New'.
+  # Live-confirmed 2026-06-16: clicking it commits + redirects to
+  # /lightning/r/{id}/view (create_record's created_nav signal fires + yields the
+  # record_id), identically to the standard modal. The `click_dismisses` verify
+  # (selector_disappears, ANY-of the verify_target list, no seedPresent) fires
+  # when both are absent post-Save — on the composer SaveEdit is always-absent so
+  # only the title='Save' rung gates, on the modal vice-versa.
   salesforce.save_button:
     archetype: click_dismisses
     irreversible: true
@@ -193,7 +210,10 @@ widgets:
       trigger:
         - button[name='SaveEdit']
         - "[data-target-selection-name$='.SaveEdit']"
-      verify_target: button[name='SaveEdit']
+        - button[title='Save']
+      verify_target:
+        - button[name='SaveEdit']
+        - button[title='Save']
     overrides:
       verify_timeout_ms: 60000
 
@@ -221,13 +241,28 @@ widgets:
     overrides:
       verify_timeout_ms: 10000
 
+  # The record-header overflow ("more actions") caret. TWO distinct shapes
+  # live-probed 2026-06-16:
+  #   - CRM objects (Contact/Account/Opportunity/Lead) + Case: a `▾` ICON
+  #     BUTTON (button.slds-button_icon-border-filled in records-highlights2);
+  #     its menu items are `div.slds-dropdown__item`.
+  #   - Activities (Task/Event): an ANCHOR `<a title="Show N more actions"
+  #     aria-haspopup="true">` (forceActionsMoreButton); its menu items are
+  #     `a[role='menuitem']` (class highlightButton), NOT slds-dropdown__item.
+  #     The old icon-button selectors did NOT match it, so open_overflow
+  #     timed out on every Task/Event delete (the activity record has no
+  #     `▾` icon button at all). Adding the anchor selector + broadening
+  #     verify_target to accept either menu shape fixes Task/Event delete
+  #     without touching the working CRM/Case path (icon selectors still
+  #     match first there; the anchor selector simply finds nothing).
   salesforce.record_overflow_caret:
     archetype: click_reveals
     selectors:
       trigger:
         - records-highlights2 button.slds-button_icon-border-filled
         - button.fix-slds-button_icon-border-filled.slds-button_icon-border-filled
-      verify_target: div.slds-dropdown__item
+        - a[title^='Show'][aria-haspopup='true']
+      verify_target: div.slds-dropdown__item, a[role='menuitem']
     overrides:
       verify_timeout_ms: 5000
 
@@ -241,10 +276,24 @@ widgets:
     overrides:
       verify_timeout_ms: 8000
 
+  # Reach the Delete affordance after open_overflow. THREE shapes, tried in
+  # order (chrome-step-driver clicks the FIRST visible match across the list):
+  #   1. button[name='Delete']  — Case's TOP-LEVEL Delete button (live-probed
+  #      2026-06-16: Case puts Delete alongside Follow/Edit/Change-Owner in
+  #      records-highlights2, NOT in the overflow; its `▾` menu only holds
+  #      Clone/Sharing/Printable). Always visible, so this wins on Case and the
+  #      preceding open_overflow (which opens a Deleteless menu) is harmless.
+  #   2. [data-target-selection-name$='.Delete'] — the overflow MENU ITEM for
+  #      CRM objects (div.slds-dropdown__item) AND Activities (Task/Event:
+  #      a[role='menuitem'] sfdc:StandardButton.Task.Delete — also ends `.Delete`).
+  #   3. div.slds-dropdown__item — last-resort generic dropdown row.
+  # On CRM/Task/Event there is no top-level button[name='Delete'], so #1 finds
+  # nothing and #2 matches the in-overflow item — unchanged from before.
   salesforce.delete_menu_item:
     archetype: click_reveals
     selectors:
       trigger:
+        - "button[name='Delete']"
         - "[data-target-selection-name$='.Delete']"
         - div.slds-dropdown__item
       verify_target: div[role='dialog'] button[title='Delete']
@@ -279,3 +328,68 @@ widgets:
         - input[name='globalSearch']
     overrides:
       url_pattern: lightning/search
+
+  # ─── ContentNote composer (create_note atom) ───────────────────────
+  #
+  # `/lightning/o/Note/new` renders NO form (Lightning Notes = ContentNote,
+  # prefix 069, created only from a record's "New Note" quick action — the
+  # legacy Note object 002 has no Lightning create UI). So create_note opens a
+  # PARENT record (Contact/Opportunity), clicks the top-level "New Note" button,
+  # and fills the Chatter-publisher "New Note" modal. All four widgets below were
+  # live-probed against a Contact /view on 2026-06-16 (screenshots in
+  # /tmp/sf-inspect-shots/Note-*.png).
+
+  # The "New Note" button in the record highlights (a plain neutral button whose
+  # only stable identity is its text — disambiguated via trigger_text). Reveals
+  # the New Note modal (Title input appears). There is also a global quick action
+  # li[data-target-selection-name='sfdc:QuickAction.Global.NewNote'], but the
+  # visible header button is the reliable click target.
+  salesforce.new_note_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - records-highlights2 button.slds-button_neutral
+        - button.slds-button_neutral
+      verify_target: div[role='dialog'] input.input[maxlength='80']
+    overrides:
+      trigger_text: New Note
+      verify_timeout_ms: 10000
+
+  # Title field of the New Note modal: a bare <input maxlength="80" class=" input"
+  # required> with NO name/aria-label/placeholder (only aria-labelledby → a label
+  # element reading "Title"). The text_input label anchor can't see it, so target
+  # it structurally, scoped to the dialog. maxlength=80 + class `input` uniquely
+  # identify it inside the modal.
+  salesforce.note_title_input:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - div[role='dialog'] input.input[maxlength='80']
+      read_target:
+        - div[role='dialog'] input.input[maxlength='80']
+
+  # Body field: <textarea role="textbox" maxlength="32000" class=" textarea">.
+  # Reflects .value, so text_input fill (native_set + element_value_equals) works.
+  salesforce.note_body_input:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - div[role='dialog'] textarea.textarea
+      read_target:
+        - div[role='dialog'] textarea.textarea
+
+  # Save button of the New Note modal: button.slds-button_brand with class
+  # cuf-publisherShareButton, text "Save". On save the modal closes + a
+  # `Note "<title>" was created.` success toast fires (.toastMessage). Verify the
+  # modal dialog disappears (click_dismisses); the atom's `created` outcome reads
+  # the toast.
+  salesforce.note_save_button:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - div[role='dialog'] button.cuf-publisherShareButton
+        - div[role='dialog'] button.slds-button_brand
+      verify_target: div[role='dialog'] input.input[maxlength='80']
+    overrides:
+      verify_timeout_ms: 12000

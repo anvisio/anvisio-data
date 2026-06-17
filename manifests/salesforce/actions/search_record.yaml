@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 3.1.0
+  version: 3.3.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
@@ -24,6 +24,8 @@ _meta:
     filter client-side. The caller MUST supply `object_type` and a
     `list_view_api_name`.
   changelog:
+    - "3.3.0 (2026-06-16): drop the `{{object_type}}.Name` entries from session_api listRecordsQuery `fields` + remove `sortBy` entirely. SF UI-API postListRecordsByName VALIDATES the query field refs, so an object with no `Name` field (Task/Event — name field is `Subject`) failed `aura: non-success`, breaking activity search (live, the Task CRUDS chain). `Id` is universal + the listview returns its full column set regardless (changelog 3.1.0), so matches are unchanged for the 6 Name-bearing objects; Task/Event now resolve `searched` cleanly (the client-side Name filter finds no Name on an activity row → 0 matches = the correct lenient result). Caller-safe: no input/output shape change, only the unsorted order differs (irrelevant to the chain + upsert_contact, which filter+pick by name)."
+    - "3.2.0 (2026-06-09): CANONICAL ACTION FORM v71. result.outcome:text (auto from the winning action, 'searched') replaces the `searched` boolean; the `searched: literal:true` extract is dropped from both flavors (session_api + mcp). No browser flavor exists (removed 3.0.0), so there is no named-signals conversion — the two API flavors KEEP their inline signal: (synchronous; the Aura/MCP call completes inside the recipe). result.matches (consumed by upsert_contact + search_and_summarize) unchanged. Behaviour-preserving."
     - "3.1.0 (2026-05-31): flatten matches via from_aura_records (was from_step) → flat {Id, Name, Email, Title, ...} matching the declared schema_union, so callers read ${ $item.Name } / ${ $item.Id } directly (not raw {id, fields:{Name:{value}}}). Live finding (probed against the org): postListRecordsByName returns the listview's FULL column set regardless of listRecordsQuery.fields, so matches are already rich (AllContacts → Name/Email/Phone/Title/Account) with no per-object field list needed. The 0-matches symptom seen while wiring upsert_contact was NOT this atom — it was step-executor passing api_def RAW, so the client-filter's contains stayed the literal '{{inputs.query}}' and excluded everything; fixed in step-executor.ts the same day. fields/sortBy unchanged here."
     - "3.0.0 (2026-05-30): MAJOR REWIRE. Remove broken browser flavor (deep-link to /lightning/search/?q= redirects to /home — live-confirmed on a healthy dev org). Make `object_type` + `list_view_api_name` required. session_api parameterizes objectApiName / listViewApiName / fields by inputs and uses the new call_platform_api `filter` primitive (field: fields.Name.value, contains: inputs.query) to client-filter records. Returns REAL matches now (was either matches: literal:null on browser, or a full unfiltered Account-only listview on session_api). Common list_view_api_name values: AllAccounts, AllOpportunities, AllLeads, AllContacts, AllCases."
     - "2.3.0 (2026-05-24): add Case + Event to object_types (8 SF schemas). Add schema-typed result.matches: schema_union list (nullable: true since browser doesn't extract structured matches from /lightning/search/ DOM). session_api populates matches from the Aura listview step; mcp from the SOSL response. The 'searched' boolean stays alongside."
@@ -51,7 +53,8 @@ inputs:
     required: true
     sample: AllAccounts
 result:
-  searched: boolean
+  # v71: outcome = the winning action ("searched"), auto-populated by the runtime.
+  outcome: text
   matches:
     schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
     cardinality: list
@@ -78,7 +81,7 @@ flavors:
             objectApiName: "{{inputs.object_type}}"
             listViewApiName: "{{inputs.list_view_api_name}}"
             listRecordsQuery:
-              # `fields` is a minimal hint, NOT a column restriction:
+              # `fields`/`sortBy` are hints, NOT a column restriction:
               # postListRecordsByName returns the listview's FULL column set
               # regardless (AllContacts → Name, Email, Phone, Title, Account;
               # verified live 2026-05-31 against the org), and from_aura_records
@@ -88,12 +91,22 @@ flavors:
               # {{inputs.query}} is substituted by the call_platform_api step
               # (step-executor.ts — fixed 2026-05-31; it previously matched the
               # literal "{{inputs.query}}" and returned 0 for every search).
+              #
+              # 3.3.0 (2026-06-16): dropped the `{{object_type}}.Name` entries
+              # from `fields` + `sortBy`. SF's UI-API VALIDATES listRecordsQuery
+              # field refs, so an object WITHOUT a `Name` field — Task / Event,
+              # whose name field is `Subject` — made postListRecordsByName fail
+              # `aura: non-success`, breaking activity search (live 2026-06-16,
+              # the Task CRUDS chain). `Id` is universal; the listview returns
+              # its full columns regardless so output is unchanged for the 6
+              # objects that DO have Name, and Task/Event now get a clean
+              # `searched` (the client-side Name filter simply finds no Name on
+              # an activity row → 0 matches, the correct lenient result; callers
+              # needing to match an activity by Subject would pass a Subject-aware
+              # filter, out of scope for the CRUDS proof).
               fields:
                 - "{{inputs.object_type}}.Id"
-                - "{{inputs.object_type}}.Name"
               pageSize: 200
-              sortBy:
-                - "{{inputs.object_type}}.Name"
     outcomes:
       - action: searched
         # The Aura call runs entirely inside the recipe's call_platform_api
@@ -112,8 +125,6 @@ flavors:
             # not raw {id, fields:{Name:{value}}}. The Name filter (api_def
             # above) has already run on the raw records before this flatten.
             from_aura_records: aura_list
-          searched:
-            literal: true
   mcp:
     requires_auth: mcp_server
     label: SOSL search via SF MCP server
@@ -128,5 +139,3 @@ flavors:
         extract:
           matches:
             from_api_response: ".matches"
-          searched:
-            literal: true

@@ -1,0 +1,50 @@
+_meta:
+  name: manifests/salesforce/views/ParentRecordView.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-16
+  description: |
+    ParentRecordView — a record detail page reached by {parent_type} +
+    {parent_id} (the create_note atom's parent record). Same page shape as
+    RecordView, but its entry URL binds the create_note inputs (parent_type /
+    parent_id) instead of (object_type / record_id), so the atom can open the
+    note's PARENT while still threading its own create-target through the
+    record_id slot elsewhere.
+
+    WHY a dedicated view (not a recipe `navigate` step): create_note is a write
+    (commits_changes:true), so the runner opens a FRESH background edit tab
+    (spec 71 §3.3). A recipe `navigate` step resolves {instance.origin} from the
+    CURRENT (fresh, blank chrome://newtab) tab and fails "not on an http(s)
+    page". The VIEW-entry path (resolveEntryUrl) instead uses the home tab's
+    instanceOrigin, so the fresh tab navigates to the real parent URL. This is
+    exactly how create_record reaches /lightning/o/{object_type}/new on its
+    fresh tab via RecordNewModal's entry.
+  changelog:
+    - "1.0.0 (2026-06-16): initial. Mirrors RecordView's landmark/verify (records-highlights2, .slds-page-header — universal across LWC + legacy headers) but keys the entry URL on parent_type/parent_id for create_note's fresh write tab."
+
+name: ParentRecordView
+
+entry:
+  url: "{instance.origin}/lightning/r/{parent_type}/{parent_id}/view"
+landmark_probe:
+  selector: records-highlights2, .slds-page-header
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: /lightning/r/.+/view
+  - type: selector_appears
+    selector: records-highlights2, .slds-page-header
+    timeout_ms: 12000
+placeholders:
+  parent_type:
+    type: text
+    sample: Contact
+  parent_id:
+    type: id
+    sample: 003dM00000fXSAMPLE
+widgets:
+  - salesforce.new_note_button
+  - salesforce.note_title_input
+  - salesforce.note_body_input
+  - salesforce.note_save_button
