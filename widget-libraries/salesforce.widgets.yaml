@@ -1,6 +1,6 @@
 _meta:
   name: widget-libraries/salesforce.widgets.yaml
-  version: 4.6.0
+  version: 4.7.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
@@ -35,6 +35,7 @@ _meta:
   archetypes_used: [text_input, picklist_select, typeahead_lookup, click_reveals, click_dismisses, click_navigates, click_toggles, typeahead_search]
 
   changelog:
+    - "4.7.0 (2026-06-17): salesforce.save_button gains a FAILURE-RACE — `failure_selector: .slds-has-error` + `failure_message`. A validation-blocked Save (a required/invalid field) leaves SaveEdit present, so click_dismisses' selector_disappears verify waited the full verify_timeout_ms (60s) then died opaquely (`watchSelector timed out after 60000ms`) — the notes->SF commit proof hit exactly this. SF stamps `.slds-has-error` on every rejected field the instant a blocked Save renders (live-probed 2026-06-17: lightning-input/-combobox/-datepicker wrappers + a page-level 'Review the following fields'), so the click_dismisses archetype (1.9.0) now RACES SaveEdit-disappears (success) vs `.slds-has-error`-appears (rejected) and fails FAST + NAMED as `invalid_input` (~1s at the verify, not 60s). Opt-in: unset → archetype resolves `failure_selector: null` → no race, every other click_dismisses widget unchanged. Live-verified 2026-06-17 (bad CloseDate → invalid_input in 13s total vs the old 60s opaque timeout; happy-path create unbroken). Pairs with fill_fields' new required-field presence gate (step-executor): the seatbelt (catch a MISSING required field before Save) + the airbag (catch an app-side rejection AT Save). Same principle as archetype 1.8.0 — a layer's failure localizes to its own altitude, fast."
     - "4.6.0 (2026-06-16): salesforce.save_button gains the ACTIVITY-COMPOSER Save rung `button[title='Save']` (trigger + verify_target). Task/Event create via `/lightning/o/<Obj>/new` is the Aura activity composer, whose Save is `<button title='Save'>` with NO `name='SaveEdit'` — so the prior trigger missed and create failed at click_save (`no selector matched (visible+settled)`, live 2026-06-16). The standard New/Edit modal's Save is `button[name='SaveEdit']` with an EMPTY title attr, so the two selectors are mutually exclusive (and exact `title='Save'` never matches the sibling 'Save & New'). verify_target is now a 2-element list; click_dismisses' selector_disappears fires on ANY-of absent (no seedPresent), correct for both surfaces. Live-confirmed the composer Save redirects to /lightning/r/{id}/view (create_record.created_nav fires + captures record_id), so Task/Event create needs NO dedicated atom — just this selector. Additive; the 6 core objects keep the SaveEdit primary."
     - "4.5.0 (2026-06-16): salesforce.text gains `input[aria-label='{{field_label}}']` + `textarea[aria-label='{{field_label}}']` fallback selectors for the ACTIVITY COMPOSER (Task/Event `/lightning/o/<Obj>/new`). Unlike standard objects, Activities render their create form OUTSIDE `records-record-layout-item` (it's the Aura activity-panel composer), and the inputs carry NO `name=` attr and NO matching `placeholder` — so all four prior selectors miss. Live-probed 2026-06-16 (cd2k dev org): the Task Subject input is `<input class='slds-combobox__input slds-input' role='combobox' aria-label='Subject' maxlength='255'>` — `aria-label` IS the on-page schema label, so it's the stable discriminator. Ordered AFTER the name selectors (standard modals still win their records-record-layout-item/name primaries) and BEFORE placeholder. Additive; behaviour-preserving for the 6 core objects."
     - "4.4.0 (2026-05-30): salesforce.text gains an `input[placeholder='{{field_label}}']` fallback selector to handle SF's COMPOUND-FIELD sub-inputs. Contact / Lead / Person Account group Salutation + FirstName + LastName under a single `records-record-layout-item[field-label='Name']` wrapper — the per-sub-field selectors (records-record-layout-item by field_label, input[name=]) all miss because there's no per-sub-field wrapper AND the sub-inputs carry camelCase lowercase `name='lastName'`/`firstName'` instead of the schema's `LastName`/`FirstName`. Placeholder attr matches the schema label (live-probed 2026-05-30, cd2k dev org). Same fallback unblocks compound Address sub-fields."
@@ -216,6 +217,16 @@ widgets:
         - button[title='Save']
     overrides:
       verify_timeout_ms: 60000
+      # Failure-race: SF marks every rejected field with `.slds-has-error` the
+      # instant a blocked Save renders, so race it against SaveEdit's
+      # disappearance. A validation-blocked Save (a required/invalid field) now
+      # fails in ~2s as a NAMED `invalid_input` (routed away from heal) instead of
+      # waiting the full 60s for a SaveEdit-disappear that never comes (the opaque
+      # "watchSelector timed out" the notes->SF commit proof hit). The message is
+      # AGENT-facing (the LLM has no DOM; "review the highlighted fields" would be
+      # dead to it). Live-probed 2026-06-17.
+      failure_selector: ".slds-has-error"
+      failure_message: "Salesforce rejected the Save: a required or invalid field. The recipe is correct — correct the field value(s) in your inputs and retry (e.g. a missing Stage or a malformed Close Date), or ask the user."
 
   salesforce.cancel_button:
     archetype: click_dismisses

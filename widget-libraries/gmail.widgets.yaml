@@ -1,6 +1,6 @@
 _meta:
   name: widget-libraries/gmail.widgets.yaml
-  version: 3.16.0
+  version: 3.17.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
   authored_at: 2026-05-27
@@ -38,6 +38,7 @@ _meta:
   archetypes_used: [text_input, contenteditable_input, typeahead_search, typeahead_chip, click_reveals, click_dismisses, click_navigates, click_toggles, read_text, read_attribute]
 
   changelog:
+    - "3.17.0 (2026-06-17): gmail.compose_send_button gains a FAILURE-RACE — `failure_selector: [role='alertdialog']` + `failure_message` (archetype click_dismisses 1.9.0). Live-probed 2026-06-17: Gmail's Send is NOT disabled on an empty/invalid To (ariaDisabled=null before AND after the click) — it's clickable and pops a `[role='alertdialog']` 'Please specify at least one recipient.' while the compose region STAYS, so the selector_disappears verify (verify_target = the compose region) would time out opaquely. Racing the alertdialog appearing turns a recipient/email rejection into a fast `invalid_input` — routed AWAY from heal (the selectors are correct; the DATA is wrong) and surfaced to the agent so it fixes the To, not the manifest. The cross-integration sibling of SF save_button's `.slds-has-error` race (lib 4.7.0). `[role='alertdialog']` is the stable role (the live class uW2Fw-bHo is obfuscated); it only appears in the post-Send error window so it can't false-positive a successful send (which closes the region + shows a snackbar, no alertdialog)."
     - "3.16.0 (2026-06-07): gmail.thread_reply_all_button opens the LAST message's More-options menu, not the first. A multi-message thread has one ⋮ 'More message options' button per message; the open step matched the FIRST → reply-all replied to the OLDEST message (caught on the 2026-06-07 multi-message re-drive of the 'asdfghjklqwerty' thread — reply/forward correctly hit the LATEST via the bottom-of-thread `.ams.bkH/.bkG` link). The messages are NOT same-type siblings and carry no distinguishing class (all `div.adn.ads`), and the `.ams` links live outside the message wrappers, so no CSS selector (`:last-of-type`/`:has`) can target the last message. Fixed with a new runtime `pick_last: true` arg on the click step (chrome-step-driver clickInPage: walk all visible matches, click the LAST) — set on open_more_message_options. Generalizes the `from_selector_last`/nth follow-up the reply atoms flagged."
     - "3.15.0 (2026-05-31): compose_to_input / compose_cc_input / compose_bcc_input verify_target rewritten from a fake-success target to the committed chip `div[role='dialog'] div[role='option'][data-hovercard-id='{{value}}']`. The old targets OR'd in an always-present element (To: `input[name='subjectbox']`; Cc/Bcc: the recipient `input` itself), so selector_appears passed the instant compose opened — the step reported success even when NO chip committed (Trap 2 fake-success), masking that the recipient was never added. Live-probed 2026-05-31: the committed Gmail recipient chip is `div[role='option'][data-hovercard-id='<email>']` (class afV); data-hovercard-id == the email for known AND unknown contacts, and {{value}} ties the verify to the address just typed. This pairs with archetype-templates 1.6.0 (submit_key default Tab→Enter) + the chrome-step-driver pressKeyInPage keyCode fix; gmail needs keyCode=13 on the synthetic Enter or PeopleKit ignores it and no chip forms. NOTE: reply_to_input still verifies via the message-body textbox appearing (a weaker 'focus moved on' signal) — not re-probed this session; the keyCode+Enter fix makes its chip commit regardless. Follow-up: align reply_to_input to the chip assertion after a live reply probe."
     - "3.14.0 (2026-05-30): gmail.compose_button gains `expand_selector: [aria-label='Maximize']` override. Gmail sometimes restores compose in MINIMIZED state from leftover drafts — the dialog mounts (so click_reveals' verify_target sees it) but To/Subject/Body inputs render at zero dimensions and the next typeahead_chip/text_input fill times out at focus_input. The new override (paired with click_reveals 1.5.0's expand_if_collapsed step) clicks Maximize after the reveal verify; harmless no-op when Maximize isn't present (compose already maximized). Live-confirmed 2026-05-30 via chrome-devtools probe: minimized compose drawer at 518,897 (328x40 strip), Maximize button at 778,909, opening compose with 3 leftover drafts repro'd reliably."
@@ -402,6 +403,17 @@ widgets:
         - div[role='region'][data-compose-id]
           div[role='button'][data-tooltip^='Send']
       verify_target: div[role='region'][data-compose-id]
+    overrides:
+      # Failure-race (live-probed 2026-06-17). Gmail's Send is NOT disabled on an
+      # empty/invalid To — it's clickable and pops a `[role='alertdialog']`
+      # "Please specify at least one recipient." while the compose region STAYS.
+      # Racing that against the region disappearing (success) turns a recipient/
+      # email rejection into a fast `invalid_input` (routed away from heal — the
+      # selectors are correct; the DATA is wrong) instead of the verify timing
+      # out. `[role='alertdialog']` is the stable role (the live class uW2Fw-bHo
+      # is obfuscated/drift-prone); it only appears in the post-Send error window.
+      failure_selector: "[role='alertdialog']"
+      failure_message: "Gmail rejected the Send: a recipient is missing or invalid (no To address, or a malformed email). The recipe is correct — supply a valid To/Cc/Bcc and retry, or ask the user."
 
   # ─── Create-label modal (sidebar Create-new-label flow) ───────────
 
