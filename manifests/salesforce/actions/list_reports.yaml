@@ -1,0 +1,98 @@
+_meta:
+  name: manifests/salesforce/actions/list_reports.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-19
+  description: |
+    list_reports atom — DISCOVER the Salesforce reports the user can see
+    (the "answer assets" catalog entry point: "is there a report for X?").
+    Reachable via the session cookie + Aura (FolderHomeController.getRecords,
+    callingDescriptor:'UNKNOWN') — the controller the Reports home calls.
+    Returns the report list ({Id, Name, FolderName, LastRunDate, ...}); the
+    caller picks one by name/folder and runs it with run_report.
+  changelog:
+    - "0.1.0 (2026-06-19): initial — call_platform_api → aura FolderHomeController.getRecords (entityApiName:Report, navScope:mru). Live-proven 2026-06-19: returns the visible reports ({Name, FolderName}). listViewId is a client cache key (any number). navScope:mru is the list that resolves; recentlyViewed returned empty. Pagination via pageNum if needed (totalCount returned)."
+
+description: >
+  List the Salesforce reports the current user can see (id, name, folder),
+  so a report can be picked and run with run_report.
+object: Report
+commits_changes: false
+depends_on_view: any
+mcp_tool: salesforce.list_reports
+inputs: {}
+result:
+  # v71: outcome = the winning action ("listed"), auto-populated by the runtime.
+  outcome: text
+  reports:
+    type: list<object>
+    description: "[{Id, Name, FolderName, LastRunDate, CreatedBy, ...}]"
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: List SF reports via Aura FolderHomeController.getRecords (session cookie)
+    recipe:
+      - id: folder_records
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "serviceComponent://ui.folder.components.aura.components.controller.FolderHomeController/ACTION$getRecords"
+            extract_path: "actions[0].returnValue"
+          args:
+            entityApiName: Report
+            navScope: mru
+            orderBy: null
+            pageNum: 1
+            pageSize: 50
+            # listViewId is a client cache key — any number works.
+            listViewId: 1
+            includeWritableFoldersOnly: false
+            userIsEntityCreator: false
+            targetRecordId: null
+    outcomes:
+      - action: listed
+        signal:
+          type: url_matches
+          pattern: "lightning\\.force\\.com"
+          timeout_ms: 10000
+        extract:
+          reports:
+            from_step: folder_records
+            path: result
+  browser:
+    requires_auth: session_cookie
+    label: Show the Reports home (for user context) + read the list via Aura
+    recipe:
+      - id: goto_reports
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/o/Report/home"
+      - id: folder_records
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "serviceComponent://ui.folder.components.aura.components.controller.FolderHomeController/ACTION$getRecords"
+            extract_path: "actions[0].returnValue"
+          args:
+            entityApiName: Report
+            navScope: mru
+            orderBy: null
+            pageNum: 1
+            pageSize: 50
+            listViewId: 1
+            includeWritableFoldersOnly: false
+            userIsEntityCreator: false
+            targetRecordId: null
+    outcomes:
+      - action: listed
+        signal:
+          type: url_matches
+          pattern: "/lightning/o/Report/"
+          timeout_ms: 15000
+        extract:
+          reports:
+            from_step: folder_records
+            path: result

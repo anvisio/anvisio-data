@@ -1,13 +1,18 @@
 _meta:
   name: manifests/salesforce/actions/query_records.yaml
-  version: 0.5.0
+  version: 0.8.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
     query_records atom: list the records of an SF listview. Read-only;
-    reads prefer session_api > mcp > browser per spec 70 §7.
+    reads prefer session_api > mcp > browser per spec 70 §7. Paginated:
+    pass page_token (the prior call's next_page_token) to walk pages; the
+    LLM loops until next_page_token is empty to scan/aggregate ALL records.
   changelog:
+    - "0.8.0 (2026-06-18): GENERAL PAGINATION PRIMITIVE (session_api + browser). New input page_token + outputs next_page_token, count. The Aura call now extracts the CONTAINER (actions[0].returnValue, was …records) so one step result yields records (from_aura_records reads .records off the container) + the cursor (.nextPageToken) + .count; page_token threads into listRecordsQuery.pageToken (dropMissing → absent = page 1). The browser flavor is NAVIGATE-ONCE: goto_list + wait_list carry skip_if:{{inputs.page_token}} so page 1 shows the list while pages 2…N read in the background without re-rendering (cd2k's 'show the source, compute quietly'). The LLM owns the loop+arithmetic+provenance; the plugin returns {records, next_page_token, count} deterministically. Convention generalizes to gmail/calendar (pageToken/nextPageToken) — only the cursor paths differ, and those live in the recipe. Relies on the new step `skip_if` gate (step-executor) + flattenAuraRecords container support (extract.ts) + dropMissing (template). mcp flavor unchanged (SOQL has its own queryMore)."
+    - "0.7.0 (2026-06-18): wire `fields` (list<text>) into the Aura listRecordsQuery of BOTH session_api + browser flavors — enables aggregate reads (sum/count of a currency column the listview doesn't surface) WITHOUT a per-record open. Live-proven: postListRecordsByName Jobber_Jobs__c with listRecordsQuery.fields:['Job_Total__c'] returns each record's {displayValue,value} (sum across all jobs = $107,750.95); the LLM sums client-side. Field names UNQUALIFIED. Requires the template engine's new dropMissing on call_platform_api args — an absent `fields` is OMITTED, never sent as '' (SF rejects fields:\"\" with 'Can not deserialize ArrayList out of VALUE_STRING'; absent / [] are fine → default columns). Agent flow: get_object_fields → query_records(fields=[currency col]) → sum."
+    - "0.6.0 (2026-06-18): browser flavor RETURNS records (was a deliberate records:[] no-op — wrong; a read flavor must return the read). It now SHOWS the list (navigate carries ?filterName={{list_view}} so the screen matches the data — user context/trust) AND reads the records via the same Aura ListUiController.postListRecordsByName the session_api flavor uses (call_platform_api, MAIN-world). Live-caught: the notes agent pins flavor:browser for every verb, so a read was force-routed to this no-op (records always []); fixing the flavor makes the browser-pinned read return data. from_aura_records extract replaces literal:[]. Custom-object proven (Jobber_Jobs__c, list_view=All → 50). Follow-ups: pickFlavor should make a browser pin write-scoped (reads → session_api) for the SILENT-aggregate path; listview rows carry only the listview's columns (currency totals absent → aggregate needs field-selection or per-record read)."
     - "0.5.0 (2026-06-09): CANONICAL ACTION FORM v71. Add result.outcome:text (auto from the winning action, 'queried') — there was no per-terminal boolean to drop here (result was just `records`). The browser fallback flavor resolves via a named signals: map + when:[queried] (was the inline signal:); session_api + mcp KEEP their inline signal: (synchronous API flavors — the gapi/MCP call completes inside the recipe, so the outcome still needs a signal to gate 'extract ready'). result.records (consumed by pipeline_prep/_review/_smoke_loop) unchanged. object_types kept. LIVE-VERIFY 2026-06-09: the browser fallback's `records-base-list tbody tr` selector was DEAD on the org (0 matches; the 23 rows render under lst-list-view-manager, not records-base-list) — retargeted the `queried` signal + the wait step to lst-list-view-manager (the proven list_records landmark, confirmed 1 match live). The fallback still returns records:[] (session_api is the structured source); this only makes the outcome resolve instead of timing out. Pre-existing staleness (same selector since 0.3.0), surfaced by the v71 live-verify pass. Otherwise behaviour-preserving."
     - "0.4.0 (2026-05-29): add the missing mcp `inputs_map` (objectName/fields/where/orderBy/limit). The query_records MCP tool requires objectName+fields (_mcp_tools.yaml) but the flavor passed nothing — surfaced by the /harden-browser-flavor step-0 MCP parity check. Mirrors update_record.mcp's inputs_map shape. No effect on the session_api/browser paths the browser-first runtime uses."
     - "0.3.0 (2026-05-24): add Case + Event to object_types (8 SF schemas now exist). Add schema-typed result.records: schema_union list per v70 signature parity rule. browser still returns literal:[] (the listview DOM scrape is brittle; session_api Aura path is the real source). session_api uses from_aura_records which flattens to {Id, ...} matching the schema field names; mcp returns SOQL records (also {Id, ...})."
@@ -44,7 +49,13 @@ inputs:
   fields:
     type: list<text>
     required: false
-    description: SOQL field list — honored only by the mcp flavor.
+    description: >
+      Extra fields to return. session_api / browser: UNQUALIFIED API names
+      added to the listview's default columns via Aura listRecordsQuery.fields
+      — use this to pull a column the listview doesn't show (e.g. a currency
+      like Job_Total__c) for client-side aggregation. mcp: SOQL SELECT list.
+      Omit to get the listview's default columns.
+    sample: ["Job_Total__c"]
   where:
     type: text
     required: false
@@ -56,12 +67,31 @@ inputs:
   limit:
     type: integer
     required: false
+  page_token:
+    type: text
+    required: false
+    description: >
+      Pagination cursor. Omit for the first page; pass the
+      next_page_token from the previous call to fetch the next page.
+      To scan/aggregate ALL records, loop until next_page_token is
+      empty. On session_api / browser the cursor is the Aura
+      listRecordsQuery.pageToken; the browser flavor navigates +
+      shows the list ONLY on the first page (no token) and reads
+      pages 2…N in the background without re-navigating.
+    sample: "50"
 result:
   # v71: outcome = the winning action ("queried"), auto-populated by the runtime.
   outcome: text
   records:
     schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
     cardinality: list
+  # Pagination cursor for the NEXT page; empty/absent when this is the
+  # last page. The caller (LLM) loops query_records passing this back as
+  # page_token until it comes back empty — that is how a sum/count over
+  # ALL records of a large object is computed (one page at a time).
+  next_page_token: text
+  # Records in THIS page (provenance: "summed N of … across pages").
+  count: integer
 flavors:
   session_api:
     requires_auth: session_cookie
@@ -73,12 +103,25 @@ flavors:
           api_def:
             kind: aura
             descriptor: "aura://ListUiController/ACTION$postListRecordsByName"
-            extract_path: "actions[0].returnValue.records"
+            # Extract the CONTAINER (not …records) so the same step result
+            # yields records AND the pagination cursor (.nextPageToken) AND
+            # .count. from_aura_records reads .records off the container.
+            extract_path: "actions[0].returnValue"
           args:
             objectApiName: "{{inputs.object_type}}"
             listViewApiName: "{{inputs.list_view}}"
             listRecordsQuery:
               pageSize: 50
+              # Optional field-selection: when `fields` is supplied the
+              # listview returns those columns IN ADDITION to its defaults
+              # (so aggregate reads can pull a currency column like
+              # Job_Total__c the listview doesn't show). Absent → dropMissing
+              # omits the key → default columns. SF rejects fields:"" but
+              # tolerates an absent / [] fields. UNQUALIFIED API names.
+              fields: "{{inputs.fields}}"
+              # Pagination cursor in. Absent (first page) → dropMissing omits
+              # it → SF returns page 1. Pass back next_page_token for page 2…N.
+              pageToken: "{{inputs.page_token}}"
     outcomes:
       - action: queried
         # The Aura call runs entirely inside the recipe's call_platform_api
@@ -93,6 +136,13 @@ flavors:
         extract:
           records:
             from_aura_records: aura_list
+          # Pagination cursor + page size, read off the same container.
+          next_page_token:
+            from_step: aura_list
+            path: nextPageToken
+          count:
+            from_step: aura_list
+            path: count
   mcp:
     requires_auth: mcp_server
     label: Query via SF MCP server
@@ -119,30 +169,65 @@ flavors:
             from_api_response: ".records"
   browser:
     requires_auth: session_cookie
-    label: Navigate to list view; read visible rows
-    # v71 signals model: `queried` = the list view rendered. (Browser is a
-    # last-resort fallback; the listview DOM scrape is brittle so records stays
-    # literal:[] — the session_api Aura path is the real structured source.)
-    # Landmark is lst-list-view-manager (live-confirmed 2026-06-09, 1 match): the
-    # prior records-base-list element is DEAD on the org (rows render directly
-    # under lst-list-view-manager). Same landmark list_records uses.
+    label: Show the list view (for user context) + read its records via Aura
+    # Browser read = SHOW the list (so the user sees what was found — builds
+    # context + trust) AND return the structured records. The records come from
+    # the SAME Aura ListUiController.postListRecordsByName the session_api flavor
+    # uses (run MAIN-world from the visible tab via call_platform_api — cookie +
+    # CSRF auto-extracted), NOT a brittle DOM scrape. The navigate carries the
+    # requested listview as ?filterName so the SHOWN screen matches the data.
+    # (Was a deliberate records:[] no-op since 0.3.0 — wrong: a read flavor must
+    # return the read. Fixed live driving Jobber_Jobs__c 2026-06-18.) Landmark
+    # lst-list-view-manager (live-confirmed; same one list_records uses).
     signals:
       queried:
         type: selector_appears
         selector: lst-list-view-manager
     recipe:
+      # navigate-once: show the list ONLY on the first page (no page_token).
+      # On pages 2…N (page_token present) skip_if skips the navigate + wait so
+      # the background reads don't re-render the screen 40× — "show the source,
+      # compute quietly" (the screen stays on page 1 while the cursor walks).
       - id: goto_list
         type: navigate
+        skip_if: "{{inputs.page_token}}"
         args:
-          url: "{instance.origin}/lightning/o/{{inputs.object_type}}/list"
+          url: "{instance.origin}/lightning/o/{{inputs.object_type}}/list?filterName={{inputs.list_view}}"
       - id: wait_list
         type: wait_for_element
+        skip_if: "{{inputs.page_token}}"
         args:
           selector: lst-list-view-manager
           timeout_ms: 10000
+      - id: aura_list
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "aura://ListUiController/ACTION$postListRecordsByName"
+            # Container (not …records) — see session_api flavor: yields records
+            # + .nextPageToken (cursor) + .count off one step result.
+            extract_path: "actions[0].returnValue"
+          args:
+            objectApiName: "{{inputs.object_type}}"
+            listViewApiName: "{{inputs.list_view}}"
+            listRecordsQuery:
+              pageSize: 50
+              # See session_api flavor: optional field-selection (e.g. pull a
+              # Job_Total__c the listview hides). Absent → omitted → default columns.
+              fields: "{{inputs.fields}}"
+              # Pagination cursor in (absent → page 1). See session_api flavor.
+              pageToken: "{{inputs.page_token}}"
     outcomes:
       - action: queried
         when: [queried]
         extract:
           records:
-            literal: []
+            from_aura_records: aura_list
+          # Pagination cursor + page size off the same container.
+          next_page_token:
+            from_step: aura_list
+            path: nextPageToken
+          count:
+            from_step: aura_list
+            path: count

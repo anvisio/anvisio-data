@@ -40,12 +40,34 @@ or patching any SF atom, widget, or outcome.
   the Aura `ListUiController.postListRecordsByName` path (session cookie +
   CSRF, MAIN-world) is the only stateless read proven to work.
 
-**API reality:** SF REST (`/services/data/...`) 401s `INVALID_SESSION_ID`
-on the Lightning cookie (SOQL / SOSL / GraphQL / LWC wire adapters all
-route through it). Only the `/aura` endpoint (MAIN-world, CSRF token from
-`window.$A.clientService`) and classic-domain REST authenticate via the
-session cookie. OAuth bearer works on REST but there's no token at
-onboarding time. Writes go through the DOM, never REST/Aura — by design.
+**API reality:** classic SF data REST (`/services/data/vXX/query`,
+`/sobjects/...`) 401s `INVALID_SESSION_ID` on the Lightning cookie (SOQL /
+SOSL / GraphQL / LWC wire adapters all route through it — so there is **no
+session-cookie SOQL aggregate**: `SELECT SUM(...)` 401s; sum/count over all
+records is done by paging a listview and reducing client-side). OAuth bearer
+works on classic REST but there's no token at onboarding time.
+
+**EXCEPTION — the ui-api REST surface IS session-reachable** (live-proven
+2026-06-18): `GET /services/data/vXX/ui-api/...` authenticates with the plain
+Lightning session cookie via `fetch(url, { credentials: 'include' })` from
+MAIN world — **200, no OAuth bearer, no CSRF token.** It is the cleanest read
+transport (a plain GET; no `/aura` CSRF dance):
+
+| ui-api endpoint | returns | use |
+|---|---|---|
+| `…/ui-api/list-records/{object}/{listView}` | a listview's records page | same data as Aura `postListRecordsByName` |
+| `…/ui-api/list-ui/{object}[/{listView}]` | records + list metadata | columns / list info |
+| `…/ui-api/list-info/{object}` (**v62.0+**; v60 404s) | **`.lists[]` of `{apiName, label}`** — the object's list-view MENU | resolve a `list_view` API name deterministically instead of guessing |
+
+The `list-info` menu is how you learn an object's real listview API names —
+e.g. `Account` → `AllAccounts` / `MyAccounts` / `NewThisWeek` (NOT `All`);
+custom objects → `All`. `list-info` is paginated (`nextPageToken`); one
+default page covers most objects. The `__Recent` entry ("Recently Viewed")
+is the MRU, not a real saved view.
+
+`query_records` currently reads via the Aura `ListUiController` (proven +
+wired); the ui-api REST path above is the cleaner alternative for NEW read
+atoms / heal. Writes still go through the DOM, never REST/Aura — by design.
 
 ## L4 confirmation toasts per write action (LIVE-PROBED 2026-05-29, dev org)
 
