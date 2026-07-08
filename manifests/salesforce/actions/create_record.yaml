@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/actions/create_record.yaml
-  version: 2.3.0
+  version: 2.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
@@ -12,6 +12,7 @@ _meta:
     `session_api` (Aura POST) + `mcp` (KirtiJha dml_records) flavors.
     Writes prefer browser > session_api > mcp per spec 70 §7.
   changelog:
+    - "2.4.0 (2026-07-07): browser recipe gains a `view_prefill` step before fill_fields — lookup (`ref:`) fields (Opportunity/Contact AccountId) are prefilled via RecordNewModal's declared `entry.prefill` URL mechanism (SF defaultFieldValues), server-resolved with no 'recently viewed' DOM race; fill_fields then skips them (ctx.prefilledFields). The prefill is fully data-driven (view manifest owns the param/format/applies-to/ready-signal) — it replaces a hardcoded SF prefill that had leaked into the generic fill_fields engine. The salesforce.lookup widget (lib 4.8.0) stays as the DOM fallback for non-prefill paths (edit forms). No-op for objects with no lookup field."
     - "2.3.0 (2026-06-09): CANONICAL ACTION FORM v71. (1) result.outcome:text (auto from the winning action: created | cancelled) replaces the `created` boolean; literal/`.success` extracts dropped across all 3 flavors (extract carries payload only — record_id/record_name/record). (2) the `ready_to_save` PSEUDO-OUTCOME is dropped (the filled-&-ready state is the recipe + the commit:true HITL pause, not an LLM terminal — per gmail send_email 0.15.0 / gcal create_event 0.7.0). (3) SPEC 70 SIGNALS MODEL: the flavor-level abandon_signal is replaced by a named signals: map — created_nav (the /r/{id}/view redirect; carries the server-assigned record_id via from_url_match in its OWN extract, read by the outcome via from_signal — the gmail send_email autosave pattern) + abandon (SaveEdit disappears). created = when:[created_nav]; cancelled = when:[abandon] not:[created_nav] (modal closed with no record-view nav — the HITL discard; grace-arbitrated so a real Save's redirect still wins). KEEPS inputs.fields:{type:object} — generic-record verb, Check-6 allowlisted (SObject fields vary by object type). object_types kept. Behaviour-preserving."
     - "2.2.0 (2026-05-29): spec 72 — add browser `abandon_signal` (selector_disappears SaveEdit) for fast HITL discard detection. The `created` outcome STAYS `url_matches /r/{id}/view`: live-probed 2026-05-29 as discard-safe (a cancelled New modal returns to the list, never a record view) AND it is the only source of the server-assigned record_id. SF success toast captured live as `<Obj> \"<Name>\" was created.` (.toastMessage / .slds-theme--success, role=null — NOT [role='alert']); recorded in salesforce.md. No L4 toaster rung added here to avoid a cross-SPA-nav false-negative + losing the from_url_match record_id."
     - "2.1.0 (2026-05-24): add Case + Event to object_types (matching the 8 schemas/<Type>.yaml authored from live SF describe). Add schema-typed result.record per v70 signature parity rule (schema_union across the 8 SF objects). Browser populates record.Id from the URL post-save; session_api populates from POST response.id; mcp from .results[0].id."
@@ -72,6 +73,16 @@ flavors:
         type: selector_disappears
         selector: button[name='SaveEdit']
     recipe:
+      # Prefill lookup (`ref:`) fields via RecordNewModal's declared URL-param
+      # mechanism (SF defaultFieldValues), server-resolved — no "recently viewed"
+      # DOM race. Records them in ctx.prefilledFields; the next fill_fields skips
+      # them. No-op when the object has no lookup field in `fields`.
+      - id: prefill_lookups
+        type: view_prefill
+        args:
+          view: RecordNewModal
+          object: "{{inputs.object_type}}"
+          from: "{{inputs.fields}}"
       - id: fill_fields
         type: fill_fields
         args:

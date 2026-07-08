@@ -1,6 +1,6 @@
 _meta:
   name: widget-libraries/salesforce.widgets.yaml
-  version: 4.7.0
+  version: 4.9.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
@@ -32,9 +32,11 @@ _meta:
     CRUD 8/8 run (.tmp-sf-manifest-8of8-2026-05-15/widgets.yaml,
     $0.09/run) — see project_sf_crud_8of8_landed_2026_05_15.md.
 
-  archetypes_used: [text_input, picklist_select, typeahead_lookup, click_reveals, click_dismisses, click_navigates, click_toggles, typeahead_search]
+  archetypes_used: [text_input, picklist_select, lookup_select, click_reveals, click_dismisses, click_navigates, click_toggles, typeahead_search]
 
   changelog:
+    - "4.9.0 (2026-07-07): salesforce.date_input formats the ISO value to the SF date input's expected LOCALE-NUMERIC form (US: '12/31/2026') via the text_input archetype's new `value_format: locale_date_numeric` override — SF rejects an ISO value ('does not match the allowed format 12/31/2024'), leaving the required CloseDate empty + blocking Save. Also verify in formatter mode (verify_value_contains:'') since SF reformats the typed value. Needs archetype-templates support for value_format on text_input + the fillTextInPage 'locale_date_numeric' transform (parsed date-only-as-local to avoid a UTC off-by-one). Reported live 2026-07-07."
+    - "4.8.0 (2026-07-07): salesforce.lookup now fills REFERENCE fields (AccountId, OwnerId, …). ROOT CAUSE: defaults_by_type routed `id` → salesforce.text, so a lookup got the native-setter text fill → `fillText: no selector matched` (a lookup has no plain text input). The just-landed notes-agent linkage fix made the model emit `AccountId=<parent record_id>` for the first time, which then died here (live 2026-07-07: create Account → Opportunity/Contact AccountId fill failed → browser_task fallback → link dropped). FIX (3 parts, correct-by-construction): (1) new `lookup_select` archetype (archetype-templates 1.10.0) — click the lookup input to open the 'recently viewed' panel, click the option whose `data-value` is the target record id; NO typing (the value is an 18-char id, which SF name-search won't match, but it IS the panel option's data-value — live-probed: a trusted click opens a 6-item recent panel, the just-created parent at the top). (2) salesforce.lookup switched typeahead_lookup → lookup_select, selectors trigger/option. (3) `reference: salesforce.lookup` reserved defaults_by_type key + resolveWidgetForField ref-branch (step-executor) route any `ref:`-bearing field here regardless of `id` type. Works for the create-then-link case (parent in recent); SF's `?defaultFieldValues=Field=<id>` URL prefill is the robust superset for arbitrary older ids (proven 2026-07-07, a candidate future shortcut). Live-verified 2026-07-07."
     - "4.7.0 (2026-06-17): salesforce.save_button gains a FAILURE-RACE — `failure_selector: .slds-has-error` + `failure_message`. A validation-blocked Save (a required/invalid field) leaves SaveEdit present, so click_dismisses' selector_disappears verify waited the full verify_timeout_ms (60s) then died opaquely (`watchSelector timed out after 60000ms`) — the notes->SF commit proof hit exactly this. SF stamps `.slds-has-error` on every rejected field the instant a blocked Save renders (live-probed 2026-06-17: lightning-input/-combobox/-datepicker wrappers + a page-level 'Review the following fields'), so the click_dismisses archetype (1.9.0) now RACES SaveEdit-disappears (success) vs `.slds-has-error`-appears (rejected) and fails FAST + NAMED as `invalid_input` (~1s at the verify, not 60s). Opt-in: unset → archetype resolves `failure_selector: null` → no race, every other click_dismisses widget unchanged. Live-verified 2026-06-17 (bad CloseDate → invalid_input in 13s total vs the old 60s opaque timeout; happy-path create unbroken). Pairs with fill_fields' new required-field presence gate (step-executor): the seatbelt (catch a MISSING required field before Save) + the airbag (catch an app-side rejection AT Save). Same principle as archetype 1.8.0 — a layer's failure localizes to its own altitude, fast."
     - "4.6.0 (2026-06-16): salesforce.save_button gains the ACTIVITY-COMPOSER Save rung `button[title='Save']` (trigger + verify_target). Task/Event create via `/lightning/o/<Obj>/new` is the Aura activity composer, whose Save is `<button title='Save'>` with NO `name='SaveEdit'` — so the prior trigger missed and create failed at click_save (`no selector matched (visible+settled)`, live 2026-06-16). The standard New/Edit modal's Save is `button[name='SaveEdit']` with an EMPTY title attr, so the two selectors are mutually exclusive (and exact `title='Save'` never matches the sibling 'Save & New'). verify_target is now a 2-element list; click_dismisses' selector_disappears fires on ANY-of absent (no seedPresent), correct for both surfaces. Live-confirmed the composer Save redirects to /lightning/r/{id}/view (create_record.created_nav fires + captures record_id), so Task/Event create needs NO dedicated atom — just this selector. Additive; the 6 core objects keep the SaveEdit primary."
     - "4.5.0 (2026-06-16): salesforce.text gains `input[aria-label='{{field_label}}']` + `textarea[aria-label='{{field_label}}']` fallback selectors for the ACTIVITY COMPOSER (Task/Event `/lightning/o/<Obj>/new`). Unlike standard objects, Activities render their create form OUTSIDE `records-record-layout-item` (it's the Aura activity-panel composer), and the inputs carry NO `name=` attr and NO matching `placeholder` — so all four prior selectors miss. Live-probed 2026-06-16 (cd2k dev org): the Task Subject input is `<input class='slds-combobox__input slds-input' role='combobox' aria-label='Subject' maxlength='255'>` — `aria-label` IS the on-page schema label, so it's the stable discriminator. Ordered AFTER the name selectors (standard modals still win their records-record-layout-item/name primaries) and BEFORE placeholder. Additive; behaviour-preserving for the 6 core objects."
@@ -49,6 +51,11 @@ _meta:
 
 defaults_by_type:
   id: salesforce.text
+  # Not a field TYPE — the reserved `reference` key routes any field carrying a
+  # schema `ref: Object.Id` (a lookup, e.g. Opportunity.AccountId) to the lookup
+  # widget, via resolveWidgetForField's ref-branch. `id` stays salesforce.text
+  # for the rare non-ref id input; a ref field never reaches the type default.
+  reference: salesforce.lookup
   text: salesforce.text
   textarea: salesforce.text
   number: salesforce.number
@@ -145,20 +152,36 @@ widgets:
         - lightning-base-combobox-item[title='{{value}}']
       verify_target: sfa-input-stage-name button[role='combobox']
 
+  # Reference/lookup fields (AccountId, OwnerId, … — schema `ref: Object.Id`).
+  # Routed here by fill_fields' resolveWidgetForField ref-branch + the
+  # `reference` defaults_by_type entry. Selects a record by ID from the
+  # "recently viewed" panel — NO typing (the value is a record id, not a
+  # searchable name; see the lookup_select archetype). Live-validated
+  # 2026-07-07: after creating an Account, the Opportunity/Contact AccountId
+  # lookup picks it from the recent panel by data-value=<the create's returned
+  # record_id> (the just-created parent is at the top of recent). `trigger`
+  # opens the panel; `option[data-value='{{value}}']` is the target record.
   salesforce.lookup:
-    archetype: typeahead_lookup
+    archetype: lookup_select
     selectors:
-      input:
+      trigger:
         - records-record-layout-item[field-label='{{field_label}}'] input
         - input[aria-label='{{field_label}}']
         - input[name='{{field_name}}']
-      result:
-        - lightning-base-combobox-item[data-value]
-        - "[role='option']"
-      verify_target: records-record-layout-item[field-label='{{field_label}}'] input
+      option:
+        - lightning-base-combobox-item[data-value='{{value}}']
+        - "[role='option'][data-value='{{value}}']"
     overrides:
-      type_delay_ms: 40
+      verify_timeout_ms: 5000
 
+  # SF Lightning date inputs expect the ORG-LOCALE numeric date (US: "12/31/2026")
+  # and REJECT an ISO value ("Your entry does not match the allowed format
+  # 12/31/2024"), leaving the required field empty so Save blocks. The model
+  # supplies an ISO date (resolve_date's iso_date, YYYY-MM-DD), so format it in the
+  # page via value_format: locale_date_numeric (toLocaleDateString numeric, parsed
+  # date-only-as-local to avoid a UTC off-by-one). SF then reformats the typed
+  # value, so verify in formatter mode (verify_value_contains:"" — prove a stable
+  # non-empty value, not a literal ISO substring).
   salesforce.date_input:
     archetype: text_input
     selectors:
@@ -168,6 +191,9 @@ widgets:
       read_target:
         - records-record-layout-item[field-label='{{field_label}}'] input
         - input[name='{{field_name}}']
+    overrides:
+      value_format: locale_date_numeric
+      verify_value_contains: ""
 
   salesforce.toggle:
     archetype: click_toggles

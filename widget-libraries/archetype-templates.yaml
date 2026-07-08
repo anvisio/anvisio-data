@@ -1,6 +1,6 @@
 _meta:
   name: widget-libraries/archetype-templates.yaml
-  version: 1.6.0
+  version: 1.11.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-16
@@ -51,6 +51,8 @@ _meta:
     tested against the final shape once.
 
   changelog:
+    - "1.11.0 (2026-07-07): text_input fill gains optional value_format ($overrides.value_format ?? null) — ISO->locale in-page transform for date inputs that reject ISO. For salesforce.date_input (lib 4.9.0): SF wants 12/31/2026 (locale_date_numeric). Additive + opt-in. Mirrors the engine copy."
+    - "1.10.0 (2026-07-07): add `lookup_select` archetype — reference/lookup selection by RECORD ID (click the lookup input to open the 'recently viewed' panel, click the option whose `data-value` is the target id; NO typing). Built for SF salesforce.lookup (lib 4.8.0): a lookup field's value is a record id, which SF name-search never matches, but the id IS the recent-panel option's data-value. Verify = the picked option disappears. Additive; typeahead_lookup unchanged. (Version jumps 1.6.0→1.10.0 to realign with the engine copy src/blueprints/runtime/widget-archetype-templates.yaml, which had drifted ahead to 1.9.0 — the engine `?raw` copy is the runtime authority via --from-bundle; the intermediate 1.7-1.9 entries live there.)"
     - "1.6.0 (2026-05-31): typeahead_chip commit step default submit_key Tab → Enter. Tab can NEVER commit a recipient/guest chip via synthetic dispatch: a synthetic Tab event does not trigger the browser's native focus-move (default actions only fire for trusted events), so neither the focus-blur commit nor any keyCode-9 handler runs. Enter is an explicit JS keydown handler on every PeopleKit picker (gmail compose To/Cc/Bcc + reply, calendar Guests, outlook-calendar attendees), so it commits the typed value directly. Live-proven 2026-05-31 in a controlled A/B against real gmail + calendar tabs: Tab (±keyCode) → no chip on either; Enter → chip on both (gmail additionally requires the keyCode fix landed in chrome-step-driver pressKeyInPage the same day). This ALSO makes calendar robust to a stale widget-library cache: a cached event_guests that predates its 0.7.0 `submit_key: Enter` override now falls back to the Enter default instead of the dead Tab. The two consumers that explicitly set submit_key are unaffected (none set Tab); the default only changed."
     - "1.5.0 (2026-05-30): click_reveals gains optional `expand_selector` override + an `expand_if_collapsed` post-step. After the reveal verifies, a second click fires on the expand selector IFF it matches a visible element (via the click step's new `optional: true` arg — no match resolves to ok+skipped, not error). Used by Gmail's compose_button to handle Gmail restoring compose in minimized state from leftover drafts: the To/Subject/Body inputs are present but zero-dimension, so the next typeahead_chip / text_input fill times out at focus_input. With this override the compose_button widget clicks Maximize after the reveal verify, restoring full-screen compose before any field fills run. Zero impact on widgets that don't set expand_selector."
     - "1.4.0 (2026-05-30): typeahead_chip recipe appends a `dismiss_popover` (type: blur_focus) step after the commit. The chip already committed (verify proved it) but the suggestion popover lingers because focus stays on the input — user sees a stuck `typed-value + open-dropdown` UI even though the recipe succeeded (live-confirmed 2026-05-30 on Calendar Guests + Gmail compose To). blur_focus is a new primitive that blurs document.activeElement + fires body mousedown/mouseup/click — same pattern fillText's commit_value branch uses to dismiss Calendar's date/time pickers. Pure visual cleanup; can't un-commit anything."
@@ -86,6 +88,10 @@ archetypes:
             args:
               selector: $selectors.fill_target
               value: "{{value}}"
+              # Optional in-page value transform (ISO 8601 -> locale string) for
+              # date/time inputs — e.g. SF's date field wants "12/31/2026"
+              # (locale_date_numeric), not ISO. Pair with verify_value_contains:"".
+              value_format: $overrides.value_format ?? null
             verify:
               type: element_value_equals
               selector: $selectors.fill_target
@@ -265,6 +271,48 @@ archetypes:
               selector: $selectors.verify_target
               contains: "{{value}}"
               timeout_ms: $overrides.verify_timeout_ms ?? 6000
+
+  lookup_select:
+    description: |
+      Reference/lookup selection by RECORD ID. Click the lookup input to
+      open the "recently viewed" panel, then click the option whose
+      data-value is the target record id — do NOT type (unlike
+      typeahead_lookup): the value is an 18-char record id, which SF's
+      name-search would not match, but it matches the panel option's
+      data-value directly (live-probed 2026-07-07: a trusted click opens a
+      recent panel of lightning-base-combobox-item[data-value=<id>], and a
+      just-created parent is at the top). Verify the picked option
+      DISAPPEARS — the panel closed, so a record was selected. Works when
+      the target is in the recent set (the create-then-link case: a parent
+      created earlier in the same flow). For an arbitrary older id NOT in
+      recent, SF's `?defaultFieldValues=Field=<id>` URL prefill is the
+      robust superset (proven 2026-07-07; a candidate future shortcut).
+    ops:
+      fill:
+        required_selectors: [trigger, option]
+        recipe:
+          - id: open_lookup
+            type: click
+            args:
+              selector: $selectors.trigger
+          # The recent panel renders async + its items re-render as their names
+          # load, so a click fired the instant open_lookup returns polls during
+          # the unstable window (clickInPage needs an element stable across 2
+          # ticks). Wait for the target option to appear + settle BEFORE clicking
+          # it, so pick_option's own stability gate resolves on a rendered item.
+          - id: await_option
+            type: wait_for_element
+            args:
+              selector: $selectors.option
+              timeout_ms: $overrides.verify_timeout_ms ?? 4000
+          - id: pick_option
+            type: click
+            args:
+              selector: $selectors.option
+            verify:
+              type: selector_disappears
+              selector: $selectors.option
+              timeout_ms: $overrides.verify_timeout_ms ?? 4000
 
   typeahead_chip:
     description: |

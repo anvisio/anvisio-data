@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/schemas/Contact.yaml
-  version: 0.1.0
+  version: 0.2.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
   authored_at: 2026-05-24
@@ -9,6 +9,7 @@ _meta:
     org's RecordUiController.getObjectInfo describe (2026-05-24). Used
     by create_record / update_record when object_type=Contact.
   changelog:
+    - "0.2.0 (2026-07-07): AccountId.label 'Account ID' → 'Account Name' (SF's on-page FORM label for the lookup), so the salesforce.lookup widget's records-record-layout-item[field-label='{{label}}'] anchor matches. See Opportunity 1.2.0."
     - "0.1.0 (2026-05-24): initial schema authored from live SF describe (orgfarm dev edition). Trimmed to ~15 user-facing fields out of the 68 standard fields. Mailing-address pair kept; Other-address pair dropped."
 
 description: |
@@ -36,7 +37,11 @@ fields:
     optional: true
   AccountId:
     type: id
-    label: Account ID
+    # Label is the ON-PAGE FORM label — SF renders the lookup as "Account Name",
+    # not "Account ID". The salesforce.lookup widget anchors on
+    # records-record-layout-item[field-label='{{label}}'], so it must match the
+    # form label (2026-07-07: fixed the lookup-fill open_lookup selector miss).
+    label: Account Name
     optional: true
     ref: Account.Id
   Email:
