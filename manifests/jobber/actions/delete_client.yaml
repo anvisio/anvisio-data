@@ -1,0 +1,120 @@
+_meta:
+  name: manifests/jobber/actions/delete_client.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    delete_client atom — destructive removal of a Jobber Client. Writes prefer
+    browser > session_api (spec 70 §7): the user sees the confirm dialog before
+    committing. session_api posts clientDelete(clientId); browser walks the client
+    record page's action menu → Delete → confirm. NOTE: Jobber also has a soft
+    clientArchive (kept for a future archive_client atom); this atom is the HARD
+    delete via clientDelete.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. session_api clientDelete(clientId: EncodedId!)
+       grounded in live introspection (ClientDeletePayload{client,userErrors});
+       reject_path data.clientDelete.userErrors → invalid_input. browser
+       action-menu recipe FLAGGED — the menu/Delete/confirm selectors + the
+       deleted toast + whether the UI offers Delete vs only Archive need a live
+       confirm (Jobber surfaces Archive prominently; Delete may be nested)."
+
+description: Delete a Jobber Client (hard delete via the record-page action menu).
+object: Client
+commits_changes: true
+depends_on_view: ClientRecord
+inputs:
+  client_id:
+    type: text
+    required: true
+    description: The Client's opaque EncodedId.
+    sample: "Z2lkOi8vSm9iYmVyL0NsaWVudC8x"
+result:
+  outcome: text
+  record_id: text
+  client:
+    schema: Client
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the client action menu; Delete; confirm when commit:true
+    # FLAGGED (needs a live delete to confirm): the action-menu trigger, the
+    # Delete menu item (vs Archive), the confirm dialog, and the deleted_toast
+    # text are all best-guess. deleted = when:[deleted_toast]; cancelled =
+    # when:[dialog_closed] not:[deleted_toast] (grace-arbitrated, mirrors SF).
+    signals:
+      deleted_toast:
+        type: transient_appears
+        selector: "[role=alert], .toast, [data-testid='toast']"
+        must_contain_text: "deleted"
+      dialog_closed:
+        type: selector_disappears
+        selector: "[role=dialog], .modal"
+    recipe:
+      - id: open_menu
+        type: use_widget
+        args:
+          widget: jobber.client_actions_menu
+          op: invoke
+      - id: click_delete
+        type: use_widget
+        args:
+          widget: jobber.delete_client_menu_item
+          op: invoke
+      - id: confirm
+        type: use_widget
+        commit: true
+        args:
+          widget: jobber.delete_confirm
+          op: invoke
+    outcomes:
+      - action: deleted
+        when: [deleted_toast]
+        extract:
+          record_id:
+            from_input: client_id
+          client:
+            id:
+              from_input: client_id
+      - action: cancelled
+        when: [dialog_closed]
+        not: [deleted_toast]
+
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL clientDelete(clientId) via the session cookie
+    recipe:
+      - id: gql_delete
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            operation_name: AnvisioDeleteClient
+            extract_path: data.clientDelete
+            # A non-empty userErrors array on the 200 → invalid_input. Rule S.
+            reject_path: data.clientDelete.userErrors
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+            query: >
+              mutation AnvisioDeleteClient($clientId: EncodedId!) {
+                clientDelete(clientId: $clientId) {
+                  client { id }
+                  userErrors { message path }
+                }
+              }
+          args:
+            clientId: "{{inputs.client_id}}"
+    outcomes:
+      - action: deleted
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          record_id:
+            from_input: client_id
+          client:
+            id:
+              from_input: client_id

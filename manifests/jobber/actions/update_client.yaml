@@ -1,0 +1,144 @@
+_meta:
+  name: manifests/jobber/actions/update_client.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    update_client atom — edit an existing Jobber Client. Writes prefer browser >
+    session_api (spec 70 §7). session_api posts clientEdit(clientId, input:
+    ClientEditInput!); browser opens the client edit form + Save. A partial edit:
+    only the supplied identity fields are sent (dropMissing omits the rest), so
+    unset inputs are left untouched. First slice = the simple identity fields
+    (first/last/company/isCompany); emails/phones/tags/addresses are nested
+    *ToAdd/*ToEdit/*ToDelete lists on ClientEditInput (an id-grain seam) — deferred.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. session_api clientEdit(clientId: EncodedId!,
+       input: ClientEditInput!) grounded in live introspection; reject_path
+       data.clientEdit.userErrors → invalid_input. browser edit form FLAGGED
+       (the /clients/{id}/edit URL + Save affordance need a live confirm)."
+
+description: Update an existing Jobber Client's identity fields (first/last/company).
+object: Client
+commits_changes: true
+depends_on_view: ClientEditForm
+inputs:
+  client_id:
+    type: text
+    required: true
+    description: The Client's opaque EncodedId.
+    sample: "Z2lkOi8vSm9iYmVyL0NsaWVudC8x"
+  first_name:
+    type: text
+    required: false
+    sample: "Ada"
+  last_name:
+    type: text
+    required: false
+    sample: "Lovelace"
+  company_name:
+    type: text
+    required: false
+    sample: "Analytical Engines"
+  is_company:
+    type: boolean
+    required: false
+result:
+  outcome: text
+  record_id: text
+  client:
+    schema: Client
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the client edit form; fill the changed fields; Save when commit:true
+    # FLAGGED: the edit-form URL (/clients/{id}/edit best-guess) + the Save button
+    # affordance + the saved_nav redirect all need one live edit to confirm.
+    # saved = when:[saved_nav]; cancelled = when:[abandon] not:[saved_nav].
+    signals:
+      saved_nav:
+        type: url_matches
+        pattern: "/clients/(?<record_id>[0-9]+)(?:$|[/?])"
+        extract:
+          record_id:
+            from_url_match: record_id
+      abandon:
+        type: selector_disappears
+        selector: "xpath=//button[normalize-space()=\"Save client\"]"
+    recipe:
+      - id: fill_fields
+        type: fill_fields
+        args:
+          object: Client
+          from:
+            firstName: "{{inputs.first_name}}"
+            lastName: "{{inputs.last_name}}"
+            companyName: "{{inputs.company_name}}"
+      - id: click_save
+        type: use_widget
+        commit: true
+        args:
+          widget: jobber.save_client
+          op: invoke
+    outcomes:
+      - action: saved
+        when: [saved_nav]
+        extract:
+          record_id:
+            from_signal: saved_nav.record_id
+          client:
+            id:
+              from_signal: saved_nav.record_id
+            firstName:
+              from_input: first_name
+            lastName:
+              from_input: last_name
+      - action: cancelled
+        when: [abandon]
+        not: [saved_nav]
+
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL clientEdit(clientId, input) via the session cookie
+    recipe:
+      - id: gql_edit
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            operation_name: AnvisioEditClient
+            extract_path: data.clientEdit
+            # A non-empty userErrors array on the 200 → invalid_input (the agent
+            # re-asks for corrected inputs; heal skips). Rule S, session path.
+            reject_path: data.clientEdit.userErrors
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+            query: >
+              mutation AnvisioEditClient($clientId: EncodedId!, $input: ClientEditInput!) {
+                clientEdit(clientId: $clientId, input: $input) {
+                  client { id name firstName lastName companyName isCompany }
+                  userErrors { message path }
+                }
+              }
+          args:
+            clientId: "{{inputs.client_id}}"
+            input:
+              firstName: "{{inputs.first_name}}"
+              lastName: "{{inputs.last_name}}"
+              companyName: "{{inputs.company_name}}"
+              isCompany: "{{inputs.is_company}}"
+    outcomes:
+      - action: saved
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          record_id:
+            from_step: gql_edit
+            path: client.id
+          client:
+            from_step: gql_edit
+            path: client

@@ -1,0 +1,167 @@
+_meta:
+  name: manifests/jobber/actions/create_job.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    create_job atom — create a Job at a Property (the end of the Client →
+    Property → Job chain). jobCreate requires `propertyId` (the reference) and
+    `invoicing` (invoicingType + invoicingSchedule enums, defaulted). Writes
+    prefer browser > session_api. session_api posts jobCreate; browser fills the
+    New Job form (title/instructions + the type-to-search property picker) + Save.
+    The created job's read exposes BOTH client + property → the run-chain link
+    assertion.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. session_api jobCreate(input: JobCreateAttributes!)
+       grounded in live introspection (propertyId + invoicing required;
+       JobCreatePayload{job, userErrors}); reject_path data.jobCreate.userErrors →
+       invalid_input. browser New Job form + property picker FLAGGED (the URL,
+       field labels, picker, and Save affordance need a live create)."
+
+description: Create a Job at a Property (requires the Property reference).
+object: Job
+commits_changes: true
+depends_on_view: NewJobForm
+inputs:
+  property_id:
+    type: text
+    required: true
+    ref: Property.id
+    description: The Property this job is at (jobCreate `propertyId`, required).
+    sample: "MTUyMTU2OTU1"
+  title:
+    type: text
+    required: false
+    sample: "Spring cleanup"
+  instructions:
+    type: text
+    required: false
+  job_type:
+    type: text
+    required: false
+    default: "ONE_OFF"
+    description: "JobTypeTypeEnum: ONE_OFF | RECURRING."
+  invoicing_type:
+    type: text
+    required: false
+    default: "FIXED_PRICE"
+    description: "BillingStrategy: FIXED_PRICE | VISIT_BASED (jobCreate invoicing.invoicingType)."
+  invoicing_schedule:
+    type: text
+    required: false
+    default: "ON_COMPLETION"
+    description: "BillingFrequencyEnum: ON_COMPLETION | PERIODIC | PER_VISIT | NEVER."
+  property_query:
+    type: text
+    required: false
+    description: >
+      Browser-only: the property name/address to type into the New Job form's
+      type-to-search picker (the id-grain seam vs the session_api propertyId).
+result:
+  outcome: text
+  record_id: text
+  job:
+    schema: Job
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Fill the New Job form (title + property picker); Save when commit:true
+    # FLAGGED: the New Job URL (/jobs/new best-guess), the field labels, the
+    # type-to-search property picker, and the Save affordance need a live create.
+    # created_nav accepts /jobs/{id} OR /work_orders/{id} (Jobber's internal term).
+    signals:
+      created_nav:
+        type: url_matches
+        pattern: "/(?:jobs|work_orders)/(?<record_id>[0-9]+)(?:$|[/?])"
+        extract:
+          record_id:
+            from_url_match: record_id
+      abandon:
+        type: selector_disappears
+        selector: "xpath=//button[contains(normalize-space(),\"Save\")]"
+    recipe:
+      - id: fill_fields
+        type: fill_fields
+        args:
+          object: Job
+          from:
+            title: "{{inputs.title}}"
+            instructions: "{{inputs.instructions}}"
+      - id: pick_property
+        type: use_widget
+        args:
+          widget: jobber.job_property_picker
+          op: fill
+          value: "{{inputs.property_query}}"
+      - id: click_save
+        type: use_widget
+        commit: true
+        args:
+          widget: jobber.save_job
+          op: invoke
+    outcomes:
+      - action: created
+        when: [created_nav]
+        extract:
+          record_id:
+            from_signal: created_nav.record_id
+          job:
+            id:
+              from_signal: created_nav.record_id
+            propertyId:
+              from_input: property_id
+      - action: cancelled
+        when: [abandon]
+        not: [created_nav]
+
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL jobCreate(input) via the session cookie
+    recipe:
+      - id: gql_create
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            operation_name: AnvisioCreateJob
+            extract_path: data.jobCreate
+            # A non-empty userErrors array on the 200 → invalid_input. Rule S.
+            reject_path: data.jobCreate.userErrors
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+            query: >
+              mutation AnvisioCreateJob($input: JobCreateAttributes!) {
+                jobCreate(input: $input) {
+                  job {
+                    id jobNumber title jobStatus jobType
+                    client { id }
+                    property { id }
+                  }
+                  userErrors { message path }
+                }
+              }
+          args:
+            input:
+              propertyId: "{{inputs.property_id}}"
+              title: "{{inputs.title}}"
+              instructions: "{{inputs.instructions}}"
+              jobType: "{{inputs.job_type}}"
+              invoicing:
+                invoicingType: "{{inputs.invoicing_type}}"
+                invoicingSchedule: "{{inputs.invoicing_schedule}}"
+    outcomes:
+      - action: created
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          record_id:
+            from_step: gql_create
+            path: job.id
+          job:
+            from_step: gql_create
+            path: job

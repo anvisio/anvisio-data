@@ -1,0 +1,36 @@
+_meta:
+  name: manifests/jobber/views/NewPropertyForm.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    The Add Property form for a client (/clients/{client_id}/properties/new —
+    best-guess URL, FLAGGED). create_property's browser launch surface: Atlantis
+    label-XPath address inputs + a Save button. Needs a live create to confirm
+    the URL, the address field labels, and the Save affordance.
+  changelog:
+    - "0.1.0 (2026-07-08): initial (FLAGGED). entry
+       /clients/{client_id}/properties/new; landmark = the Save button."
+
+name: NewPropertyForm
+
+entry:
+  url: "{instance.origin}/clients/{client_id}/properties/new"
+landmark_probe:
+  selector: "xpath=//button[contains(normalize-space(),\"Save\")]"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/properties/new"
+  - type: selector_appears
+    selector: "xpath=//button[contains(normalize-space(),\"Save\")]"
+    timeout_ms: 12000
+placeholders:
+  client_id:
+    type: text
+    sample: "145657131"
+widgets:
+  - jobber.text_input
+  - jobber.save_property
+  - jobber.cancel_button

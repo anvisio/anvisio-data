@@ -1,0 +1,152 @@
+_meta:
+  name: manifests/jobber/actions/create_client.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    create_client atom — create a Jobber Client. Writes prefer browser >
+    session_api (spec 70 §7). session_api posts clientCreate; browser fills
+    the New Client form + clicks Save. First slice = the simple identity
+    fields (first/last/company); emails/phones are nested Email/PhoneNumber
+    CreateAttributes on the API vs simple inputs on the form (an id-grain
+    seam) — deferred.
+  changelog:
+    - "0.2.0 (2026-07-08): session_api userErrors→invalid_input now WIRED — moved
+       the dead flavor-level rejects_when onto the api_def as reject_path (the
+       kind:graphql executor evaluates it). A non-empty data.clientCreate.userErrors
+       on a 200 → invalid_input (heal skips, the agent re-asks)."
+    - "0.1.0 (2026-07-08): initial. session_api clientCreate (input:
+       ClientCreateInput!) grounded in live introspection; browser fill_fields
+       via the label-XPath widget + Save. FLAGGED for a live create pass: the
+       created_nav redirect URL/id format, the success toast, and the form's
+       reject surface (a missing required field) all need one real create to
+       confirm."
+
+description: Create a new Jobber Client (a person or a company).
+object: Client
+commits_changes: true
+depends_on_view: NewClientForm
+inputs:
+  first_name:
+    type: text
+    required: true
+    sample: "Ada"
+  last_name:
+    type: text
+    required: true
+    sample: "Lovelace"
+  company_name:
+    type: text
+    required: false
+    sample: "Analytical Engines"
+  is_company:
+    type: boolean
+    required: false
+    default: false
+  sample_data:
+    type: boolean
+    required: false
+    default: false
+    description: Tag the record as sample/test data (set true for run-chain fixtures).
+result:
+  outcome: text
+  record_id: text
+  client:
+    schema: Client
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Fill the New Client form; click Save when commit:true
+    # created_nav = the post-save redirect to the new client's page (carries the
+    # web id). abandon = the Save button disappears with NO such redirect (Cancel
+    # → back to the list). created = when:[created_nav]; cancelled = when:[abandon]
+    # not:[created_nav] (grace-arbitrated). FLAGGED: the redirect URL/id shape is a
+    # best-guess pending one live create.
+    signals:
+      created_nav:
+        type: url_matches
+        pattern: "/clients/(?<record_id>[0-9]+)(?:$|[/?])"
+        extract:
+          record_id:
+            from_url_match: record_id
+      abandon:
+        type: selector_disappears
+        selector: "xpath=//button[normalize-space()=\"Save client\"]"
+    recipe:
+      - id: fill_fields
+        type: fill_fields
+        args:
+          object: Client
+          from:
+            firstName: "{{inputs.first_name}}"
+            lastName: "{{inputs.last_name}}"
+            companyName: "{{inputs.company_name}}"
+      - id: click_save
+        type: use_widget
+        commit: true
+        args:
+          widget: jobber.save_client
+          op: invoke
+    outcomes:
+      - action: created
+        when: [created_nav]
+        extract:
+          record_id:
+            from_signal: created_nav.record_id
+          client:
+            id:
+              from_signal: created_nav.record_id
+            firstName:
+              from_input: first_name
+            lastName:
+              from_input: last_name
+      - action: cancelled
+        when: [abandon]
+        not: [created_nav]
+
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL clientCreate(input) via the session cookie
+    recipe:
+      - id: gql_create
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            operation_name: AnvisioCreateClient
+            extract_path: data.clientCreate
+            # A non-empty userErrors array on the 200 → invalid_input (the agent
+            # re-asks for corrected inputs; heal skips). Rule S, session path.
+            reject_path: data.clientCreate.userErrors
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+            query: >
+              mutation AnvisioCreateClient($input: ClientCreateInput!) {
+                clientCreate(input: $input) {
+                  client { id name firstName lastName companyName isCompany }
+                  userErrors { message path }
+                }
+              }
+          args:
+            input:
+              firstName: "{{inputs.first_name}}"
+              lastName: "{{inputs.last_name}}"
+              companyName: "{{inputs.company_name}}"
+              isCompany: "{{inputs.is_company}}"
+              sampleData: "{{inputs.sample_data}}"
+    outcomes:
+      - action: created
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          record_id:
+            from_step: gql_create
+            path: client.id
+          client:
+            from_step: gql_create
+            path: client

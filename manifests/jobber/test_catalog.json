@@ -1,0 +1,99 @@
+{
+  "integration_id": "jobber",
+  "generated_at": "2026-07-08T00:00:00Z",
+  "_meta": {
+    "format": "id-based chain (parseTestCatalog): depends_on + input_from + expect. session_api (kind: graphql) is the proven path; the browser flavors are the mandatory fallback but are FLAGGED (unconfirmed forms) so the chain drives session_api.",
+    "purpose": "The CRUDS reference run-chain (plan Phase 5): create_client → create_property (Property → Client via clientId) → create_job (Job → Property via propertyId) → read_job and ASSERT the 2-hop link (job.client.id == created client id AND job.property.id == created property id, both surfaced flat by get_job). Plus CRUD-S update, and a self-cleaning delete_client (cascade removes the property + job). Every write is sampleData/token-tagged. Proves: kind:graphql CRUD, the reference resolution across create→create→create, and the round-trip link on read-back.",
+    "notes": [
+      "run_token: every created record is tagged with {{run_token}} + sampleData:true so re-runs are isolated and swept.",
+      "expect vars reference a parent step's captured extract as {{<parent_id>.<extract_key>}} (no `.outcomes.`); input_from uses <parent_id>.outcomes.<extract_key>.",
+      "invalid_input (Rule S) is NOT a catalog entry (no normal outcome fires) — it is unit-proven (platform-api reject_path) + confirmed live (jobCreate with a bogus propertyId → userErrors → invalid_input).",
+      "Run live against a signed-in secure.getjobber.com tab (session cookie); the browser flavors need a separate hardening pass before they can drive this chain."
+    ]
+  },
+  "tests": [
+    {
+      "id": "create_client",
+      "action": "create_client",
+      "flavor": "session_api",
+      "commit": true,
+      "expected_outcome": "created",
+      "inputs": {
+        "first_name": "Anvisio",
+        "last_name": "Chain {{run_token}}",
+        "company_name": "Anvisio Test {{run_token}}",
+        "is_company": false,
+        "sample_data": true
+      },
+      "expect": { "record_id": "<nonempty>" }
+    },
+    {
+      "id": "create_property",
+      "action": "create_property",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": "create_client",
+      "expected_outcome": "created",
+      "inputs": {
+        "street1": "1 Test Way",
+        "city": "Austin",
+        "province": "TX",
+        "postal_code": "78701",
+        "country": "United States",
+        "name": "Chain Property {{run_token}}"
+      },
+      "input_from": { "client_id": "create_client.outcomes.record_id" },
+      "expect": { "record_id": "<nonempty>" }
+    },
+    {
+      "id": "create_job",
+      "action": "create_job",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": "create_property",
+      "expected_outcome": "created",
+      "inputs": {
+        "title": "Chain Job {{run_token}}",
+        "instructions": "Anvisio CRUDS reference run-chain.",
+        "job_type": "ONE_OFF",
+        "invoicing_type": "FIXED_PRICE",
+        "invoicing_schedule": "ON_COMPLETION"
+      },
+      "input_from": { "property_id": "create_property.outcomes.record_id" },
+      "expect": { "record_id": "<nonempty>" }
+    },
+    {
+      "id": "read_job",
+      "action": "get_job",
+      "flavor": "session_api",
+      "depends_on": ["create_job", "create_client", "create_property"],
+      "expected_outcome": "fetched",
+      "input_from": { "job_id": "create_job.outcomes.record_id" },
+      "expect": {
+        "client_id": "{{create_client.record_id}}",
+        "property_id": "{{create_property.record_id}}"
+      }
+    },
+    {
+      "id": "update_client",
+      "action": "update_client",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": ["create_client", "read_job"],
+      "expected_outcome": "saved",
+      "inputs": { "last_name": "Chain-Updated {{run_token}}" },
+      "input_from": { "client_id": "create_client.outcomes.record_id" },
+      "expect": { "record_id": "{{create_client.record_id}}" }
+    },
+    {
+      "id": "delete_client",
+      "action": "delete_client",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": ["update_client", "read_job"],
+      "expected_outcome": "deleted",
+      "input_from": { "client_id": "create_client.outcomes.record_id" },
+      "expect": { "record_id": "{{create_client.record_id}}" }
+    }
+  ]
+}

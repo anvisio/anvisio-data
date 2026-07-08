@@ -1,0 +1,88 @@
+_meta:
+  name: manifests/jobber/schemas/Property.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Property schema — a service location that belongs to a Client. The
+    middle hop of the Client → Property → Job reference chain. Fields grounded
+    in live GraphQL introspection of the Property type + PropertyAttributes /
+    AddressAttributes (2026-07-08). `clientId` is the up-reference to Client
+    (the API read returns it nested as `client { id }`; propertyCreate takes a
+    top-level `clientId` arg). The address is a nested PropertyAddress on read /
+    AddressAttributes on write; modeled here as flat components (street1..country)
+    that the create_property atom composes into the nested `address`.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Core read fields + flat address components +
+       the clientId up-ref. Live-probed."
+
+description: |
+  A Jobber Property — a service location (address) owned by a Client. A Property
+  hosts Jobs (jobCreate needs a propertyId). Global id `id` is an opaque EncodedId.
+primary_key: [id]
+fields:
+  id:
+    type: id
+    label: Property ID
+    primary: true
+    readonly: true
+  name:
+    type: text
+    label: Name
+    optional: true
+    description: Optional label for the property (nullable; often blank).
+  clientId:
+    type: id
+    label: Client ID
+    readonly: true
+    optional: true
+    ref: Client.id
+    description: >
+      The owning Client (the up-reference). Not a form-fillable field — a Property
+      is created in a Client's URL context and propertyCreate takes `clientId` as a
+      top-level argument; surfaced on read as nested `client { id }`. Set once at
+      creation via the create_property `client_id` input.
+  street1:
+    type: text
+    label: Street address
+    optional: true
+  street2:
+    type: text
+    label: Street address line 2
+    optional: true
+  city:
+    type: text
+    label: City
+    optional: true
+  province:
+    type: text
+    label: Province/State
+    optional: true
+  postalCode:
+    type: text
+    label: Postal/ZIP code
+    optional: true
+  country:
+    type: text
+    label: Country
+    optional: true
+  routingOrder:
+    type: number
+    label: Routing order
+    readonly: true
+    optional: true
+  isBillingAddress:
+    type: boolean
+    label: Is billing address
+    readonly: true
+    optional: true
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true
+    description: Absolute URL of the property's page (nested under its client).

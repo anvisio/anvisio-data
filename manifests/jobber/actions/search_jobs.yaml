@@ -1,0 +1,98 @@
+_meta:
+  name: manifests/jobber/actions/search_jobs.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    search_jobs atom — find Jobs by term. Read-only. session_api (kind: graphql,
+    `jobs(searchTerm, first)` Relay connection) + browser (the jobs list).
+    Grounded in live introspection (jobs query args: searchTerm:String, first:Int
+    → nodes{}).
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Relay connection, extract data.jobs.nodes.
+       browser jobs-list deeplink FLAGGED (/jobs list page best-guess)."
+
+description: >
+  Search Jobber Jobs by a free-text term, returning matching jobs (id + number +
+  title + status + owning client/property).
+object: Job
+commits_changes: false
+depends_on_view: any
+inputs:
+  query:
+    type: text
+    required: true
+    description: Free-text search term (title, client name, etc.).
+    sample: "cleanup"
+  limit:
+    type: number
+    required: false
+    default: 25
+    description: Max results (Relay `first`).
+result:
+  jobs:
+    schema_list: Job
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL jobs(searchTerm, first) via the session cookie
+    recipe:
+      - id: gql_search
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            operation_name: AnvisioSearchJobs
+            extract_path: data.jobs.nodes
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+            query: >
+              query AnvisioSearchJobs($searchTerm: String, $first: Int) {
+                jobs(searchTerm: $searchTerm, first: $first) {
+                  nodes {
+                    id jobNumber title jobStatus jobberWebUri
+                    client { id name }
+                    property { id }
+                  }
+                }
+              }
+          args:
+            searchTerm: "{{inputs.query}}"
+            first: "{{inputs.limit}}"
+    outcomes:
+      - action: searched
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          jobs:
+            from_step: gql_search
+            path: ""
+
+  browser:
+    requires_auth: session_cookie
+    label: Open the jobs list
+    # FLAGGED: /jobs list URL is a best-guess (Jobber's internal term is
+    # 'work order'). session_api is the real path.
+    recipe:
+      - id: nav_jobs
+        type: navigate
+        args:
+          url: "{instance.origin}/jobs"
+      - id: wait_list
+        type: wait_for_element
+        args:
+          selector: "table, [data-testid='jobs-table'], h1"
+          timeout_ms: 10000
+    outcomes:
+      - action: searched
+        signal:
+          type: selector_appears
+          selector: "table, [data-testid='jobs-table'], h1"
+        extract:
+          jobs:
+            from_input: query

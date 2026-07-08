@@ -1,0 +1,91 @@
+_meta:
+  name: manifests/jobber/schemas/Job.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Job schema — a unit of work at a Property for a Client. The end of the
+    Client → Property → Job reference chain. A Job read exposes BOTH `client` and
+    `property` (both non-null), so the CRUDS run-chain link assertion is clean:
+    job.client.id == created client id AND job.property.id == created property id.
+    Fields grounded in live GraphQL introspection of the Job type +
+    JobCreateAttributes / JobInvoicingAttributes (2026-07-08).
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Core read fields + the propertyId (required
+       create ref) + clientId (up-ref via property). Live-probed."
+
+description: |
+  A Jobber Job — scheduled work at a Property for a Client. jobCreate requires a
+  `propertyId` (the Property → Client linkage supplies the client). Global id `id`
+  is an opaque EncodedId.
+primary_key: [id]
+fields:
+  id:
+    type: id
+    label: Job ID
+    primary: true
+    readonly: true
+  jobNumber:
+    type: number
+    label: Job number
+    readonly: true
+  title:
+    type: text
+    label: Title
+    optional: true
+  instructions:
+    type: text
+    label: Instructions
+    optional: true
+  jobStatus:
+    type: text
+    label: Status
+    readonly: true
+    description: "JobStatusTypeEnum (active, upcoming, on_hold, unscheduled, archived, …)."
+  jobType:
+    type: text
+    label: Job type
+    readonly: true
+    description: "JobTypeTypeEnum (ONE_OFF | RECURRING). Set on create via the create_job job_type input."
+  propertyId:
+    type: id
+    label: Property ID
+    readonly: true
+    ref: Property.id
+    description: >
+      The Property this job is at (the required create reference). Not a plain-fill
+      field — selected via the New Job property picker (browser) or the jobCreate
+      `propertyId` argument (session_api). Surfaced on read as nested `property { id }`.
+  clientId:
+    type: id
+    label: Client ID
+    readonly: true
+    ref: Client.id
+    description: >
+      The Client this job is for (the up-reference, derived from the Property).
+      Surfaced on read as nested `client { id }`; not set directly (the Property
+      supplies it).
+  startAt:
+    type: datetime
+    label: Start at
+    readonly: true
+    optional: true
+  endAt:
+    type: datetime
+    label: End at
+    readonly: true
+    optional: true
+  total:
+    type: number
+    label: Total
+    readonly: true
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true
+    description: Absolute URL of the job's page in the web app.

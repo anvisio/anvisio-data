@@ -1,0 +1,95 @@
+_meta:
+  name: manifests/jobber/schemas/Client.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Client schema — the customer record (a person or a company).
+    Fields grounded in live GraphQL introspection of the Client type +
+    ClientCreateInput (2026-07-08). Used by the client CRUD-S atoms.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Core fillable fields + read fields from
+       introspection. emails/phones are nested EmailCreateAttributes /
+       PhoneNumberCreateAttributes on write (an id-grain seam vs the browser
+       form's simple Email/Phone inputs) — deferred; first slice uses the
+       simple firstName/lastName/companyName core."
+
+description: |
+  A Jobber Client — the customer, either a person (firstName/lastName) or a
+  company (companyName + isCompany). Global id `id` is an opaque EncodedId.
+  A Client owns Properties (clientProperties), and Jobs/Quotes/Invoices hang
+  off those. Live-probed.
+primary_key: [id]
+fields:
+  id:
+    type: id
+    label: Client ID
+    primary: true
+    readonly: true
+  name:
+    type: text
+    label: Name
+    readonly: true
+    description: Display name Jobber computes from first/last or company.
+  firstName:
+    type: text
+    label: First name
+    required: true
+  lastName:
+    type: text
+    label: Last name
+    required: true
+  companyName:
+    type: text
+    label: Company name
+    optional: true
+  isCompany:
+    type: boolean
+    label: Is company
+    readonly: true
+    description: >
+      True when the client is a business rather than an individual. Not a simple
+      browser-form fill (derived) — set via the create_client API input.
+  title:
+    type: text
+    label: Title
+    optional: true
+  email:
+    type: text
+    label: Email
+    optional: true
+    description: Primary email (read convenience; writes go through emails[]).
+  phone:
+    type: text
+    label: Phone number
+    optional: true
+    description: Primary phone (read convenience; writes go through phones[]).
+  balance:
+    type: number
+    label: Balance
+    readonly: true
+  isArchived:
+    type: boolean
+    label: Archived
+    readonly: true
+  leadSource:
+    type: text
+    label: Lead source
+    optional: true
+  sampleData:
+    type: boolean
+    label: Sample data
+    readonly: true
+    description: >
+      Marks a record as test/sample data. Read field; set on create via the
+      create_client `sample_data` API input (run-chain fixtures set it true).
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true
+    description: Absolute URL of the client's page in the web app.

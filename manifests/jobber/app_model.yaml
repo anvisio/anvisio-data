@@ -1,0 +1,100 @@
+_meta:
+  name: manifests/jobber/app_model.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Semantic-layer model for Jobber's web app (secure.getjobber.com). Screens,
+    affordances, known-dead paths, transitions. Consumed by propose/heal/Claude;
+    the runtime ignores this file. Seed from the live Client-flow probe
+    (2026-07-08); Property/Job/Invoice screens are not yet characterized.
+    Single-source rule: selectors in widgets.yaml, URLs in views/, fields in schemas/.
+  changelog:
+    - "0.1.0 (2026-07-08): initial Client-flow seed (ClientsList / ClientRecord /
+       NewClientForm). Records the generated-input-id / label-XPath structure +
+       the browser-write signals still needing a live create."
+
+screens:
+  ClientsList:
+    view: ClientsList
+    url_pattern: "{instance.origin}/clients"
+    purpose: "Clients index table + search box; entry to the New Client form. The search_clients browser landmark."
+    verified_at: 2026-07-08
+    status: partially_documented   # list-table selector is a best-guess pending a live render probe
+  ClientRecord:
+    view: ClientRecord
+    url_pattern: "{instance.origin}/clients/{client_id}"
+    purpose: "A single client's detail page. The post-create landing + the get_client browser landmark. Header is the client name (h1)."
+    verified_at: 2026-07-08
+    status: partially_documented
+  NewClientForm:
+    view: NewClientForm
+    url_pattern: "{instance.origin}/clients/new"
+    purpose: "The create-client form. The launch-contract surface where the user clicks Save. Label-XPath text inputs + a 'Save client' commit button."
+    verified_at: 2026-07-08   # inputs + Save button live-probed; the post-save redirect/toast NOT yet
+  ClientEditForm:
+    view: ClientEditForm
+    url_pattern: "{instance.origin}/clients/{client_id}/edit"
+    purpose: "The client edit form. update_client's browser launch surface."
+    status: unprobed   # FLAGGED — URL + Save affordance need a live edit
+  NewPropertyForm:
+    view: NewPropertyForm
+    url_pattern: "{instance.origin}/clients/{client_id}/properties/new"
+    purpose: "The Add Property form under a client. create_property's browser launch surface."
+    status: unprobed   # FLAGGED — URL + field labels + Save affordance need a live create
+  NewJobForm:
+    view: NewJobForm
+    url_pattern: "{instance.origin}/jobs/new"
+    purpose: "The New Job form (title/instructions + type-to-search property picker). create_job's browser launch surface."
+    status: unprobed   # FLAGGED — URL + labels + picker + Save; Jobber's internal term for a Job is 'work order'
+
+affordances:
+  NewClientForm:
+    - { label: "First/Last/Company text inputs", widget: jobber.text_input, behavior: "label-first fill via xpath //input[@id = //label[text()=LABEL]/@for] (generated input ids)" }
+    - { label: "Save client", widget: jobber.save_client, behavior: "commit — saves + navigates to the new client page (click_dismisses; the created_nav redirect is the real commit proof)" }
+    - { label: "Cancel", widget: jobber.cancel_button, behavior: "discard — returns to the clients list" }
+
+known_dead_paths:
+  - id: generated_input_ids
+    description: "New Client form inputs have React-generated ids (_r_1i_) + NO stable placeholder/name/testid. Addressed label-first via xpath (label for/id link). If Atlantis changes the label text or the for/id wiring, the fills break — re-probe label→input association."
+    discovered: 2026-07-08
+    alternative: "The session_api (kind: graphql) clientCreate needs no DOM and is the write workhorse; browser is the visible fallback."
+  - id: browser_write_signals_unconfirmed
+    description: "create_client's created_nav redirect URL/id, the success toast, and the reject-for-input surface are NOT captured — they need one real create. Until then the browser create outcome is a best-guess; the session_api create is the proven path. Applies equally to the FLAGGED update_client / create_property / create_job / delete_client browser flavors + their views/widgets."
+    discovered: 2026-07-08
+    alternative: "Run a live hardening pass: create a sampleData client, capture the redirect + toast, drive a missing-required reject, author the Save widget failure_selector, then delete."
+  - id: property_url_nested
+    description: "Properties live at the NESTED /clients/{clientId}/properties/{propertyId} (CONFIRMED live 2026-07-08 via a real record's jobberWebUri). The flat /properties/{id} deeplink (get_property browser) likely will not resolve without the client id."
+    discovered: 2026-07-08
+    alternative: "session_api (kind: graphql) property(id) needs no DOM."
+  - id: job_url_work_orders
+    description: "Job web URL is /work_orders/{numericId} — CONFIRMED live 2026-07-08 (a created job's jobberWebUri = https://secure.getjobber.com/work_orders/150333161). NOT /jobs/{id}. get_job browser nav updated; create_job created_nav accepts both."
+    discovered: 2026-07-08
+    alternative: "session_api job(id) needs no DOM."
+  - id: id_grain_encoded_vs_numeric
+    description: "THE #1 browser-hardening item. Web URLs use the base64-DECODED numeric id (EncodedId MTQ1NzI1MDM4 → 145725038); the API uses the EncodedId. Every browser navigate flavor interpolates the EncodedId into a numeric-id URL slot → wrong path, and every created_nav extracts the numeric web id (≠ the EncodedId session_api returns). Robust fix: navigate a prior read's jobberWebUri, or decode in-recipe."
+    discovered: 2026-07-08
+    alternative: "session_api uses the EncodedId throughout — the proven path."
+  - id: client_delete_async
+    description: "clientDelete returns success (empty userErrors) immediately, but the client + cascaded property/job still resolve for a few seconds, then all go null (~8s). delete_client's outcome fires on mutation success (correct); a downstream 'verify gone' must POLL."
+    discovered: 2026-07-08
+    alternative: "N/A — behavioural note; the delete itself works + cascades."
+
+transitions:
+  - { from: any, to: ClientsList, via: "deeplink {instance.origin}/clients (search_clients browser)" }
+  - { from: any, to: ClientRecord, via: "deeplink {instance.origin}/clients/{client_id} (get_client browser)" }
+  - { from: any, to: NewClientForm, via: "deeplink {instance.origin}/clients/new (create_client)" }
+  - { from: NewClientForm, to: ClientRecord, via: "click Save → Jobber navigates to the new client (create_client created_nav)" }
+  - { from: any, to: NewPropertyForm, via: "deeplink {instance.origin}/clients/{client_id}/properties/new (create_property, FLAGGED)" }
+  - { from: any, to: NewJobForm, via: "deeplink {instance.origin}/jobs/new (create_job, FLAGGED)" }
+  - { from: any, to: ClientEditForm, via: "deeplink {instance.origin}/clients/{client_id}/edit (update_client, FLAGGED)" }
+
+atoms_using:
+  ClientsList: [search_clients]
+  ClientRecord: [get_client, create_client (post-save landing), delete_client]
+  NewClientForm: [create_client]
+  ClientEditForm: [update_client]
+  NewPropertyForm: [create_property]
+  NewJobForm: [create_job]
+  # get_property / search_properties / get_job / search_jobs use deeplink navs (depends_on_view: any)

@@ -1,0 +1,30 @@
+_meta:
+  name: manifests/jobber/views/NewClientForm.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    The New Client form (/clients/new). The launch-contract surface where the
+    user clicks Save. Live-probed 2026-07-08: label-XPath text inputs + a
+    "Save client" commit button. Reached by a direct URL nav.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. entry /clients/new; landmark = the Save button."
+
+name: NewClientForm
+
+entry:
+  url: "{instance.origin}/clients/new"
+landmark_probe:
+  selector: "xpath=//button[normalize-space()=\"Save client\"]"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/clients/new"
+  - type: selector_appears
+    selector: "xpath=//button[normalize-space()=\"Save client\"]"
+    timeout_ms: 12000
+widgets:
+  - jobber.text_input
+  - jobber.save_client
+  - jobber.cancel_button
