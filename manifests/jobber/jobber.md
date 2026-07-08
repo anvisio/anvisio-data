@@ -58,16 +58,34 @@ standalone `clientId` path is cleaner and is what create_property uses). `jobCre
 `property` (non-null) → the link assertion is clean: `job.client.id` + `job.property.id`. `get_job`
 surfaces these flat as `client_id` / `property_id` for the run-chain's read-back assertion.
 
-## Atoms authored (2026-07-08 — the Phase-5 factory-validation slice)
+## OBJECT-GENERIC architecture (Rule Q — the 2026-07-08 re-authoring)
 
-session_api (`kind: graphql`, correct-by-construction from introspection) + browser (mandatory
-fallback; the WRITE forms are FLAGGED pending a live-hardening pass — see below):
-- **Client (full CRUD-S):** create / get / search / update / delete.
-- **Property (C + reads):** create (Property → Client via `clientId`) / get / search.
-- **Job (C + reads):** create (Job → Property via `propertyId`) / get / search.
-The CRUDS reference run-chain lives in [test_catalog.json](test_catalog.json): create client →
-create property → create job → read job + ASSERT the 2-hop link → update → self-cleaning delete.
-Full update/delete for Property/Job + the browser-write hardening is the documented follow-on.
+Jobber is a generic-object SOR (one data model over Client/Property/Job/Quote/Invoice/Request/Visit),
+so per atom-methodology Rule Q it is authored as **ONE object-generic atom set**, NOT one-atom-per-
+object. Five atoms — [create_object](actions/create_object.yaml) / [get_object](actions/get_object.yaml)
+/ [update_object](actions/update_object.yaml) / [delete_object](actions/delete_object.yaml) /
+[search_objects](actions/search_objects.yaml) — each taking an `object` input + `object_types:` list.
+
+The GraphQL-SOR twist (why this needed engine work): a GraphQL SOR bakes the object into the
+OPERATION NAME (`clientCreate` vs `jobCreate`), unlike SF's uniform `/sobjects/{ObjectType}` — so the
+per-object operation can't be a URL parameter. The per-object wire descriptor therefore lives in each
+**schema** (`schemas/<Object>.yaml` → `url_segment` + a `graphql:` block: per-verb `{query,
+extract_path, reject_path, variables}`), and a new engine step **`resolve_object`** (step-executor)
+dispatches it: given `inputs.object` + a verb, it reads the schema descriptor, resolves the
+`variables` template against ctx (shaping the `fields` bag into the object's GraphQL variables —
+absorbing every irregularity: `input:` vs `attributes:`, the propertyCreate `clientId` arg + nested
+`{properties:[…]}`, jobDelete's `jobIds:[list]`, visitEdit's `id:`, Visit's missing searchTerm), and
+feeds a downstream `call_platform_api` (kind: graphql) templated from `{{steps.desc.*}}`. Adding an
+8th object = ONE schema (fields + descriptor), zero new atoms/views.
+
+Enforced by **gate check 17** (findPerObjectCrudClusters): a per-object CRUD cluster on a generic-
+object SOR now FAILS the gate (it fired on this integration's own first per-object draft).
+
+**Live-proven 2026-07-08** (session_api, real account, records swept): all 7 objects' search
+descriptors execute clean; Client full CRUD-S + a Request create (Request→Client ref resolves) round-
+trip; the Client→Property→Job reference chain + 2-hop link assertion pass; clientDelete cascades
+(async). Quote/Invoice/Visit CREATE descriptors are introspection-grounded but not live-created (their
+required inputs — lineItems / origin+dueDetails+tax / nested visits — are supplied via `fields`).
 
 ## Browser-flavor DOM (New Client form, live-probed 2026-07-08)
 

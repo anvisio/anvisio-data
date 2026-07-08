@@ -90,11 +90,19 @@ transitions:
   - { from: any, to: NewJobForm, via: "deeplink {instance.origin}/jobs/new (create_job, FLAGGED)" }
   - { from: any, to: ClientEditForm, via: "deeplink {instance.origin}/clients/{client_id}/edit (update_client, FLAGGED)" }
 
+# OBJECT-GENERIC (Rule Q, 2026-07-08): the atoms are now the 5 generic verbs
+# (create_object / get_object / update_object / delete_object / search_objects),
+# NOT per-object. Each resolves the object's web url_segment + GraphQL descriptor
+# from its schema via the resolve_object engine step, then navigates/dispatches
+# per object. The screens below describe the real Jobber web pages the browser
+# flavor lands on per object (semantic reference); they are no longer per-object
+# VIEW files. depends_on_view: any for all five (the recipe navigates itself).
 atoms_using:
-  ClientsList: [search_clients]
-  ClientRecord: [get_client, create_client (post-save landing), delete_client]
-  NewClientForm: [create_client]
-  ClientEditForm: [update_client]
-  NewPropertyForm: [create_property]
-  NewJobForm: [create_job]
-  # get_property / search_properties / get_job / search_jobs use deeplink navs (depends_on_view: any)
+  ClientsList: [search_objects (object=Client)]
+  ClientRecord: [get_object, delete_object, create_object (post-save landing)]
+  NewClientForm: [create_object (object=Client)]
+  ClientEditForm: [update_object (object=Client)]
+  NewPropertyForm: [create_object (object=Property)]
+  NewJobForm: [create_object (object=Job)]
+  # every object routes through the same 5 atoms; the object input + schema
+  # url_segment/graphql descriptor select the per-object web page + operation.

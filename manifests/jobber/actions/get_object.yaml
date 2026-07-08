@@ -1,0 +1,97 @@
+_meta:
+  name: manifests/jobber/actions/get_object.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    get_object — the OBJECT-GENERIC read-by-id atom (Rule Q). ONE atom fetches any
+    Jobber object by id; the per-object GraphQL query lives in each schema's
+    `graphql.get` descriptor, dispatched by resolve_object. Read-only.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Replaces get_client/get_property/get_job.
+       session_api = resolve_object → call_platform_api; browser = navigate the
+       record page (FLAGGED: EncodedId vs numeric web-id seam; property nested)."
+
+description: Fetch any Jobber object by id (Client, Property, Job, Quote, Invoice, Request, Visit).
+object: "{{inputs.object}}"
+object_types: [Client, Property, Job, Quote, Invoice, Request, Visit]
+commits_changes: false
+depends_on_view: any
+inputs:
+  object:
+    type: text
+    required: true
+    description: The object type to fetch (a defined schema name).
+    sample: Client
+  record_id:
+    type: text
+    required: true
+    description: The object's opaque EncodedId.
+    sample: "MTQ1NjU3MTMx"
+result:
+  record:
+    schema_union: [Client, Property, Job, Quote, Invoice, Request, Visit]
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL <object>(id) via the session cookie (resolve_object dispatch)
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: get
+      - id: gql
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            query: "{{steps.desc.query}}"
+            extract_path: "{{steps.desc.extract_path}}"
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+          args: "{{steps.desc.variables}}"
+    outcomes:
+      - action: fetched
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          record:
+            from_step: gql
+            path: ""
+
+  browser:
+    requires_auth: session_cookie
+    label: Open the object's record page + landmark the header
+    # FLAGGED: navigates {segment}/{record_id}; the id-grain seam (EncodedId vs the
+    # numeric web id) + nested property URLs mean this is a fallback — session_api
+    # (EncodedId throughout) is the proven path.
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: get
+      - id: nav
+        type: navigate
+        args:
+          url: "{instance.origin}/{{steps.desc.url_segment}}/{{inputs.record_id}}"
+      - id: wait_header
+        type: wait_for_element
+        args:
+          selector: "h1, h2"
+          timeout_ms: 10000
+    outcomes:
+      - action: fetched
+        signal:
+          type: selector_appears
+          selector: "h1, h2"
+        extract:
+          record:
+            id:
+              from_input: record_id

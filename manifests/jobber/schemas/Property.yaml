@@ -21,6 +21,84 @@ description: |
   A Jobber Property — a service location (address) owned by a Client. A Property
   hosts Jobs (jobCreate needs a propertyId). Global id `id` is an opaque EncodedId.
 primary_key: [id]
+
+# ── Object-generic dispatch (resolve_object). Property → Client via clientId. ──
+# url_segment is the NESTED path (properties live under a client); the browser
+# fallback is FLAGGED (the flat /properties/{id} may not resolve) — session_api is
+# the path. create maps the flat fields into propertyCreate's {properties:[{…}]}.
+url_segment: properties
+graphql:
+  create:
+    query: >
+      mutation($clientId: EncodedId!, $input: PropertyCreateInput!) {
+        propertyCreate(clientId: $clientId, input: $input) {
+          properties { id name address { street1 street2 city province postalCode country } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.propertyCreate.properties[0]
+    reject_path: data.propertyCreate.userErrors
+    variables:
+      clientId: "{{inputs.fields.clientId}}"
+      input:
+        properties:
+          - name: "{{inputs.fields.name}}"
+            address:
+              street1: "{{inputs.fields.street1}}"
+              street2: "{{inputs.fields.street2}}"
+              city: "{{inputs.fields.city}}"
+              province: "{{inputs.fields.province}}"
+              postalCode: "{{inputs.fields.postalCode}}"
+              country: "{{inputs.fields.country}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        property(id: $id) {
+          id name routingOrder isBillingAddress createdAt jobberWebUri
+          address { street1 street2 city province postalCode country }
+          client { id name }
+        }
+      }
+    extract_path: data.property
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($propertyId: EncodedId!, $input: PropertyEditInput!) {
+        propertyEdit(propertyId: $propertyId, input: $input) {
+          property { id name }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.propertyEdit.property
+    reject_path: data.propertyEdit.userErrors
+    variables:
+      propertyId: "{{inputs.record_id}}"
+      input: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($propertyId: EncodedId!) {
+        propertyDelete(propertyId: $propertyId) {
+          property { id }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.propertyDelete.property
+    reject_path: data.propertyDelete.userErrors
+    variables:
+      propertyId: "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        properties(searchTerm: $searchTerm, first: $first) {
+          nodes { id name jobberWebUri address { street1 city province } client { id name } }
+        }
+      }
+    extract_path: data.properties.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
 fields:
   id:
     type: id

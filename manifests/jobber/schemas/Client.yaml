@@ -1,26 +1,90 @@
 _meta:
   name: manifests/jobber/schemas/Client.yaml
-  version: 0.1.0
+  version: 0.2.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-07-08
   description: |
-    Jobber Client schema — the customer record (a person or a company).
-    Fields grounded in live GraphQL introspection of the Client type +
-    ClientCreateInput (2026-07-08). Used by the client CRUD-S atoms.
+    Jobber Client schema — the customer record (a person or a company). This
+    schema is the SINGLE per-object source for the object-generic atom set: it
+    carries `fields` (the catalog, for browser fills + results), `url_segment`
+    (the web path), and a `graphql:` block (the per-verb wire descriptor the
+    `resolve_object` engine step dispatches, since a GraphQL SOR's operation name
+    varies per object — clientCreate vs jobCreate). Live-introspected 2026-07-08.
   changelog:
-    - "0.1.0 (2026-07-08): initial. Core fillable fields + read fields from
-       introspection. emails/phones are nested EmailCreateAttributes /
-       PhoneNumberCreateAttributes on write (an id-grain seam vs the browser
-       form's simple Email/Phone inputs) — deferred; first slice uses the
-       simple firstName/lastName/companyName core."
+    - "0.2.0 (2026-07-08): + url_segment + graphql descriptor (create/get/update/
+       delete/search) for the object-generic atoms (Rule Q). The per-object CRUD-S
+       atoms are retired in favour of create_object/get_object/… + this descriptor."
+    - "0.1.0 (2026-07-08): initial. Core fillable + read fields from introspection."
 
 description: |
   A Jobber Client — the customer, either a person (firstName/lastName) or a
   company (companyName + isCompany). Global id `id` is an opaque EncodedId.
-  A Client owns Properties (clientProperties), and Jobs/Quotes/Invoices hang
-  off those. Live-probed.
 primary_key: [id]
+
+# ── Object-generic dispatch (consumed by the resolve_object engine step) ──
+url_segment: clients
+graphql:
+  create:
+    query: >
+      mutation($input: ClientCreateInput!) {
+        clientCreate(input: $input) {
+          client { id name firstName lastName companyName isCompany }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.clientCreate.client
+    reject_path: data.clientCreate.userErrors
+    variables:
+      input: "{{inputs.fields}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        client(id: $id) {
+          id name firstName lastName companyName isCompany title
+          email phone balance isArchived leadSource createdAt jobberWebUri
+        }
+      }
+    extract_path: data.client
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($clientId: EncodedId!, $input: ClientEditInput!) {
+        clientEdit(clientId: $clientId, input: $input) {
+          client { id name firstName lastName companyName isCompany }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.clientEdit.client
+    reject_path: data.clientEdit.userErrors
+    variables:
+      clientId: "{{inputs.record_id}}"
+      input: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($clientId: EncodedId!) {
+        clientDelete(clientId: $clientId) {
+          client { id }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.clientDelete.client
+    reject_path: data.clientDelete.userErrors
+    variables:
+      clientId: "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        clients(searchTerm: $searchTerm, first: $first) {
+          nodes { id name firstName lastName companyName isCompany email phone }
+        }
+      }
+    extract_path: data.clients.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
 fields:
   id:
     type: id
@@ -48,9 +112,7 @@ fields:
     type: boolean
     label: Is company
     readonly: true
-    description: >
-      True when the client is a business rather than an individual. Not a simple
-      browser-form fill (derived) — set via the create_client API input.
+    description: True when the client is a business. Set via the create fields, not a form fill.
   title:
     type: text
     label: Title
@@ -77,13 +139,6 @@ fields:
     type: text
     label: Lead source
     optional: true
-  sampleData:
-    type: boolean
-    label: Sample data
-    readonly: true
-    description: >
-      Marks a record as test/sample data. Read field; set on create via the
-      create_client `sample_data` API input (run-chain fixtures set it true).
   createdAt:
     type: datetime
     label: Created at
@@ -92,4 +147,3 @@ fields:
     type: text
     label: Jobber web URL
     readonly: true
-    description: Absolute URL of the client's page in the web app.

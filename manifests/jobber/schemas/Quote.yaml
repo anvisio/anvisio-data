@@ -1,0 +1,131 @@
+_meta:
+  name: manifests/jobber/schemas/Quote.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Quote schema — a priced proposal for a Client at a Property. Single
+    per-object source for the object-generic atoms: fields + url_segment + a
+    graphql descriptor. Live-introspected 2026-07-08. NOTE: quoteCreate uses
+    `attributes:` (not `input:`) and requires clientId + propertyId + lineItems.
+  changelog:
+    - "0.1.0 (2026-07-08): initial (object-generic era). Read fields + refs +
+       graphql descriptor. lineItems (required on create) is supplied via `fields`."
+
+description: A Jobber Quote — a priced proposal (client + property + line items).
+primary_key: [id]
+
+url_segment: quotes
+graphql:
+  create:
+    query: >
+      mutation($attributes: QuoteCreateAttributes!) {
+        quoteCreate(attributes: $attributes) {
+          quote { id quoteNumber title quoteStatus client { id } property { id } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.quoteCreate.quote
+    reject_path: data.quoteCreate.userErrors
+    variables:
+      attributes: "{{inputs.fields}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        quote(id: $id) {
+          id quoteNumber title message quoteStatus createdAt sentAt jobberWebUri
+          client { id name } property { id name } request { id }
+        }
+      }
+    extract_path: data.quote
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($quoteId: EncodedId!, $attributes: QuoteEditAttributes!) {
+        quoteEdit(quoteId: $quoteId, attributes: $attributes) {
+          quote { id title quoteStatus }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.quoteEdit.quote
+    reject_path: data.quoteEdit.userErrors
+    variables:
+      quoteId: "{{inputs.record_id}}"
+      attributes: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($quoteId: EncodedId!) {
+        quoteDelete(quoteId: $quoteId) { userErrors { message path } }
+      }
+    extract_path: data.quoteDelete
+    reject_path: data.quoteDelete.userErrors
+    variables:
+      quoteId: "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        quotes(searchTerm: $searchTerm, first: $first) {
+          nodes { id quoteNumber title quoteStatus jobberWebUri client { id name } }
+        }
+      }
+    extract_path: data.quotes.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
+fields:
+  id:
+    type: id
+    label: Quote ID
+    primary: true
+    readonly: true
+  quoteNumber:
+    type: text
+    label: Quote number
+    readonly: true
+  title:
+    type: text
+    label: Title
+    optional: true
+  message:
+    type: text
+    label: Message
+    optional: true
+  quoteStatus:
+    type: text
+    label: Status
+    readonly: true
+    description: "QuoteStatusTypeEnum (draft/awaiting_response/approved/…)."
+  clientId:
+    type: id
+    label: Client ID
+    optional: true
+    ref: Client.id
+    description: The Client this quote is for (quoteCreate `attributes.clientId`, required).
+  propertyId:
+    type: id
+    label: Property ID
+    optional: true
+    ref: Property.id
+    description: The Property this quote is at (quoteCreate `attributes.propertyId`, required).
+  requestId:
+    type: id
+    label: Request ID
+    optional: true
+    ref: Request.id
+    description: The originating Request, if any.
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+  sentAt:
+    type: datetime
+    label: Sent at
+    readonly: true
+    optional: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true

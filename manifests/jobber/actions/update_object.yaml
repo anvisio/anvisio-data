@@ -1,0 +1,126 @@
+_meta:
+  name: manifests/jobber/actions/update_object.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    update_object — the OBJECT-GENERIC edit atom (Rule Q). ONE atom edits any
+    Jobber object; the per-object GraphQL (<object>Edit + id-arg + input type)
+    lives in each schema's `graphql.update` descriptor. A partial edit — only the
+    supplied `fields` are sent (dropMissing omits the rest). Writes prefer browser
+    > session_api. `fields` is the platform-generic bag (Check-6 ALLOW).
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Replaces update_client (+ future per-object
+       edits). session_api = resolve_object → call_platform_api; browser = navigate
+       {segment}/{id}/edit → fill + Save (FLAGGED forms)."
+
+description: Update any Jobber object's fields (Client, Property, Job, Quote, Invoice, Request, Visit).
+object: "{{inputs.object}}"
+object_types: [Client, Property, Job, Quote, Invoice, Request, Visit]
+commits_changes: true
+depends_on_view: any
+inputs:
+  object:
+    type: text
+    required: true
+    sample: Client
+  record_id:
+    type: text
+    required: true
+    sample: "MTQ1NjU3MTMx"
+  fields:
+    type: object
+    required: true
+    description: The field values to change (partial; only supplied fields are sent).
+    sample:
+      lastName: Lovelace-Byron
+result:
+  outcome: text
+  record_id: text
+  record:
+    schema_union: [Client, Property, Job, Quote, Invoice, Request, Visit]
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the object's edit form; fill the changed fields; Save when commit:true
+    # FLAGGED: the per-object edit forms + Save affordance need live drives.
+    signals:
+      saved_nav:
+        type: url_matches
+        pattern: "/(?:clients|work_orders|quotes|invoices|requests|visits)/(?<record_id>[0-9]+)(?:$|[/?])"
+        extract:
+          record_id:
+            from_url_match: record_id
+      abandon:
+        type: selector_disappears
+        selector: "xpath=//button[starts-with(normalize-space(),\"Save\")]"
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: update
+      - id: nav
+        type: navigate
+        args:
+          url: "{instance.origin}/{{steps.desc.url_segment}}/{{inputs.record_id}}/edit"
+      - id: fill
+        type: fill_fields
+        args:
+          object: "{{inputs.object}}"
+          from: "{{inputs.fields}}"
+      - id: save
+        type: use_widget
+        commit: true
+        args:
+          widget: jobber.save_generic
+          op: invoke
+    outcomes:
+      - action: saved
+        when: [saved_nav]
+        extract:
+          record_id:
+            from_signal: saved_nav.record_id
+          record:
+            id:
+              from_signal: saved_nav.record_id
+      - action: cancelled
+        when: [abandon]
+        not: [saved_nav]
+
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL <object>Edit via the session cookie (resolve_object dispatch)
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: update
+      - id: gql
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            query: "{{steps.desc.query}}"
+            extract_path: "{{steps.desc.extract_path}}"
+            reject_path: "{{steps.desc.reject_path}}"
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+          args: "{{steps.desc.variables}}"
+    outcomes:
+      - action: saved
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          record_id:
+            from_step: gql
+            path: id
+          record:
+            from_step: gql
+            path: ""

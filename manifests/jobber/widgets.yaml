@@ -1,42 +1,35 @@
 _meta:
   name: manifests/jobber/widgets.yaml
-  version: 0.1.0
+  version: 0.3.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-07-08
   description: |
-    Jobber widget primitives, archetype-driven, inline (initial seed).
-    Jobber's Atlantis forms use React-GENERATED input ids (`_r_1i_`) with
-    NO stable placeholder/name/testid — but each input has a
-    `<label for="{id}">First name</label>`, so fields are addressed
-    label-first via an XPath that links the label text to its input by
-    for/id. Live-probed 2026-07-08 on /clients/new (First/Last/Company/
-    Phone/Email all resolve; the email input additionally carries
-    data-testid ATL-InputEmail-input). Commit/discard buttons are
-    addressed by their button text ("Save client" / "Cancel").
+    Jobber widget primitives, archetype-driven, GENERIC (object-agnostic) to match
+    the object-generic atom set. Jobber's Atlantis forms use React-GENERATED input
+    ids (`_r_1i_`) with NO stable placeholder/name/testid — but each input has a
+    `<label for="{id}">First name</label>`, so fields are addressed label-first via
+    an XPath linking the label text to its input by for/id. The New Client form was
+    live-probed 2026-07-08; the New Quote/Job/Property/edit forms are FLAGGED
+    (best-guess) pending live drives — session_api is the proven write path.
   changelog:
-    - "0.2.0 (2026-07-08): + the CRUD-S/Property/Job slice widgets, all FLAGGED
-       (best-guess, confirm in a live pass): delete_client action-menu flow
-       (client_actions_menu / delete_client_menu_item / delete_confirm, click_reveals
-       + click_dismisses), save_property + save_job commit buttons, and
-       job_property_picker (typeahead_lookup — the type-to-search property lookup,
-       pending the dedicated lookup_search archetype)."
-    - "0.1.0 (2026-07-08): initial. Label-XPath text_input (works for every
-       New Client field), Save/Cancel buttons by text. Field-fill selectors
-       live-verified; the created-nav redirect + success toast + reject
-       surface still need a live create to confirm (flagged in app_model)."
+    - "0.3.0 (2026-07-08): object-generic rewrite. text_input (label-XPath) + a
+       generic save_generic (any 'Save…' button) + a generic delete flow
+       (object_actions_menu / delete_menu_item / delete_confirm). Replaces the
+       per-object save_client/save_property/save_job/client_actions_menu widgets."
+    - "0.2.0 / 0.1.0 (2026-07-08): per-object widgets (retired with the per-object atoms)."
 
-  archetypes_used: [text_input, click_dismisses, click_reveals, typeahead_lookup]
+  archetypes_used: [text_input, click_dismisses, click_reveals]
 
 # Any writable field with no explicit `widget:` resolves here by type.
 defaults_by_type:
   text: jobber.text_input
 
 widgets:
-  # Label-first text input. `{{field_label}}` is the schema field's label
-  # (matches the form's <label> text). The XPath links label→input by for/id
-  # because the input's own id is React-generated (unstable). xpath= is
-  # resolved by the runtime via document.evaluate (chrome-step-driver).
+  # Label-first text input. `{{field_label}}` is the schema field's label (matches
+  # the form's <label> text). The XPath links label→input by for/id because the
+  # input's own id is React-generated (unstable). xpath= is resolved by the runtime
+  # via document.evaluate. Live-verified on /clients/new; other forms FLAGGED.
   jobber.text_input:
     archetype: text_input
     selectors:
@@ -44,20 +37,19 @@ widgets:
         - "xpath=//input[@id = //label[normalize-space()=\"{{field_label}}\"]/@for]"
         - "xpath=//textarea[@id = //label[normalize-space()=\"{{field_label}}\"]/@for]"
 
-  # Commit button — clicking it saves + navigates to the new client page, so
-  # the button disappears (click_dismisses). The real commit proof is the
-  # flavor's created_nav signal (the redirect), same as salesforce.save_button.
-  jobber.save_client:
+  # Generic commit button — every Jobber New/Edit form has a "Save …" button
+  # ("Save client" / "Save Job" / …). Matches any button whose text starts with
+  # "Save". The REAL commit proof is the atom's created_nav/saved_nav signal, not
+  # this disappearance. FLAGGED per non-client form.
+  jobber.save_generic:
     archetype: click_dismisses
     irreversible: true
     selectors:
       trigger:
-        - "xpath=//button[normalize-space()=\"Save client\"]"
-      # The button goes away on save (the form navigates to the new client). The
-      # REAL commit proof is the atom's created_nav signal, not this disappearance.
-      verify_target: "xpath=//button[normalize-space()=\"Save client\"]"
+        - "xpath=//button[starts-with(normalize-space(),\"Save\")]"
+      verify_target: "xpath=//button[starts-with(normalize-space(),\"Save\")]"
 
-  # Discard button — used by the discard test (Cancel returns to the list).
+  # Discard button — Cancel returns to the list/record.
   jobber.cancel_button:
     archetype: click_dismisses
     selectors:
@@ -65,23 +57,22 @@ widgets:
         - "xpath=//button[normalize-space()=\"Cancel\"]"
       verify_target: "xpath=//button[normalize-space()=\"Cancel\"]"
 
-  # ── delete_client browser flow (FLAGGED — best-guess, confirm on a live delete) ──
-  # Jobber's client record page has a "More Actions" menu; Delete/Archive lives
-  # inside it → a confirm dialog. All three selectors are best-guess: the live
-  # pass must confirm the menu trigger text, whether the item is "Delete" vs
-  # "Archive", and the confirm-dialog button.
-  jobber.client_actions_menu:
+  # ── delete_object browser flow (FLAGGED — best-guess, confirm on a live delete) ──
+  # A record page's "More Actions" menu → Delete/Archive → a confirm dialog. All
+  # three selectors are best-guess and object-agnostic; the live pass confirms the
+  # menu trigger, whether the item is "Delete" vs "Archive", and the confirm button.
+  jobber.object_actions_menu:
     archetype: click_reveals
     selectors:
       trigger:
         - "xpath=//button[contains(normalize-space(),\"More Actions\") or contains(normalize-space(),\"Actions\")]"
       verify_target: "[role=menu], .menu, [data-testid='menu']"
 
-  jobber.delete_client_menu_item:
+  jobber.delete_menu_item:
     archetype: click_reveals
     selectors:
       trigger:
-        - "xpath=//*[self::button or self::a or @role=\"menuitem\"][normalize-space()=\"Delete\" or normalize-space()=\"Delete Client\"]"
+        - "xpath=//*[self::button or self::a or @role=\"menuitem\"][starts-with(normalize-space(),\"Delete\")]"
       verify_target: "[role=dialog], .modal"
 
   jobber.delete_confirm:
@@ -91,36 +82,3 @@ widgets:
       trigger:
         - "xpath=//*[self::button or @role=\"button\"][normalize-space()=\"Delete\" or normalize-space()=\"Confirm\" or normalize-space()=\"Yes, delete\"]"
       verify_target: "[role=dialog], .modal"
-
-  # ── Property / Job form Save buttons (FLAGGED — best-guess button text) ──
-  # The New Property + New Job forms are Atlantis forms like New Client; the
-  # commit button text is a best-guess ("Save" / "Save property" / "Save job").
-  # The real commit proof is the atom's created_nav signal, not the disappearance.
-  jobber.save_property:
-    archetype: click_dismisses
-    irreversible: true
-    selectors:
-      trigger:
-        - "xpath=//button[normalize-space()=\"Save property\" or normalize-space()=\"Save\"]"
-      verify_target: "xpath=//button[normalize-space()=\"Save property\" or normalize-space()=\"Save\"]"
-
-  jobber.save_job:
-    archetype: click_dismisses
-    irreversible: true
-    selectors:
-      trigger:
-        - "xpath=//button[normalize-space()=\"Save Job\" or normalize-space()=\"Save job\" or normalize-space()=\"Save\"]"
-      verify_target: "xpath=//button[normalize-space()=\"Save Job\" or normalize-space()=\"Save job\" or normalize-space()=\"Save\"]"
-
-  # Job form's property picker — a type-to-search lookup (confirms the plan's
-  # lookup_search need). Modeled on typeahead_lookup (type query → click result)
-  # pending the dedicated lookup_search archetype. FLAGGED: the input locator,
-  # the result-option selector, and the value reflection all need a live New Job
-  # form to confirm.
-  jobber.job_property_picker:
-    archetype: typeahead_lookup
-    selectors:
-      input:
-        - "xpath=//label[contains(normalize-space(),\"Property\")]/following::input[1]"
-      result: "[role=option], [data-testid='autocomplete-option']"
-      verify_target: "xpath=//label[contains(normalize-space(),\"Property\")]/following::input[1]"

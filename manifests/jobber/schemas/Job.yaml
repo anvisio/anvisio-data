@@ -20,6 +20,82 @@ description: |
   `propertyId` (the Property → Client linkage supplies the client). Global id `id`
   is an opaque EncodedId.
 primary_key: [id]
+
+# ── Object-generic dispatch (resolve_object). Job → Property (propertyId, req) +
+# invoicing (two enums, req). Web URL is /work_orders/{id} (live-confirmed).
+# jobDelete takes a LIST (jobIds). ──
+url_segment: work_orders
+graphql:
+  create:
+    query: >
+      mutation($input: JobCreateAttributes!) {
+        jobCreate(input: $input) {
+          job { id jobNumber title jobStatus jobType client { id } property { id } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.jobCreate.job
+    reject_path: data.jobCreate.userErrors
+    variables:
+      input:
+        propertyId: "{{inputs.fields.propertyId}}"
+        title: "{{inputs.fields.title}}"
+        instructions: "{{inputs.fields.instructions}}"
+        jobType: "{{inputs.fields.jobType}}"
+        invoicing:
+          invoicingType: "{{inputs.fields.invoicingType}}"
+          invoicingSchedule: "{{inputs.fields.invoicingSchedule}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        job(id: $id) {
+          id jobNumber title jobStatus jobType instructions
+          startAt endAt total createdAt jobberWebUri
+          client { id name }
+          property { id name address { street1 city province } }
+        }
+      }
+    extract_path: data.job
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($jobId: EncodedId!, $input: JobEditInput!) {
+        jobEdit(jobId: $jobId, input: $input) {
+          job { id title jobStatus }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.jobEdit.job
+    reject_path: data.jobEdit.userErrors
+    variables:
+      jobId: "{{inputs.record_id}}"
+      input: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($jobIds: [EncodedId!]!) {
+        jobDelete(jobIds: $jobIds) {
+          deletedJobs { id }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.jobDelete.deletedJobs[0]
+    reject_path: data.jobDelete.userErrors
+    variables:
+      jobIds:
+        - "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        jobs(searchTerm: $searchTerm, first: $first) {
+          nodes { id jobNumber title jobStatus jobberWebUri client { id name } property { id } }
+        }
+      }
+    extract_path: data.jobs.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
 fields:
   id:
     type: id

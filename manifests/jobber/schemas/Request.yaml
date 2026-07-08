@@ -1,0 +1,136 @@
+_meta:
+  name: manifests/jobber/schemas/Request.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Request schema — a client's inbound work request (assessment/lead).
+    Single per-object source for the object-generic atoms. Live-introspected
+    2026-07-08. requestCreate requires clientId.
+  changelog:
+    - "0.1.0 (2026-07-08): initial (object-generic era)."
+
+description: A Jobber Request — an inbound work request from a Client.
+primary_key: [id]
+
+url_segment: requests
+graphql:
+  create:
+    query: >
+      mutation($input: RequestCreateInput!) {
+        requestCreate(input: $input) {
+          request { id title requestStatus client { id } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.requestCreate.request
+    reject_path: data.requestCreate.userErrors
+    variables:
+      input: "{{inputs.fields}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        request(id: $id) {
+          id title requestStatus source contactName companyName email phone
+          createdAt jobberWebUri
+          client { id name } property { id }
+        }
+      }
+    extract_path: data.request
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($requestId: EncodedId!, $input: RequestEditInput!) {
+        requestEdit(requestId: $requestId, input: $input) {
+          request { id title requestStatus }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.requestEdit.request
+    reject_path: data.requestEdit.userErrors
+    variables:
+      requestId: "{{inputs.record_id}}"
+      input: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($requestId: EncodedId!) {
+        requestDelete(requestId: $requestId) { userErrors { message path } }
+      }
+    extract_path: data.requestDelete
+    reject_path: data.requestDelete.userErrors
+    variables:
+      requestId: "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        requests(searchTerm: $searchTerm, first: $first) {
+          nodes { id title requestStatus jobberWebUri client { id name } }
+        }
+      }
+    extract_path: data.requests.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
+fields:
+  id:
+    type: id
+    label: Request ID
+    primary: true
+    readonly: true
+  title:
+    type: text
+    label: Title
+    optional: true
+  requestStatus:
+    type: text
+    label: Status
+    readonly: true
+    description: "RequestStatusTypeEnum."
+  source:
+    type: text
+    label: Source
+    readonly: true
+    optional: true
+  contactName:
+    type: text
+    label: Contact name
+    optional: true
+  companyName:
+    type: text
+    label: Company name
+    optional: true
+  email:
+    type: text
+    label: Email
+    optional: true
+  phone:
+    type: text
+    label: Phone
+    optional: true
+  clientId:
+    type: id
+    label: Client ID
+    optional: true
+    ref: Client.id
+    description: The Client making the request (requestCreate `input.clientId`, required).
+  propertyId:
+    type: id
+    label: Property ID
+    optional: true
+    ref: Property.id
+  referringClientId:
+    type: id
+    label: Referring client ID
+    optional: true
+    ref: Client.id
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true
