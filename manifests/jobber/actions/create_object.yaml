@@ -55,9 +55,12 @@ flavors:
         extract:
           record_id:
             from_url_match: record_id
+      # abandon = the user navigated AWAY from the New form (Cancel, home, search,
+      # any link) without the record redirect firing. url_leaves is the direct
+      # signal (Jobber New forms are distinct /…/new URLs, not modals).
       abandon:
-        type: selector_disappears
-        selector: "xpath=//button[starts-with(normalize-space(),\"Save\")]"
+        type: url_leaves
+        from_pattern_contains: "/new"
     recipe:
       - id: desc
         type: resolve_object

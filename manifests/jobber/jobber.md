@@ -146,8 +146,9 @@ The generic `create_object` browser flavor's assumptions hold across the New for
 The New forms do NOT autosave. Filling a field fires ZERO API calls; navigating away restores NO draft
 and raises NO unsaved-changes warning. So the three outcomes are clean:
 - **committed** — Save → redirect to the record (`created_nav`).
-- **discarded** — Cancel OR navigate away → the form is gone, no redirect, no draft (abandon == cancel).
-  `create_object`'s `abandon: selector_disappears(Save)` `not:[created_nav]` captures both.
+- **discarded** — Cancel OR navigate away (home, search, any link) → no redirect, no draft (abandon ==
+  cancel). `create_object`'s `abandon: url_leaves(from_pattern_contains: /new)` `not:[created_nav]` captures
+  every away-navigation directly (the distinct-URL form leaving `/new`); update_object uses `/edit`.
 - **rejected-for-input** — Save with a missing/invalid required field → the Save button STAYS and a
   `[role='alert']` surfaces the validation text (e.g. "At least one of 'First Name', 'Last Name', or
   'Company Name' must be provided."). Wired: `jobber.save_generic` declares `failure_selector: [role='alert']`

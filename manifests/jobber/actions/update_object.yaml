@@ -53,9 +53,11 @@ flavors:
         extract:
           record_id:
             from_url_match: record_id
+      # abandon = navigated away from the edit form (Cancel, home, search, any link)
+      # without the saved redirect firing. Direct URL signal (distinct /…/edit URL).
       abandon:
-        type: selector_disappears
-        selector: "xpath=//button[starts-with(normalize-space(),\"Save\")]"
+        type: url_leaves
+        from_pattern_contains: "/edit"
     recipe:
       - id: desc
         type: resolve_object
