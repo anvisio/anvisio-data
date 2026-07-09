@@ -17,6 +17,11 @@ primary_key: [id]
 url_segment: invoices
 graphql:
   create:
+    # Required `fields` (live-confirmed): clientId; origin (InvoiceOrigin enum, e.g.
+    # NEW_JOBBER_ONLINE); dueDetails { dueDate?, invoiceNet? }; tax { taxCalculationMethod
+    # (EXCLUSIVE|INCLUSIVE), taxRateId? }; lineItems — a non-empty list of
+    # { name (required), quantity?, unitPrice?, description? } (NOTE: no
+    # saveToProductsAndServices here — invoice line items differ from quote line items).
     query: >
       mutation($input: InvoiceCreateInput!) {
         invoiceCreate(input: $input) {

@@ -67,7 +67,7 @@ flavors:
       - id: nav
         type: navigate
         args:
-          url: "{instance.origin}/{{steps.desc.url_segment}}/new"
+          url: "{instance.origin}/{{steps.desc.new_segment}}/new"
       - id: fill
         type: fill_fields
         args:

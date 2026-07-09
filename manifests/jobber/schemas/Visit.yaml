@@ -22,22 +22,22 @@ primary_key: [id]
 url_segment: visits
 graphql:
   create:
+    # visitCreate(jobId, input:{visits:[{title, instructions, …}]}) → payload
+    # field is `createdVisits` (a list), NOT `visits`. Live-confirmed.
     query: >
       mutation($jobId: EncodedId!, $input: VisitCreateInput!) {
         visitCreate(jobId: $jobId, input: $input) {
-          visits { id title visitStatus job { id } property { id } client { id } }
+          createdVisits { id title visitStatus job { id } property { id } client { id } }
           userErrors { message path }
         }
       }
-    extract_path: data.visitCreate.visits[0]
+    extract_path: data.visitCreate.createdVisits[0]
     reject_path: data.visitCreate.userErrors
     variables:
       jobId: "{{inputs.fields.jobId}}"
       input:
         visits:
           - title: "{{inputs.fields.title}}"
-            startAt: "{{inputs.fields.startAt}}"
-            endAt: "{{inputs.fields.endAt}}"
             instructions: "{{inputs.fields.instructions}}"
   get:
     query: >

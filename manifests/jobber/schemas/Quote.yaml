@@ -19,6 +19,9 @@ primary_key: [id]
 url_segment: quotes
 graphql:
   create:
+    # Required `fields` (live-confirmed): clientId, propertyId, and lineItems — a
+    # non-empty list of { name (required), saveToProductsAndServices (required bool),
+    # quantity?, unitPrice?, description? }. + optional title/message.
     query: >
       mutation($attributes: QuoteCreateAttributes!) {
         quoteCreate(attributes: $attributes) {

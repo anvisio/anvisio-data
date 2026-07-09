@@ -82,10 +82,17 @@ Enforced by **gate check 17** (findPerObjectCrudClusters): a per-object CRUD clu
 object SOR now FAILS the gate (it fired on this integration's own first per-object draft).
 
 **Live-proven 2026-07-08** (session_api, real account, records swept): all 7 objects' search
-descriptors execute clean; Client full CRUD-S + a Request create (Request→Client ref resolves) round-
-trip; the Client→Property→Job reference chain + 2-hop link assertion pass; clientDelete cascades
-(async). Quote/Invoice/Visit CREATE descriptors are introspection-grounded but not live-created (their
-required inputs — lineItems / origin+dueDetails+tax / nested visits — are supplied via `fields`).
+descriptors execute clean; **all 7 objects CREATE clean** (Client/Property/Job/Quote/Invoice/Request/
+Visit); Client full CRUD-S; the Client→Property→Job reference chain + 2-hop link assertion pass;
+clientDelete cascades (async) and sweeps quotes/invoices/visits too.
+
+Complex-create required `fields` (live-confirmed — the caller supplies these in the bag):
+- **Quote**: `clientId`, `propertyId`, `lineItems:[{name, saveToProductsAndServices, quantity?, unitPrice?}]`.
+- **Invoice**: `clientId`, `origin`(InvoiceOrigin enum, e.g. NEW_JOBBER_ONLINE), `dueDetails:{dueDate?, invoiceNet?}`,
+  `tax:{taxCalculationMethod: EXCLUSIVE|INCLUSIVE, taxRateId?}`, `lineItems:[{name, quantity?, unitPrice?}]`
+  (invoice line items have NO `saveToProductsAndServices` — they differ from quote line items).
+- **Visit**: `jobId` + `visits:[{title, instructions?}]`. visitCreate's payload field is `createdVisits` (a list),
+  not `visits` — the Visit descriptor extracts `data.visitCreate.createdVisits[0]`.
 
 ## Browser-flavor DOM (New Client form, live-probed 2026-07-08)
 
@@ -123,17 +130,27 @@ interpolates `{{inputs.<id>}}` (an EncodedId) into a URL slot produces the WRONG
 navigate a prior session_api read's `jobberWebUri`, or decode the EncodedId in-recipe. Until then the
 browser reads are FLAGGED; session_api (EncodedId throughout) is the proven path.
 
-## Still FLAGGED (browser-write hardening follow-on — needs live form drives)
+## Browser New forms — CONFIRMED (2026-07-08)
 
-- The FLAGGED browser WRITE forms + their views/widgets: update_client (`/clients/{id}/edit`),
-  create_property (Add Property form), create_job (New Job form + the type-to-search property
-  picker), delete_client (the record-page action menu → Delete vs Archive → confirm). The fills +
-  Save on the New CLIENT form were live-probed last session; the post-save redirect/toast + these
-  other forms need live drives.
-- The form's **reject surface** (submit a missing required field → the validation error selector;
-  author it as the browser Save widget's `failure_selector` → `invalid_input`).
-- **emails/phones** are nested `Email/PhoneNumberCreateAttributes` on the API vs simple form inputs
-  (an id-grain seam) — first slice uses first/last/company only.
+The generic `create_object` browser flavor's assumptions hold across the New forms probed:
+- **Label-first inputs** — every New form (Client `/clients/new`, Quote `/quotes/new`, Job `/jobs/new`)
+  renders `<label for=id>` inputs (Title / Name / Quantity / …), so the label-XPath `jobber.text_input`
+  addresses them.
+- **`jobber.save_generic`** (`//button[starts-with(.,"Save")]`) matches every commit button — "Save client",
+  "Save Quote", "Save Job".
+- **new_segment** — the Job New form is `/jobs/new` while the record is `/work_orders/{id}`; the schema
+  declares `new_segment: jobs` and `resolve_object` returns it, so `create_object` navigates `{new_segment}/new`.
+
+## Still FLAGGED (browser-write follow-on — needs a live SUBMIT)
+
+- **Post-commit signals** — the `created_nav` redirect + success toast are not captured (no browser SUBMIT
+  driven this pass; the session_api path is the proven one). Drive one real Save per object to author them.
+- **The type-to-search pickers** — "Select a client" / property on the Quote/Job forms (the `reference`
+  widget) need a live drive to confirm the typeahead selectors.
+- **Edit + delete flows** — the `{segment}/{id}/edit` forms + the record-page delete action menu are unprobed.
+- **id-grain seam** — browser URLs use the numeric web id; the API uses the EncodedId (see above). Reads/
+  navigations in the browser flavor need the decoded id or a prior read's `jobberWebUri`.
+- The **reject surface** (a missing required field → the validation error selector → `invalid_input`).
 
 ## Sources (MCP / catalog provenance)
 

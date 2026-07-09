@@ -24,7 +24,10 @@ primary_key: [id]
 # ── Object-generic dispatch (resolve_object). Job → Property (propertyId, req) +
 # invoicing (two enums, req). Web URL is /work_orders/{id} (live-confirmed).
 # jobDelete takes a LIST (jobIds). ──
+# Record path is /work_orders/{id} (get/update/delete); the New form is /jobs/new
+# (create) — live-confirmed, so new_segment differs from url_segment.
 url_segment: work_orders
+new_segment: jobs
 graphql:
   create:
     query: >
