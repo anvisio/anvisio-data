@@ -141,16 +141,29 @@ The generic `create_object` browser flavor's assumptions hold across the New for
 - **new_segment** — the Job New form is `/jobs/new` while the record is `/work_orders/{id}`; the schema
   declares `new_segment: jobs` and `resolve_object` returns it, so `create_object` navigates `{new_segment}/new`.
 
+### Create outcome model — explicit-save, NO autosave (live-confirmed)
+
+The New forms do NOT autosave. Filling a field fires ZERO API calls; navigating away restores NO draft
+and raises NO unsaved-changes warning. So the three outcomes are clean:
+- **committed** — Save → redirect to the record (`created_nav`).
+- **discarded** — Cancel OR navigate away → the form is gone, no redirect, no draft (abandon == cancel).
+  `create_object`'s `abandon: selector_disappears(Save)` `not:[created_nav]` captures both.
+- **rejected-for-input** — Save with a missing/invalid required field → the Save button STAYS and a
+  `[role='alert']` surfaces the validation text (e.g. "At least one of 'First Name', 'Last Name', or
+  'Company Name' must be provided."). Wired: `jobber.save_generic` declares `failure_selector: [role='alert']`
+  → a fast NAMED `invalid_input`.
+
 ## Still FLAGGED (browser-write follow-on — needs a live SUBMIT)
 
-- **Post-commit signals** — the `created_nav` redirect + success toast are not captured (no browser SUBMIT
-  driven this pass; the session_api path is the proven one). Drive one real Save per object to author them.
+- **Post-commit signals** — the `created_nav` redirect + success toast are not captured (no successful
+  browser SUBMIT driven; the session_api path is the proven one). Drive one real Save per object.
 - **The type-to-search pickers** — "Select a client" / property on the Quote/Job forms (the `reference`
   widget) need a live drive to confirm the typeahead selectors.
 - **Edit + delete flows** — the `{segment}/{id}/edit` forms + the record-page delete action menu are unprobed.
-- **id-grain seam** — browser URLs use the numeric web id; the API uses the EncodedId (see above). Reads/
-  navigations in the browser flavor need the decoded id or a prior read's `jobberWebUri`.
-- The **reject surface** (a missing required field → the validation error selector → `invalid_input`).
+  **Open question: do EDIT forms autosave?** (The create forms don't, but field-service apps often autosave
+  inline edits — if so, update_object's browser outcome model differs, per atom-methodology Rule J.)
+- **id-grain seam** — browser URLs use the numeric web id; the API uses the EncodedId. Browser reads/navs
+  need the decoded id or a prior read's `jobberWebUri`.
 
 ## Sources (MCP / catalog provenance)
 

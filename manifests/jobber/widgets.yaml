@@ -48,6 +48,15 @@ widgets:
       trigger:
         - "xpath=//button[starts-with(normalize-space(),\"Save\")]"
       verify_target: "xpath=//button[starts-with(normalize-space(),\"Save\")]"
+    overrides:
+      # Failure-race: a rejected Save (a missing/invalid required field) leaves the
+      # Save button in place and surfaces a [role='alert'] with the validation text
+      # (live-confirmed on the New Client form: "At least one of 'First Name',
+      # 'Last Name', or 'Company Name' must be provided."). Racing it against the
+      # button's disappearance turns a rejection into a fast NAMED invalid_input
+      # (the live alert text is appended) instead of a timeout.
+      failure_selector: "[role='alert']"
+      failure_message: "a required field is missing or invalid"
 
   # Discard button — Cancel returns to the list/record.
   jobber.cancel_button:
