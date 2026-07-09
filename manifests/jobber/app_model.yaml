@@ -15,6 +15,9 @@ _meta:
        NewClientForm). Records the generated-input-id / label-XPath structure +
        the browser-write signals still needing a live create."
 
+kind: system_of_record
+transports: [session_api, browser]
+
 screens:
   ClientsList:
     view: ClientsList
