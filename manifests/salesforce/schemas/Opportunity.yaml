@@ -22,6 +22,7 @@ fields:
     label: Opportunity ID
     primary: true
     readonly: true
+    required: true
   Name:
     type: text
     label: Name
@@ -37,19 +38,19 @@ fields:
   Amount:
     type: number
     label: Amount
-    optional: true
+    required: false
   Probability:
     type: number
     label: Probability (%)
-    optional: true
+    required: false
   Type:
     type: picklist
     label: Opportunity Type
-    optional: true
+    required: false
   LeadSource:
     type: picklist
     label: Lead Source
-    optional: true
+    required: false
   AccountId:
     type: id
     # Label is the ON-PAGE FORM label — SF renders the lookup as "Account Name",
@@ -57,18 +58,18 @@ fields:
     # records-record-layout-item[field-label='{{label}}'], so it must match the
     # form label (2026-07-07: fixed the lookup-fill open_lookup selector miss).
     label: Account Name
-    optional: true
+    required: false
     ref: Account.Id
   OwnerId:
     type: id
     label: Owner ID
-    optional: true
+    required: false
     ref: User.Id
   Description:
     type: textarea
     label: Description
-    optional: true
+    required: false
   NextStep:
     type: text
     label: Next Step
-    optional: true
+    required: false

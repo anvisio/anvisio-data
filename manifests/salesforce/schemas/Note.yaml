@@ -30,6 +30,7 @@ fields:
     label: Note ID
     primary: true
     readonly: true
+    required: true
   Title:
     type: text
     label: Title
@@ -37,7 +38,7 @@ fields:
   Body:
     type: textarea
     label: Body
-    optional: true
+    required: false
   ParentId:
     type: id
     label: Parent Record
@@ -46,9 +47,9 @@ fields:
   IsPrivate:
     type: bool
     label: Private
-    optional: true
+    required: false
   OwnerId:
     type: id
     label: Owner ID
-    optional: true
+    required: false
     ref: User.Id

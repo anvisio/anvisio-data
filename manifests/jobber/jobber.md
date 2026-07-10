@@ -174,3 +174,26 @@ introspection** (run from a signed-in `secure.getjobber.com` tab against
 that live introspection (2026-07-08), not web research. Vendor docs:
 `developer.getjobber.com/docs` (Cloudflare-gated to browsers). Public API endpoint +
 OAuth (unused): `api.getjobber.com/api/graphql`, `X-JOBBER-GRAPHQL-VERSION` header.
+
+## Views burn-down — live DOM findings (2026-07-09)
+
+Toward ADR 014 (every atom opens a form-ready view). Jobber ships 0 views today →
+gate check 19 ALLOW-lists all 5 atoms, `fix_by 2026-08-22`. Live-drove `/clients/new`:
+
+- **New form** (`/clients/new`, generalizes to `/{segment}/new`): a **React SPA**, NO shadow
+  DOM, Jobber's **Atlantis** design system (`data-testid="ATL-*"` on some fields).
+- **Form-ready landmark (generic):** `[class*="stickyFormFooter"]` — UNIQUE (1 match), the
+  sticky footer holding `Cancel` / `Save and Create Another` / **`Save <object>`** (e.g. "Save
+  client"). CSS-module hashes are unstable, but the `[class*=…]` partial match survives them.
+- **Fields fill by LABEL** — inputs carry generated ids (`_r_1i_`) with no stable `name`/`id`;
+  labels ("First name", "Company name") are the anchor. New forms do NOT take URL-param prefills
+  (unlike SF `defaultFieldValues`), so the browser flavor fills via `fill_fields`.
+
+**BLOCKER (design decision before authoring the views).** The SF pre-nav pattern (`depends_on_view`
+→ `enterView` navigates `view.entry.url` filling a placeholder from a direct input like
+`object_type`) does NOT fit jobber: jobber's `url_segment`/`new_segment` is DERIVED by
+`resolve_object` (a recipe step), but pre-nav runs BEFORE the recipe — at pre-nav time the atom
+has `object`, not `segment`. Options to resolve: (a) teach pre-nav to resolve a view placeholder
+from the object schema's `url_segment` (engine change); or (b) a post-navigate view-referencing
+recipe step provides the form-ready gate (satisfies check 19's step-`view:` clause without pre-nav).
+Decide before authoring NewForm/RecordView/ListView/EditForm.

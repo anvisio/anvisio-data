@@ -84,51 +84,56 @@ fields:
     label: Quote ID
     primary: true
     readonly: true
+    required: true
   quoteNumber:
     type: text
     label: Quote number
     readonly: true
+    required: true
   title:
     type: text
     label: Title
-    optional: true
+    required: false
   message:
     type: text
     label: Message
-    optional: true
+    required: false
   quoteStatus:
     type: text
     label: Status
     readonly: true
+    required: true
     description: "QuoteStatusTypeEnum (draft/awaiting_response/approved/…)."
   clientId:
     type: id
     label: Client ID
-    optional: true
+    required: false
     ref: Client.id
     description: The Client this quote is for (quoteCreate `attributes.clientId`, required).
   propertyId:
     type: id
     label: Property ID
-    optional: true
+    required: false
     ref: Property.id
     description: The Property this quote is at (quoteCreate `attributes.propertyId`, required).
   requestId:
     type: id
     label: Request ID
-    optional: true
+    required: false
     ref: Request.id
     description: The originating Request, if any.
   createdAt:
     type: datetime
     label: Created at
     readonly: true
+    required: true
   sentAt:
     type: datetime
     label: Sent at
     readonly: true
-    optional: true
+    required: true
   jobberWebUri:
     type: text
     label: Jobber web URL
     readonly: true
+    required: true

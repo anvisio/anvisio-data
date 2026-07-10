@@ -91,66 +91,70 @@ fields:
     label: Visit ID
     primary: true
     readonly: true
+    required: true
   title:
     type: text
     label: Title
-    optional: true
+    required: false
   visitStatus:
     type: text
     label: Status
     readonly: true
+    required: true
     description: "VisitStatusTypeEnum."
   startAt:
     type: datetime
     label: Start at
-    optional: true
+    required: false
   endAt:
     type: datetime
     label: End at
-    optional: true
+    required: false
   allDay:
     type: boolean
     label: All day
     readonly: true
+    required: true
   duration:
     type: number
     label: Duration
     readonly: true
-    optional: true
+    required: true
   instructions:
     type: text
     label: Instructions
-    optional: true
+    required: false
   jobId:
     type: id
     label: Job ID
-    optional: true
+    required: false
     ref: Job.id
     description: The Job this visit belongs to (visitCreate `jobId` arg, required).
   clientId:
     type: id
     label: Client ID
     readonly: true
-    optional: true
+    required: true
     ref: Client.id
   propertyId:
     type: id
     label: Property ID
     readonly: true
-    optional: true
+    required: true
     ref: Property.id
   invoiceId:
     type: id
     label: Invoice ID
     readonly: true
-    optional: true
+    required: true
     ref: Invoice.id
   completedAt:
     type: datetime
     label: Completed at
     readonly: true
-    optional: true
+    required: true
   createdAt:
     type: datetime
     label: Created at
     readonly: true
+    required: true

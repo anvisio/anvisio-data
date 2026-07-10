@@ -21,6 +21,7 @@ fields:
     label: Account ID
     primary: true
     readonly: true
+    required: true
   Name:
     type: text
     label: Account Name
@@ -28,53 +29,53 @@ fields:
   Type:
     type: picklist
     label: Account Type
-    optional: true
+    required: false
   Industry:
     type: picklist
     label: Industry
-    optional: true
+    required: false
   Phone:
     type: text
     label: Account Phone
-    optional: true
+    required: false
   Website:
     type: text
     label: Website
-    optional: true
+    required: false
   BillingStreet:
     type: textarea
     label: Billing Street
-    optional: true
+    required: false
   BillingCity:
     type: text
     label: Billing City
-    optional: true
+    required: false
   BillingState:
     type: text
     label: Billing State/Province
-    optional: true
+    required: false
   BillingPostalCode:
     type: text
     label: Billing Zip/Postal Code
-    optional: true
+    required: false
   BillingCountry:
     type: text
     label: Billing Country
-    optional: true
+    required: false
   AnnualRevenue:
     type: number
     label: Annual Revenue
-    optional: true
+    required: false
   NumberOfEmployees:
     type: number
     label: Employees
-    optional: true
+    required: false
   Description:
     type: textarea
     label: Account Description
-    optional: true
+    required: false
   OwnerId:
     type: id
     label: Owner ID
-    optional: true
+    required: false
     ref: User.Id

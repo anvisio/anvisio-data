@@ -105,16 +105,17 @@ fields:
     label: Property ID
     primary: true
     readonly: true
+    required: true
   name:
     type: text
     label: Name
-    optional: true
+    required: false
     description: Optional label for the property (nullable; often blank).
   clientId:
     type: id
     label: Client ID
     readonly: true
-    optional: true
+    required: true
     ref: Client.id
     description: >
       The owning Client (the up-reference). Not a form-fillable field — a Property
@@ -124,43 +125,45 @@ fields:
   street1:
     type: text
     label: Street address
-    optional: true
+    required: false
   street2:
     type: text
     label: Street address line 2
-    optional: true
+    required: false
   city:
     type: text
     label: City
-    optional: true
+    required: false
   province:
     type: text
     label: Province/State
-    optional: true
+    required: false
   postalCode:
     type: text
     label: Postal/ZIP code
-    optional: true
+    required: false
   country:
     type: text
     label: Country
-    optional: true
+    required: false
   routingOrder:
     type: number
     label: Routing order
     readonly: true
-    optional: true
+    required: true
   isBillingAddress:
     type: boolean
     label: Is billing address
     readonly: true
-    optional: true
+    required: true
   createdAt:
     type: datetime
     label: Created at
     readonly: true
+    required: true
   jobberWebUri:
     type: text
     label: Jobber web URL
     readonly: true
+    required: true
     description: Absolute URL of the property's page (nested under its client).

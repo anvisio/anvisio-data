@@ -4,12 +4,13 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/manifest-v60/entity-schema.schema.json",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "cdn_schema_version": "70.0.0",
       "authored_by": "cd2k + claude",
       "authored_at": "2026-06-08",
-      "description": "Per-role schema for manifests/<saas>/schemas/<Entity>.yaml body (post-_meta-strip). v70: the field map is `properties` OR the legacy `fields` (both conventions coexist in the data; at least one is required). Each entry must carry `type`. label/field_type/read_only/required/primary/picklist/sample optional. Per-field shape is validated permissively here and rigorously by the runtime validator. FOLLOW-UP: normalize the data to a single key.",
+      "description": "Per-role schema for manifests/<saas>/schemas/<Entity>.yaml body (post-_meta-strip). v70: the field map is `properties` OR the legacy `fields` (both conventions coexist in the data; at least one is required). Each entry must carry `type`. Necessity is a single boolean `required` (true = user must supply, false/absent = need not); `readonly` marks non-input system fields; `auto_generated` (implies required:false) marks app-auto-filled createables. The legacy `optional` flag is FORBIDDEN (the runtime never read it).",
       "changelog": [
+        "2.1.0 (2026-07-09): necessity axis collapsed to `required: boolean` + `auto_generated`; `optional` forbidden (not:{required:[optional]}); `read_only`→`readonly` (camelCase, matches data + runtime).",
         "2.0.0 (2026-06-08): v70 shape — accept `properties` map (new) OR `fields` map (legacy); per-field `read_only`/`field_type`/`label`/`sample` allowed (additionalProperties:true).",
         "1.0.0 (2026-05-11): initial v60 hand-rolled."
       ],
@@ -39,20 +40,24 @@
   "$defs": {
     "FieldMap": {
       "type": "object",
-      "description": "Map of field name (e.g. Subject, To) → field definition. Each entry must have type; label/field_type/read_only/required/primary/picklist/sample are optional.",
+      "description": "Map of field name (e.g. Subject, To) → field definition. Each entry must have type; label/field_type/readonly/required/auto_generated/primary/ref/widget are optional. `optional` is FORBIDDEN — necessity is the single `required` boolean.",
       "minProperties": 1,
       "additionalProperties": {
         "type": "object",
         "required": ["type"],
         "additionalProperties": true,
+        "not": { "required": ["optional"] },
         "properties": {
           "type": { "type": "string", "description": "Field type (text, email, list<email>, id, string, …)." },
           "field_type": { "type": "string", "description": "UI field kind (text, picklist, datetime, …)." },
           "label": { "type": "string" },
           "widget": { "type": "string", "description": "Widget id used to read/write this field." },
           "primary": { "type": "boolean" },
-          "read_only": { "type": "boolean" },
-          "required": { "type": "boolean" }
+          "readonly": { "type": "boolean", "description": "Non-input system field (Id, formula, auto-number); dropped from the fillable set." },
+          "required": { "type": "boolean", "description": "Necessity/presence (OpenAPI `required`) — on every field. Writable: must-supply-on-create. readonly: always-present-in-reads (readOnly+required, e.g. the PK id). true|false. (No `optional`.)" },
+          "auto_generated": { "type": "boolean", "description": "Createable but the app auto-fills it (OwnerId, CreatedDate); user MAY override. Implies required:false." },
+          "ref": { "type": "string", "description": "`<RefObject>.Id` lookup target for reference fields." },
+          "description": { "type": "string" }
         }
       }
     }

@@ -23,6 +23,7 @@ fields:
     label: Event ID
     primary: true
     readonly: true
+    required: true
   Subject:
     type: text
     label: Subject
@@ -30,55 +31,55 @@ fields:
   StartDateTime:
     type: datetime
     label: Start
-    optional: true
+    required: false
   EndDateTime:
     type: datetime
     label: End
-    optional: true
+    required: false
   DurationInMinutes:
     type: number
     label: Duration (Minutes)
-    optional: true
+    required: false
   IsAllDayEvent:
     type: bool
     label: All-Day Event
-    optional: true
+    required: false
   Location:
     type: text
     label: Location
-    optional: true
+    required: false
   WhoId:
     type: id
     label: Name (Contact / Lead)
-    optional: true
+    required: false
     description: Polymorphic reference (Contact or Lead).
   WhatId:
     type: id
     label: Related To
-    optional: true
+    required: false
     description: Polymorphic reference (Account, Opportunity, Case, ~70 object types).
   EventSubtype:
     type: picklist
     label: Subtype
-    optional: true
+    required: false
   ShowAs:
     type: picklist
     label: Show Time As
-    optional: true
+    required: false
   Description:
     type: textarea
     label: Description
-    optional: true
+    required: false
   ReminderDateTime:
     type: datetime
     label: Reminder
-    optional: true
+    required: false
   IsReminderSet:
     type: bool
     label: Reminder Set
-    optional: true
+    required: false
   OwnerId:
     type: id
     label: Assigned To
-    optional: true
+    required: false
     ref: User.Id, Calendar.Id

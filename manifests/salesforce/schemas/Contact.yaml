@@ -23,6 +23,7 @@ fields:
     label: Contact ID
     primary: true
     readonly: true
+    required: true
   LastName:
     type: text
     label: Last Name
@@ -30,11 +31,11 @@ fields:
   FirstName:
     type: text
     label: First Name
-    optional: true
+    required: false
   Salutation:
     type: picklist
     label: Salutation
-    optional: true
+    required: false
   AccountId:
     type: id
     # Label is the ON-PAGE FORM label — SF renders the lookup as "Account Name",
@@ -42,63 +43,63 @@ fields:
     # records-record-layout-item[field-label='{{label}}'], so it must match the
     # form label (2026-07-07: fixed the lookup-fill open_lookup selector miss).
     label: Account Name
-    optional: true
+    required: false
     ref: Account.Id
   Email:
     type: text
     label: Email
-    optional: true
+    required: false
   Phone:
     type: text
     label: Business Phone
-    optional: true
+    required: false
   MobilePhone:
     type: text
     label: Mobile Phone
-    optional: true
+    required: false
   Title:
     type: text
     label: Title
-    optional: true
+    required: false
   Department:
     type: text
     label: Department
-    optional: true
+    required: false
   LeadSource:
     type: picklist
     label: Lead Source
-    optional: true
+    required: false
   ReportsToId:
     type: id
     label: Reports To
-    optional: true
+    required: false
     ref: Contact.Id
   MailingStreet:
     type: textarea
     label: Mailing Street
-    optional: true
+    required: false
   MailingCity:
     type: text
     label: Mailing City
-    optional: true
+    required: false
   MailingState:
     type: text
     label: Mailing State/Province
-    optional: true
+    required: false
   MailingPostalCode:
     type: text
     label: Mailing Zip/Postal Code
-    optional: true
+    required: false
   MailingCountry:
     type: text
     label: Mailing Country
-    optional: true
+    required: false
   Description:
     type: textarea
     label: Description
-    optional: true
+    required: false
   OwnerId:
     type: id
     label: Owner ID
-    optional: true
+    required: false
     ref: User.Id

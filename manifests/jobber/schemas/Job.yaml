@@ -105,32 +105,37 @@ fields:
     label: Job ID
     primary: true
     readonly: true
+    required: true
   jobNumber:
     type: number
     label: Job number
     readonly: true
+    required: true
   title:
     type: text
     label: Title
-    optional: true
+    required: false
   instructions:
     type: text
     label: Instructions
-    optional: true
+    required: false
   jobStatus:
     type: text
     label: Status
     readonly: true
+    required: true
     description: "JobStatusTypeEnum (active, upcoming, on_hold, unscheduled, archived, …)."
   jobType:
     type: text
     label: Job type
     readonly: true
+    required: true
     description: "JobTypeTypeEnum (ONE_OFF | RECURRING). Set on create via the create_job job_type input."
   propertyId:
     type: id
     label: Property ID
     readonly: true
+    required: true
     ref: Property.id
     description: >
       The Property this job is at (the required create reference). Not a plain-fill
@@ -140,6 +145,7 @@ fields:
     type: id
     label: Client ID
     readonly: true
+    required: true
     ref: Client.id
     description: >
       The Client this job is for (the up-reference, derived from the Property).
@@ -149,22 +155,25 @@ fields:
     type: datetime
     label: Start at
     readonly: true
-    optional: true
+    required: true
   endAt:
     type: datetime
     label: End at
     readonly: true
-    optional: true
+    required: true
   total:
     type: number
     label: Total
     readonly: true
+    required: true
   createdAt:
     type: datetime
     label: Created at
     readonly: true
+    required: true
   jobberWebUri:
     type: text
     label: Jobber web URL
     readonly: true
+    required: true
     description: Absolute URL of the job's page in the web app.

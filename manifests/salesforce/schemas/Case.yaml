@@ -24,69 +24,71 @@ fields:
     label: Case ID
     primary: true
     readonly: true
+    required: true
   CaseNumber:
     type: text
     label: Case Number
     readonly: true
+    required: true
     description: Auto-assigned by SF on insert.
   Subject:
     type: text
     label: Subject
-    optional: true
+    required: false
   Status:
     type: picklist
     label: Status
-    optional: true
+    required: false
   Priority:
     type: picklist
     label: Priority
-    optional: true
+    required: false
   Origin:
     type: picklist
     label: Case Origin
-    optional: true
+    required: false
   Reason:
     type: picklist
     label: Case Reason
-    optional: true
+    required: false
   Type:
     type: picklist
     label: Type
-    optional: true
+    required: false
   AccountId:
     type: id
     label: Account ID
-    optional: true
+    required: false
     ref: Account.Id
   ContactId:
     type: id
     label: Contact ID
-    optional: true
+    required: false
     ref: Contact.Id
   ParentId:
     type: id
     label: Parent Case
-    optional: true
+    required: false
     ref: Case.Id
   AssetId:
     type: id
     label: Asset
-    optional: true
+    required: false
     ref: Asset.Id
   IsEscalated:
     type: bool
     label: Escalated
-    optional: true
+    required: false
   Description:
     type: textarea
     label: Description
-    optional: true
+    required: false
   Comments:
     type: textarea
     label: Internal Comments
-    optional: true
+    required: false
   OwnerId:
     type: id
     label: Case Owner
-    optional: true
+    required: false
     ref: User.Id, Group.Id

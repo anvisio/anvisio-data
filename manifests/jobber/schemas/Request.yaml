@@ -80,57 +80,61 @@ fields:
     label: Request ID
     primary: true
     readonly: true
+    required: true
   title:
     type: text
     label: Title
-    optional: true
+    required: false
   requestStatus:
     type: text
     label: Status
     readonly: true
+    required: true
     description: "RequestStatusTypeEnum."
   source:
     type: text
     label: Source
     readonly: true
-    optional: true
+    required: true
   contactName:
     type: text
     label: Contact name
-    optional: true
+    required: false
   companyName:
     type: text
     label: Company name
-    optional: true
+    required: false
   email:
     type: text
     label: Email
-    optional: true
+    required: false
   phone:
     type: text
     label: Phone
-    optional: true
+    required: false
   clientId:
     type: id
     label: Client ID
-    optional: true
+    required: false
     ref: Client.id
     description: The Client making the request (requestCreate `input.clientId`, required).
   propertyId:
     type: id
     label: Property ID
-    optional: true
+    required: false
     ref: Property.id
   referringClientId:
     type: id
     label: Referring client ID
-    optional: true
+    required: false
     ref: Client.id
   createdAt:
     type: datetime
     label: Created at
     readonly: true
+    required: true
   jobberWebUri:
     type: text
     label: Jobber web URL
     readonly: true
+    required: true

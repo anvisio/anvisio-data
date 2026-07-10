@@ -91,10 +91,12 @@ fields:
     label: Client ID
     primary: true
     readonly: true
+    required: true
   name:
     type: text
     label: Name
     readonly: true
+    required: true
     description: Display name Jobber computes from first/last or company.
   firstName:
     type: text
@@ -107,43 +109,48 @@ fields:
   companyName:
     type: text
     label: Company name
-    optional: true
+    required: false
   isCompany:
     type: boolean
     label: Is company
     readonly: true
+    required: true
     description: True when the client is a business. Set via the create fields, not a form fill.
   title:
     type: text
     label: Title
-    optional: true
+    required: false
   email:
     type: text
     label: Email
-    optional: true
+    required: false
     description: Primary email (read convenience; writes go through emails[]).
   phone:
     type: text
     label: Phone number
-    optional: true
+    required: false
     description: Primary phone (read convenience; writes go through phones[]).
   balance:
     type: number
     label: Balance
     readonly: true
+    required: true
   isArchived:
     type: boolean
     label: Archived
     readonly: true
+    required: true
   leadSource:
     type: text
     label: Lead source
-    optional: true
+    required: false
   createdAt:
     type: datetime
     label: Created at
     readonly: true
+    required: true
   jobberWebUri:
     type: text
     label: Jobber web URL
     readonly: true
+    required: true

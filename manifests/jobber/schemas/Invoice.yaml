@@ -84,34 +84,39 @@ fields:
     label: Invoice ID
     primary: true
     readonly: true
+    required: true
   invoiceNumber:
     type: text
     label: Invoice number
     readonly: true
+    required: true
   invoiceStatus:
     type: text
     label: Status
     readonly: true
+    required: true
     description: "InvoiceStatusTypeEnum (draft/awaiting_payment/paid/…)."
   clientId:
     type: id
     label: Client ID
-    optional: true
+    required: false
     ref: Client.id
     description: The Client this invoice bills (invoiceCreate `input.clientId`, required).
   dueDate:
     type: datetime
     label: Due date
-    optional: true
+    required: false
   issuedDate:
     type: datetime
     label: Issued date
-    optional: true
+    required: false
   createdAt:
     type: datetime
     label: Created at
     readonly: true
+    required: true
   jobberWebUri:
     type: text
     label: Jobber web URL
     readonly: true
+    required: true

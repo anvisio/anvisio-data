@@ -24,6 +24,7 @@ fields:
     label: Lead ID
     primary: true
     readonly: true
+    required: true
   LastName:
     type: text
     label: Last Name
@@ -35,56 +36,56 @@ fields:
   Salutation:
     type: picklist
     label: Salutation
-    optional: true
+    required: false
   FirstName:
     type: text
     label: First Name
-    optional: true
+    required: false
   Email:
     type: text
     label: Email
-    optional: true
+    required: false
   Phone:
     type: text
     label: Phone
-    optional: true
+    required: false
   MobilePhone:
     type: text
     label: Mobile Phone
-    optional: true
+    required: false
   Title:
     type: text
     label: Title
-    optional: true
+    required: false
   Industry:
     type: picklist
     label: Industry
-    optional: true
+    required: false
   LeadSource:
     type: picklist
     label: Lead Source
-    optional: true
+    required: false
   Status:
     type: picklist
     label: Status
-    optional: true
+    required: false
   Rating:
     type: picklist
     label: Rating
-    optional: true
+    required: false
   Website:
     type: text
     label: Website
-    optional: true
+    required: false
   AnnualRevenue:
     type: number
     label: Annual Revenue
-    optional: true
+    required: false
   NumberOfEmployees:
     type: number
     label: Employees
-    optional: true
+    required: false
   Description:
     type: textarea
     label: Description
-    optional: true
+    required: false
