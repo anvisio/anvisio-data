@@ -1,0 +1,61 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: mark-read-unread-tester
+  version: '1.0.0'
+  title: Gmail mark_read_unread browser-flavor tester
+  summary: |
+    Live-verifies the mark_read_unread browser flavor end-to-end through
+    the runtime. Self-discovers a recent inbox thread via search_emails,
+    then marks it UNREAD (the meaningful transition for a thread you've
+    already seen).
+
+    The assertion IS the atom's honest L4 outcome (mark_read_unread
+    0.5.0): unlike starring, mark-read/unread DOES emit a snackbar
+    (live-probed both modes 2026-05-28) —
+      mode=unread -> "Conversation marked as unread."
+      mode=read   -> "Conversation marked as read."
+    The atom matches `must_contain_text: 'Conversation marked as
+    {{inputs.mode}}.'`, so a non-error result IS proof the toggle
+    committed (the snackbar only fires on Gmail's backend confirmation).
+    No redundant read-back (Rule G).
+
+    NOTE: marking a thread that is ALREADY unread as unread is a Gmail
+    no-op and fires no snackbar -> the outcome would time out. This
+    tester marks `unread` and assumes the discovered thread is currently
+    read (true for any thread you've opened). If you hit an outcome
+    timeout, the picked thread was already unread; re-run (search will
+    pick a different recent thread) or flip the mode below to `read`.
+
+    Side effect: leaves the picked thread UNREAD. Mark it read manually
+    after the run if desired — same run-once contract as the other
+    write-atom testers.
+
+    Force flavor: browser on the search step — BYOK accounts default to
+    oauth_api which returns thread.id ids that fail Gmail's cold-load
+    `#all/<id>` URL routing (same gotcha as apply_label_tester 1.1.0).
+
+    Drive via: /run-blueprint gmail mark_read_unread_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to mark unread
+      call: gmail.atom.search_emails
+      flavor: browser  # see summary re: cold-load id rejection
+      with:
+        query: 'newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - mark_throwaway:
+      label: Mark the picked thread unread (proof = "Conversation marked as unread." snackbar in atom outcome)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'mark unread'
+      do:
+        - mark_call:
+            call: gmail.atom.mark_read_unread
+            flavor: browser
+            with:
+              thread_id: '${ $tid }'
+              mode: unread

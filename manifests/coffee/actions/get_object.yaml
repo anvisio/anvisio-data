@@ -1,0 +1,31 @@
+_meta:
+  name: manifests/coffee/actions/get_object.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    get_object - object-generic read. Browser navigates to the record drawer. Live-observed on People (composite id c|ddb|<ws>|<hash>).
+
+description: Read one record of any coffee object type by id.
+object: "{{inputs.object}}"
+object_types: [Person, Company, Deal, Task, Note]
+commits_changes: false
+depends_on_view: RecordView
+inputs:
+  object: { type: text, required: true, sample: Person }
+  record_id: { type: text, required: true, sample: "c|ddb|7360|6a4fffdb439a881af054349e" }
+result:
+  outcome: text
+  record: { schema_union: [Person, Company, Deal, Task, Note] }
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the record detail drawer by id
+    signals:
+      drawer_open: { type: selector_appears, selector: "[role=dialog]" }
+    recipe:
+      - { id: desc, type: resolve_object, args: { object: "{{inputs.object}}", verb: get } }
+      - { id: goto, type: navigate, args: { url: "{instance.origin}/{{steps.desc.url_segment}}/{{inputs.record_id}}" } }
+    outcomes:
+      - { action: read, when: [drawer_open] }

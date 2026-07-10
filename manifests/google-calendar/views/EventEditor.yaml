@@ -1,0 +1,80 @@
+_meta:
+  name: manifests/google-calendar/views/EventEditor.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Event editor pane — the full create / edit event form. Reached from
+    CalendarGrid by clicking Create, the Event menu item, then "More
+    options" (Create → Event opens a condensed quick-create popup; the full
+    editor is behind "More options"); reached for an existing event from
+    EventDetail's edit pencil (update_event drives that hop inside its own
+    recipe). Hosts title / start / end / description / location / guests /
+    recurrence fields + Save. Exit dismisses via Escape.
+  changelog:
+    - "0.2.0 (2026-05-28): entry clicks 'More options' (more_options widget) after Create → Event to reach the FULL editor instead of the quick-create popup; landmarks switched to the full editor's title (aria='Title', was 'Add title') + the real <button> Save. Added event_recurrence + more_options to the widgets list."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70)."
+
+name: EventEditor
+description: >
+  The full create / edit event form. For a new event the entry recipe
+  clicks Create, the Event menu item, then "More options" to leave the
+  quick-create popup for the full editor; for an existing event
+  update_event reaches it via EventDetail's edit pencil within its own
+  recipe. Hosts the title, start, end, description, location, guests, and
+  recurrence fields plus the Save button.
+entry:
+  depends_on_view: CalendarGrid
+  recipe:
+    - id: open_create_menu
+      type: use_widget
+      args:
+        widget: google-calendar.create_button
+        op: invoke
+    - id: pick_event_type
+      type: use_widget
+      args:
+        widget: google-calendar.create_event_menuitem
+        op: invoke
+    # Create → Event opens the condensed quick-create popup, NOT the full
+    # editor. "More options" opens the full editor where the corrected field
+    # widgets (title aria='Title') + event_recurrence live. update_event
+    # reaches the full editor via the edit pencil and skips this step.
+    - id: open_more_options
+      type: use_widget
+      args:
+        widget: google-calendar.more_options
+        op: invoke
+    - id: wait_editor
+      type: wait_for_element
+      args:
+        selector: input[aria-label='Title']
+        timeout_ms: 8000
+exit:
+  - id: dismiss_editor
+    type: press_key
+    args:
+      key: Escape
+  - id: wait_editor_gone
+    type: wait_for_element
+    args:
+      selector: input[aria-label='Title']
+      state: absent
+      timeout_ms: 5000
+url_patterns:
+  - https://calendar\.google\.com/calendar/u/\d+/r/eventedit
+identifying_selectors:
+  - input[aria-label='Title']
+  - button[aria-label='Save']
+widgets:
+  - google-calendar.event_title
+  - google-calendar.event_start
+  - google-calendar.event_end
+  - google-calendar.event_description
+  - google-calendar.event_location
+  - google-calendar.event_guests
+  - google-calendar.event_recurrence
+  - google-calendar.event_save
+  - google-calendar.event_close
+  - google-calendar.more_options

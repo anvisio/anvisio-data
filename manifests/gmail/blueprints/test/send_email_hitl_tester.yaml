@@ -1,0 +1,30 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: send-email-hitl-tester
+  version: '1.0.0'
+  title: Gmail send_email HITL tester (preview — exercises sent / discarded / drafted)
+  summary: |
+    Spec-70 autosave / three-terminal e2e. Fills compose in PREVIEW
+    (commit:false / HITL) and HANDS OFF to you — it does NOT auto-send.
+    The runtime captures the autosave handle (?compose= token), then waits
+    for YOUR terminal action. Perform ONE to test each outcome:
+
+      - click Send            -> runtime resolves `sent`
+      - trash / Ctrl+Shift+D  -> resolves `discarded` ("Draft discarded." toast)
+      - X / Save & close      -> resolves `drafted` (autosaved draft persists;
+                                  draft_id = the ?compose= handle)
+
+    Set To: to YOUR OWN address before running — it's a self-send, so nothing
+    leaves your account even if you click Send.
+do:
+  - fill_compose:
+      label: Filling compose (PREVIEW) — now do Send / Discard / Close-X to test the terminal
+      call: gmail.atom.send_email
+      commit: false
+      with:
+        To: ['you@example.com']
+        Subject: 'ANVISIO autosave e2e (preview - close / discard / send to test)'
+        Body: |
+          Spec-70 autosave + three-terminal e2e. The fill ran in HITL preview.
+          Now: Send -> sent, trash -> discarded, X (Save & close) -> drafted.

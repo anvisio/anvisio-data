@@ -1,0 +1,70 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: crud-chain-smoke
+  version: '1.0.0'
+  title: Google Calendar CRUD chain (create -> find -> get -> update -> delete)
+  summary: |
+    End-to-end WRITE lifecycle — self-fixturing + self-cleaning. Creates a
+    uniquely-titled event (commit:true auto-Save), re-discovers it via
+    search_events (the browser create flavor returns event_id:null — the DOM
+    doesn't surface the new id — so the chain finds it by title instead), then
+    for each match: reads it back (get_event), reschedules it (update_event
+    commit:true), and deletes it (delete_event commit:true). Looping the search
+    result also cleans up any leftover "ANVISIO-E2E-CRUD" events from a prior
+    interrupted run.
+
+    This is the atom-level CRUD proof: create's L4 ("Event saved"), the gapi
+    read-back, update's L4, delete's L4 ("Event deleted") — all in one flow.
+
+    ⚠️ COMMIT MODE — CREATES + DELETES real events on your primary calendar
+    (test data only, all titled "ANVISIO-E2E-CRUD"). DETACH chrome-devtools MCP
+    first: it holds the CDP socket the runtime's trusted clicks (Save / trash)
+    need. NOTE: relies on gapi search indexing the just-created event; if a run
+    is interrupted before delete, the next run's `find` loop cleans the leftover.
+
+    Drive via: /run-blueprint google-calendar crud_chain_smoke
+do:
+  - create:
+      label: Create a uniquely-titled event (auto-Save)
+      call: google-calendar.atom.create_event
+      commit: true
+      with:
+        Title: 'ANVISIO-E2E-CRUD'
+        StartTime: '2026-06-20T15:00:00-07:00'
+        EndTime: '2026-06-20T15:30:00-07:00'
+        Description: 'Anvisio CRUD-chain smoke. Safe to delete.'
+
+  - find:
+      label: Re-discover the event by title (gapi events.list + q)
+      call: google-calendar.atom.search_events
+      with:
+        query: 'ANVISIO-E2E-CRUD'
+
+  - lifecycle:
+      for:
+        each: ev
+        in: '${ .find.events }'
+        item_label: '${ $ev.summary }'
+      do:
+        - get:
+            label: Read it back by id (verify create landed)
+            call: google-calendar.atom.get_event
+            with:
+              event_id: '${ $ev.id }'
+        - edit:
+            label: Reschedule it +1h (auto-Save)
+            call: google-calendar.atom.update_event
+            commit: true
+            with:
+              event_id: '${ $ev.id }'
+              occurrence_date: '${ $ev.start.dateTime }'
+              StartTime: '2026-06-20T16:00:00-07:00'
+              EndTime: '2026-06-20T16:30:00-07:00'
+        - remove:
+            label: Delete it (auto-trash, cleanup)
+            call: google-calendar.atom.delete_event
+            commit: true
+            with:
+              event_id: '${ $ev.id }'
+              occurrence_date: '${ $ev.start.dateTime }'

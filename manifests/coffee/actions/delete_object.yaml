@@ -1,0 +1,33 @@
+_meta:
+  name: manifests/coffee/actions/delete_object.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    delete_object - object-generic delete. FLAGGED: delete affordance not located in budget; standard overflow-menu + confirm pattern to harden live.
+
+description: Delete any coffee object record.
+object: "{{inputs.object}}"
+object_types: [Person, Company, Deal, Task, Note]
+commits_changes: true
+depends_on_view: RecordView
+inputs:
+  object: { type: text, required: true, sample: Person }
+  record_id: { type: text, required: true, sample: "c|ddb|7360|6a502dd8838198a804073dc5" }
+result:
+  outcome: text
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Delete the record via its overflow menu + confirm
+    signals:
+      deleted: { type: selector_appears, selector: "li.group", must_contain_text: "deleted" }
+    recipe:
+      - { id: desc, type: resolve_object, args: { object: "{{inputs.object}}", verb: delete } }
+      - { id: goto, type: navigate, args: { url: "{instance.origin}/{{steps.desc.url_segment}}/{{inputs.record_id}}" } }
+      - { id: menu, type: use_widget, args: { widget: coffee.object_actions_menu, op: invoke } }
+      - { id: hit, type: use_widget, args: { widget: coffee.delete_menu_item, op: invoke } }
+      - { id: confirm, type: use_widget, commit: true, args: { widget: coffee.delete_confirm, op: invoke } }
+    outcomes:
+      - { action: deleted, when: [deleted] }

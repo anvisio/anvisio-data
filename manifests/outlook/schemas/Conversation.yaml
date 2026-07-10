@@ -1,0 +1,38 @@
+_meta:
+  name: manifests/outlook/schemas/Conversation.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Outlook Conversation schema — the READ object for read_email. OWA's
+    message-list unit is the conversation, identified by `data-convid` on
+    each row (the stable primary key; survives search vs inbox). Read
+    fields point to outlook.conv_* read widgets (read_text / read_attribute)
+    scoped to the ConversationContainer app-section. Mirrors gmail's Thread
+    schema (the read counterpart of its compose Message schema).
+  changelog:
+    - "1.0.0 (2026-06-01): net-new. Id == data-convid; Subject/From/Body read widgets live-grounded against the OWA reading pane 2026-06-01 (ConversationContainer landmark, [role='heading'][aria-level='3'] subject, span[title*='@'] sender)."
+
+object: Conversation
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    primary: true
+    readonly: true
+  Subject:
+    type: text
+    readonly: true
+    widget: outlook.conv_subject
+  From:
+    type: email
+    readonly: true
+    widget: outlook.conv_from
+  Body:
+    type: rich_text
+    readonly: true
+    widget: outlook.conv_body
+natural_keys:
+  - Subject
+  - Id

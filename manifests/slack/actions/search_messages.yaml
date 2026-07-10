@@ -1,0 +1,107 @@
+_meta:
+  name: manifests/slack/actions/search_messages.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    search_messages atom: workspace-wide search. mcp prefers Slack's
+    Real-Time Search API (introduced 2026-02-17 alongside the MCP
+    server); session_api + oauth_api fall back to search.messages.
+
+    search.messages results carry the `channel` field on each item
+    (unlike conversations.history), so the flat list extract gives a
+    Message-shaped object with both PK fields (channel + ts)
+    populated.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.matches: list<Message> per v70 signature parity rule. All three flavors' flat .messages.matches extracts populate the list whole."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Search Slack messages across the workspace.
+object: messages
+object_types: [Message]
+commits_changes: false
+depends_on_view: any
+mcp_tool: slack.search_messages
+inputs:
+  workspace: { type: text, required: true, sample: anvisio }
+  query:     { type: text, required: true, description: "Slack search syntax (e.g. 'in:#general from:@me after:2026-05-01')" }
+  sort:      { type: text, required: false, default: score, description: "score | timestamp" }
+  count:     { type: integer, required: false, default: 20, maximum: 100 }
+  page:      { type: integer, required: false, default: 1 }
+result:
+  matches:
+    schema: Message
+    cardinality: list
+  total: integer
+
+flavors:
+  mcp:
+    requires_auth: mcp_server
+    label: Official Slack MCP search_messages (Real-Time Search API)
+    server: slack
+    tool: search_messages
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          matches:
+            from_api_response: true
+            path: messages.matches
+          total:
+            from_api_response: true
+            path: messages.total
+
+  session_api:
+    requires_auth: session_cookie
+    label: Workspace /api/search.messages
+    recipe:
+      - id: api_call
+        type: call_platform_api
+        args:
+          api_def:
+            kind: slack_session_api
+            endpoint: "https://{{inputs.workspace}}.slack.com/api/search.messages?query={{inputs.query}}&sort={{inputs.sort}}&count={{inputs.count}}&page={{inputs.page}}"
+            method: GET
+            extract_path: ""
+    outcomes:
+      - action: queried
+        signal:
+          type: url_matches
+          pattern: "slack\\.com"
+          timeout_ms: 10000
+        extract:
+          matches:
+            from_step: api_call
+            path: messages.matches
+          total:
+            from_step: api_call
+            path: messages.total
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public Web API /search.messages
+    request:
+      method: GET
+      url: "https://slack.com/api/search.messages"
+      query:
+        query: "{{inputs.query}}"
+        sort:  "{{inputs.sort}}"
+        count: "{{inputs.count}}"
+        page:  "{{inputs.page}}"
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "slack.com/api/search.messages"
+          status: 200
+        extract:
+          matches:
+            from_api_response: true
+            path: messages.matches
+          total:
+            from_api_response: true
+            path: messages.total

@@ -1,9 +1,9 @@
 _meta:
   name: widget-libraries/gmail.widgets.yaml
-  version: 3.0.0
+  version: 3.17.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
-  authored_at: 2026-05-16
+  authored_at: 2026-05-27
   description: |
     Gmail widget library, archetype-driven shape (v60.4).
 
@@ -28,19 +28,35 @@ _meta:
     Source selectors are the v0.2.0 live-tested set (gmail Phase 5
     widget validation, 2026-05-10).
 
-    4 widgets remain in LEGACY shape pending additional archetypes:
-      - gmail.search_input: typeahead_search_click variant (click
-        submit button vs. press Enter; 1 user; not worth a new
-        archetype yet)
+    3 widgets remain in LEGACY shape pending additional archetypes:
       - gmail.label_menu_search: typeahead_menu variant (no focus,
         verify by menu disappearance; 2 users)
       - gmail.move_menu_search: same as above
       - gmail.thread_reply_all_button: 2-step composite (open menu +
         click menuitem); doesn't fit a single archetype
 
-  archetypes_used: [text_input, contenteditable_input, typeahead_chip, click_reveals, click_dismisses, click_navigates, click_toggles, read_text, read_attribute]
+  archetypes_used: [text_input, contenteditable_input, typeahead_search, typeahead_chip, click_reveals, click_dismisses, click_navigates, click_toggles, read_text, read_attribute]
 
   changelog:
+    - "3.17.0 (2026-06-17): gmail.compose_send_button gains a FAILURE-RACE — `failure_selector: [role='alertdialog']` + `failure_message` (archetype click_dismisses 1.9.0). Live-probed 2026-06-17: Gmail's Send is NOT disabled on an empty/invalid To (ariaDisabled=null before AND after the click) — it's clickable and pops a `[role='alertdialog']` 'Please specify at least one recipient.' while the compose region STAYS, so the selector_disappears verify (verify_target = the compose region) would time out opaquely. Racing the alertdialog appearing turns a recipient/email rejection into a fast `invalid_input` — routed AWAY from heal (the selectors are correct; the DATA is wrong) and surfaced to the agent so it fixes the To, not the manifest. The cross-integration sibling of SF save_button's `.slds-has-error` race (lib 4.7.0). `[role='alertdialog']` is the stable role (the live class uW2Fw-bHo is obfuscated); it only appears in the post-Send error window so it can't false-positive a successful send (which closes the region + shows a snackbar, no alertdialog)."
+    - "3.16.0 (2026-06-07): gmail.thread_reply_all_button opens the LAST message's More-options menu, not the first. A multi-message thread has one ⋮ 'More message options' button per message; the open step matched the FIRST → reply-all replied to the OLDEST message (caught on the 2026-06-07 multi-message re-drive of the 'asdfghjklqwerty' thread — reply/forward correctly hit the LATEST via the bottom-of-thread `.ams.bkH/.bkG` link). The messages are NOT same-type siblings and carry no distinguishing class (all `div.adn.ads`), and the `.ams` links live outside the message wrappers, so no CSS selector (`:last-of-type`/`:has`) can target the last message. Fixed with a new runtime `pick_last: true` arg on the click step (chrome-step-driver clickInPage: walk all visible matches, click the LAST) — set on open_more_message_options. Generalizes the `from_selector_last`/nth follow-up the reply atoms flagged."
+    - "3.15.0 (2026-05-31): compose_to_input / compose_cc_input / compose_bcc_input verify_target rewritten from a fake-success target to the committed chip `div[role='dialog'] div[role='option'][data-hovercard-id='{{value}}']`. The old targets OR'd in an always-present element (To: `input[name='subjectbox']`; Cc/Bcc: the recipient `input` itself), so selector_appears passed the instant compose opened — the step reported success even when NO chip committed (Trap 2 fake-success), masking that the recipient was never added. Live-probed 2026-05-31: the committed Gmail recipient chip is `div[role='option'][data-hovercard-id='<email>']` (class afV); data-hovercard-id == the email for known AND unknown contacts, and {{value}} ties the verify to the address just typed. This pairs with archetype-templates 1.6.0 (submit_key default Tab→Enter) + the chrome-step-driver pressKeyInPage keyCode fix; gmail needs keyCode=13 on the synthetic Enter or PeopleKit ignores it and no chip forms. NOTE: reply_to_input still verifies via the message-body textbox appearing (a weaker 'focus moved on' signal) — not re-probed this session; the keyCode+Enter fix makes its chip commit regardless. Follow-up: align reply_to_input to the chip assertion after a live reply probe."
+    - "3.14.0 (2026-05-30): gmail.compose_button gains `expand_selector: [aria-label='Maximize']` override. Gmail sometimes restores compose in MINIMIZED state from leftover drafts — the dialog mounts (so click_reveals' verify_target sees it) but To/Subject/Body inputs render at zero dimensions and the next typeahead_chip/text_input fill times out at focus_input. The new override (paired with click_reveals 1.5.0's expand_if_collapsed step) clicks Maximize after the reveal verify; harmless no-op when Maximize isn't present (compose already maximized). Live-confirmed 2026-05-30 via chrome-devtools probe: minimized compose drawer at 518,897 (328x40 strip), Maximize button at 778,909, opening compose with 3 leftover drafts repro'd reliably."
+    - "3.13.0 (2026-05-28): scope gmail.row_star_toggle's trigger + verify_target selectors to `div[role='main']` (gmail.md #6). star_email needs to work in search/label views, where Gmail keeps the previous list as a DETACHED tr.zA cache outside main — live-probed 2026-05-28: the same thread_id matched 2 rows (1 live in main + 1 detached), so an unscoped `tr.zA:has(...)` could click/verify the wrong row. Only consumer is star_email (now 0.7.0). Live-verified the scoped star round-trip (Not starred -> Starred -> restored)."
+    - "3.12.0 (2026-05-28): fix gmail.move_menu_search.type_destination — the typeahead input selector `div[role='menu'] input[placeholder='Move to:']` is DEAD (the 3.6.0 label_menu_search fix predicted this drift for move; CONFIRMED live 2026-05-28 via the context-menu 'Move to►' submenu probe during the move_email C-rest rewrite). The live input is `input.bqf[aria-label='Move-to menu open']` — survived only on the `input[type='text']` fallback until now. New selector list: aria-label first, `input.bqf` class fallback, `input[type='text']` last. Surfaced when move_email moved to the right-click context menu (apply_label-style 'Move to►' submenu) — same submenu opens the SAME typeahead, so this widget is reused. See app_model known_dead_paths.move_menu_search_placeholder_drift + gmail.md gotcha #7."
+    - "3.11.0 (2026-05-27): fix gmail.move_menu_search.pick_match — selector relied on `div[role='menuitem'][aria-label*='{{value}}']` but Gmail's Move-to menuitems have NO aria-label, only textContent (same Gmail-typeahead pattern label_menu_search hit in 3.6.0). Worse: fallback `:nth-of-type(1)` would silently click the FIRST menuitem regardless of input (same false-success trap label_menu_search 3.7.0 fixed). Rewrote to use `must_contain_text: '{{value}}'` on `div[role='menu'] [role='menuitem']`. Also dropped the per-step `selector_disappears` verify per /debug-atom skill 3.9.0 lesson — Move-to menuitem click commits immediately AND closes menu, atom outcome (positive snackbar from move_email 0.6.0) is the L4 proof. Surfaced 2026-05-27 when move_email_tester step 3 failed at pick_match (after 3.10.0 unblocked step 2). Same lesson as the label_menu_search fix family: AVOID aria-label dependency for Gmail typeahead menu items; use text-content filtering."
+    - "3.10.0 (2026-05-27): fix gmail.toolbar_move_button selector drift. ALL four selectors required `[act='8']` but Gmail dropped that attribute from the Move-to button (live-probed 2026-05-27: current button has act=null). Worse: `act='8'` now belongs to the INVERSE button `aria-label='Move to Inbox'` (shown in Archive/Sent views to PUT BACK into inbox), so any `aria-label^='Move to'` prefix-match silently hits the WRONG button on those views. New selectors use EXACT `aria-label='Move to'` (no prefix), with `data-tooltip='Move to'` as belt-and-suspenders for the primary selector. Surfaced when move_email_tester 1.0.0's L3 (open_move_menu step) failed at 5s with `click: no selector matched (visible+settled)` — applied /debug-atom skill L0→L3 ladder, probed live DOM via MCP, found the drift immediately. Without the L3 step diagnosis, the failure looked like a selector_drift-class manifest bug (the symptom) when the underlying cause was a stale attr-based identifier (the cause). General lesson: AVOID Gmail's `act=` codes in selectors — they're internal action codes that change without notice. Use aria-label exact-match for action buttons."
+    - "3.9.0 (2026-05-27): drop gmail.label_menu_search.pick_match per-step `verify:` block (`aria-checked='true'` positive verify added in 3.8.0). Live-failure on chanu's account post-runtime-foreground-fix: the verify timed out at 4s even though apply_label completed successfully (post-condition search returned the labeled thread). Gmail's menuitemcheckbox `aria-checked` state DOES flip on click but its timing / DOM-readable presence is not reliable within a 4s budget after a click event from MAIN-world chrome.scripting. The recipe has TWO downstream proofs already: commit_via_escape's `selector_disappears` (menu dismissed = Gmail accepted commit) and apply_label's `applied` outcome (same disappears signal, 6s timeout). The click step's `must_contain_text` filter proves we targeted the right element. Three correctness layers; the middle one was speculative + flaky → textbook 'heal on happy path = authoring debt' (see [[feedback-heal-on-happy-path-is-authoring-debt]]). Drop it. If later we want a positive proof of which label was applied (vs which was checked-in-menu), the right place is the atom's outcome extract, not the widget's per-step verify."
+    - "3.8.2 (2026-05-27): fix gmail.create_label_sidebar_button verify_target to wait for Closure framework wire-up. Gmail's create-label modal is Closure (not React); its input listeners are wired ~100-300ms AFTER the modal renders. If the fill_name step runs before Closure wires up, the value sets in DOM but Closure's internal state stays empty. The Create button's onclick handler then sees empty-name → closes modal without creating the label → false-success. Reactive proof: poll for `button.eV8l8d:disabled` (Create button present AND disabled). The disabled state only appears AFTER Closure's validation has run on the empty input, proving the handlers are wired. By the time we see Create disabled, fill_name's input event will be picked up. Live-verified 2026-05-27 via 4-round probe: native_set fill within 90ms of modal-open → snackbar never fires; same fill after waiting for Create disabled → snackbar fires within 105ms of click."
+    - "3.8.1 (2026-05-27): bump gmail.create_label_sidebar_button verify timeout 4s → 8s and loosen verify_target from `div[role='alertdialog'] input[type='text']` to `div[role='alertdialog']`. Live-failure 2026-05-27 in cold-load edit tab: modal opened correctly but the text input rendered ~500ms after the dialog itself, causing the strict selector to time out at 4s. The fill_name step downstream has its own retry on the input so the lenient verify here is safe."
+    - "3.8.0 (2026-05-27): fix gmail.label_menu_search SECOND false-success class — clicking a menuitemcheckbox toggles aria-checked='true' but does NOT commit the label change AND does NOT close the menu. Gmail commits + closes only when the user dismisses the menu (Escape or click outside). The previous widget shape had pick_match's verify as `selector_disappears` which would silently pass once the menu eventually closed (idle timeout? user click elsewhere?) — without proving the right checkbox got toggled. Two structural changes: (a) pick_match's verify is now POSITIVE — `selector_appears menuitemcheckbox[aria-checked='true']` with must_contain_text to prove the right item flipped state; (b) new commit_via_escape step that presses Escape — this explicitly dismisses the menu, which is what Gmail uses as the commit signal. Now: click toggles → verify aria-checked → ESC commits + closes → outcome's selector_disappears matches. Live-probed 2026-05-27: full flow applies the label (search label:<name> returned 1 row)."
+    - "3.7.0 (2026-05-27): fix gmail.label_menu_search false-success bug — pick_match step's selector fallback list included `[role='menuitem']` which matched Gmail's `\"<name>\" (create new)` typeahead suggestion when the requested label didn't exist. The click hit the (create new) item, the typeahead menu closed (which is what selector_disappears verify watches), the recipe reported success — but no label was ever applied AND no create-confirmation dialog was driven through. Live-failure on chanu's account 2026-05-27 with `label: anvisio-hardening-2026-05-25` (deleted label). Fix: drop the `[role='menuitem']` fallback so pick_match only targets `[role='menuitemcheckbox']` (existing labels). If the input label name doesn't match any existing label, the click fails with no_match instead of pretending to succeed. Callers wanting create-if-missing semantics should use a separate flow (create_label atom + apply_label) — apply_label's contract is now strictly 'apply existing label'."
+    - "3.6.0 (2026-05-25): fix gmail.label_menu_search for modern Gmail's right-click Label-as submenu. Old typeahead selector `div[role='menu'] input[placeholder='Label as:']` is DEAD — modern Gmail dropped the placeholder and uses `aria-label='Label-as menu open'` + class `bqf`. Same drift on the pick_match step: `div[role='menuitemcheckbox'][aria-label*='{{value}}']` is dead because the live menuitemcheckbox elements have NO aria-label — only text content. Pick step now uses the new `must_contain_text` arg (added today to click + contextmenu primitives) to filter visible menuitemcheckbox candidates by text. selector_disappears verify retargeted to the new aria-label selector. Live-verified against a real signed-in account 2026-05-25. The widget is now reusable from the new right-click-context-menu apply_label flavor (the old toolbar-Labels-button entry point is dead per [[project-gmail-browser-flavor-audit-2026-05-25]] Finding 1; the right-click submenu opens THE SAME typeahead so the same widget is reused). NOTE: gmail.move_menu_search likely has the same drift (placeholder='Move to:' → unknown aria-label); not fixed this commit because move_email's current path still works for the user. File separately when move_email surfaces."
+    - "3.5.0 (2026-05-25): fix gmail.thread_reply_button to mirror gmail.thread_forward_button's pattern. Primary selector now `div[role='main'] span[role='link'].ams.bkH` (the inline text-link at the bottom of an open thread — text 'Reply', no aria-label, class `ams bkH`). The icon-button variant `button[aria-label='Reply']` (class `pYTkkf-JX-I` etc.) remains as a fallback — live-probing 2026-05-25 confirmed BOTH variants coexist in modern Gmail (icon at top, text link at bottom). Earlier audit ([[project-gmail-browser-flavor-audit-2026-05-25]] Finding 3) called the widget dead based on aria-label='Reply' returning 0 — that was wrong: the audit was likely run in a thread state where only the bottom text-link was rendered. Today recipes (e.g. ReplyComposer.yaml entry) already inline the `.ams.bkH` selector; aligning the widget closes the gap so heal/propose can route through `use_widget gmail.thread_reply_button` instead of inlining."
+    - "3.4.0 (2026-05-25): add 3 widgets for create_label atom: `gmail.create_label_sidebar_button` (opens the modal), `gmail.create_label_name_input` (the modal's text input — no name/placeholder attrs, positional inside alertdialog), `gmail.create_label_create_button` (Cancel/Create button pair; Create is identified by primary-action class `eV8l8d` with `:last-of-type` fallback since text-content CSS doesn't exist). Live-verified against the user's Gmail account 2026-05-25 — the modal is `div[role='alertdialog']` with `h2.uW2Fw-bHp` 'New label' heading."
+    - "3.3.0 (2026-05-25): fix gmail.compose_send_button selector drift. The two primary trigger selectors scoped on `[role='region'][aria-label='New Message']` are DEAD as soon as the user types a Subject — Gmail renames the compose region's aria-label to the Subject text (live-verified during send_email hardening 2026-05-25: region.aria-label='Anvisio hardening test 2026-05-25' after subject typed). Recipe was only working because the third fallback selector `[aria-label^='Send '][aria-label*='Ctrl-Enter']` was generic-enough to match anywhere. Reordered: the previously-third selector (and its data-tooltip twin) are now PRIMARY; the region-scoped ones rescoped to `[role='region'][data-compose-id]` (stable container attribute that's present from compose-open through send) and kept as defensive fallbacks. verify_target also rescoped. General rule per [[reference-gmail-compose-aria-label-mutation]]: don't use mutable container aria-label strings as selector scopes; prefer stable data-* attrs."
+    - "3.2.0 (2026-05-25): reorder gmail.search_input selectors — structural anchor (form[role='search'] input[name='q']) first; aria-label-based selectors as defensive fallbacks. Gmail rebranded the search input from 'Search mail' to 'Ask Gmail' (Gemini integration); the structural anchor has been stable for years and is the right primary. Live-verified on a real signed-in account 2026-05-25."
+    - "3.1.0 (2026-05-24): promote gmail.search_input from legacy archetype:text_input + custom-fill hybrid (which the archetype resolver couldn't expand — no top-level selectors block, silently dropped from registry) to proper typeahead_search archetype. Unblocks gmail/triage_inbox via search_email's browser flavor. URL pattern + per-char type cover Gmail's React-controlled search box."
     - "3.0.0 (2026-05-16): MAJOR rewrite to archetype-driven shape. 30 widgets converted from v0.2.0's per-widget recipes (~655 lines) to { archetype, selectors, overrides }. The recipe bodies were structurally identical modulo selectors — duplication eliminated. 4 outlier widgets (search_input, label_menu_search, move_menu_search, thread_reply_all_button) remain in legacy shape; promoting them needs typeahead_search_click + typeahead_menu archetypes or a 2-step composite primitive (deferred — single-user patterns)."
     - "0.2.0 (2026-05-10): MAJOR bump. Healed against live gmail in Phase 5 widget validation. Replaces propose-authored seed with the live-DOM-verified shape. 11 widgets healed across 3 drift classes."
     - "0.1.0 (2026-05-07): initial seed extracted from manifest-redesign/manifests/gmail/widgets.yaml."
@@ -61,6 +77,16 @@ widgets:
         - div[role='button'].T-I-KE.L3
         - div.z0 div[role='button'][tabindex='0']
       verify_target: div[role='dialog'], input[name='subjectbox']
+    overrides:
+      # Gmail sometimes restores compose in MINIMIZED state from leftover
+      # drafts — the dialog mounts but the To/Subject/Body inputs render
+      # at zero dimensions. click_reveals' expand_if_collapsed step (1.5.0)
+      # clicks Maximize after the reveal verifies; harmless no-op when
+      # Maximize isn't present (compose already maximized).
+      # Live-confirmed 2026-05-30 via chrome-devtools probe: minimized
+      # compose drawer at 518,897 (328x40), Maximize button [aria-label=Maximize]
+      # present at 778,909, dismissable click on largest contenteditable.
+      expand_selector: "[aria-label='Maximize']"
 
   gmail.compose_close_button:
     archetype: click_dismisses
@@ -73,37 +99,35 @@ widgets:
     overrides:
       verify_timeout_ms: 6000
 
-  # ─── Search (LEGACY: typeahead_search_click variant) ──────────────
-  # TODO Phase 1b: add `typeahead_search_click` archetype (focus + type
-  # + click submit + verify URL) — sole user today; not worth its own
-  # archetype until a second SaaS surfaces the pattern.
+  # ─── Search (typeahead_search archetype) ──────────────────────────
+  # Gmail's search box is React-controlled (see
+  # [[reference-framework-controlled-inputs]]); typeahead_search uses
+  # type_sequentially (per-char dispatch) so the value is reflected
+  # back. Submits via Enter and verifies on URL change to #search/...
+  # Was previously authored as a legacy archetype:text_input + custom
+  # fill: hybrid that the archetype resolver couldn't expand (no
+  # top-level selectors block), leaving the widget silently
+  # unregistered and blocking gmail/triage_inbox.
 
   gmail.search_input:
-    archetype: text_input
-    fill:
-      - id: focus_search
-        type: click
-        args:
-          selector:
-            - input[aria-label='Search mail'][name='q']
-            - form[role='search'] input[name='q']
-      - id: type_query
-        type: fill_text
-        args:
-          selector:
-            - input[aria-label='Search mail'][name='q']
-          value: "{{value}}"
-      - id: submit_query
-        type: click
-        args:
-          selector:
-            - form[role='search'] button[aria-label='Search mail'][role='button']
-            - button.gb_Ve[aria-label='Search mail']
-            - form#aso_search_form_anchor button[aria-label='Search mail']
-        verify:
-          type: url_matches
-          pattern: "#search/.*"
-          timeout_ms: 8000
+    archetype: typeahead_search
+    # Selectors are tried in order; the runtime takes the first match.
+    # The structural anchor (form[role='search'] + input[name='q']) is
+    # stable across Gmail UI changes; aria-label has been rebranded
+    # ("Search mail" → "Ask Gmail" with the 2026 Gemini integration),
+    # so we list it AFTER the structural anchor as a defensive backup.
+    selectors:
+      trigger:
+        - form[role='search'] input[name='q']
+        - input[aria-label='Ask Gmail'][name='q']
+        - input[aria-label='Search mail'][name='q']
+      input:
+        - form[role='search'] input[name='q']
+        - input[aria-label='Ask Gmail'][name='q']
+        - input[aria-label='Search mail'][name='q']
+    overrides:
+      url_pattern: "#search/"
+      verify_timeout_ms: 8000
 
   # ─── Thread list row interactions ─────────────────────────────────
 
@@ -128,12 +152,16 @@ widgets:
 
   gmail.row_star_toggle:
     archetype: click_reveals
+    # All selectors scoped to div[role='main'] (gmail.md #6): in a search
+    # view the same thread_id also lives in the detached inbox cache
+    # (live-probed 2 rows for 1 thread 2026-05-28), so an unscoped
+    # tr.zA:has(...) could toggle/verify the WRONG (stale) row.
     selectors:
       trigger:
-        - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span[role='button'].T-KT
-        - tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span.aXw
-      verify_target: tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span.T-KT.T-KT-Jp,
-        tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span[aria-label='Not starred']
+        - div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span[role='button'].T-KT
+        - div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span.aXw
+      verify_target: div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span.T-KT.T-KT-Jp,
+        div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{thread_id}}']) span[aria-label='Not starred']
 
   # ─── Inbox toolbar buttons (operate on selected/open thread) ──────
 
@@ -190,11 +218,17 @@ widgets:
   gmail.toolbar_move_button:
     archetype: click_reveals
     selectors:
+      # Gmail dropped the `act='8'` attribute from the Move-to button
+      # (drift discovered 2026-05-27 via live probe — current button has
+      # act=null). Worse, `act='8'` now belongs to the INVERSE button
+      # `Move to Inbox` (shown in Archive/Sent views), so any
+      # `aria-label^='Move to'` prefix-match silently hits the WRONG
+      # button on those views. Use EXACT aria-label='Move to' to
+      # disambiguate.
       trigger:
-        - div[role='button'][act='8']
-        - div[role='button'][aria-label^='Move to'][act='8']
-        - div[role='button'][data-tooltip^='Move to'][act='8']
-        - div.G-Ni div[role='button'][act='8']
+        - div[role='button'][aria-label='Move to'][data-tooltip='Move to']
+        - div[role='button'][aria-label='Move to']
+        - div.G-Ni div[role='button'][aria-label='Move to']
       verify_target: div[role='menu'].J-M div[role='menuitem'],
         div[role='menu'] div[role='menuitem']
     overrides:
@@ -212,40 +246,74 @@ widgets:
         type: fill_text
         args:
           selector:
-            - div[role='menu'] input[placeholder='Label as:']
+            - div[role='menu'] input[aria-label='Label-as menu open']
+            - div[role='menu'] input.bqf
             - div[role='menu'] input[type='text']
           value: "{{value}}"
+      # Click the menuitemcheckbox for the requested label. Strict role
+      # (no [role='menuitem'] fallback) prevents matching Gmail's
+      # "(create new)" suggestion — see 3.7.0 changelog. The click's
+      # `must_contain_text` filter already proves we hit the right
+      # element; correctness of the commit itself is proven downstream
+      # by commit_via_escape's `selector_disappears` (menu dismisses)
+      # AND apply_label's atom outcome (same disappears signal). No
+      # per-step verify here — see 3.9.0 changelog re: heal-on-happy-
+      # path bug where the prior `aria-checked='true'` verify never
+      # matched live Gmail in 4s even though the label was applied.
       - id: pick_match
         type: click
         args:
           selector:
-            - div[role='menu'] div[role='menuitemcheckbox'][aria-label*='{{value}}']
-            - div[role='menu'] div[role='menuitem']:nth-of-type(1)
+            - div[role='menu'] [role='menuitemcheckbox']
+          must_contain_text: "{{value}}"
+      # Gmail commits the label change when the typeahead menu is
+      # dismissed (Escape OR click outside). Without this explicit
+      # commit, the click above only toggles aria-checked locally —
+      # the label is NOT applied until the menu closes. See 3.8.0
+      # changelog above.
+      - id: commit_via_escape
+        type: press_key
+        args:
+          key: Escape
         verify:
           type: selector_disappears
-          selector: div[role='menu'] input[placeholder='Label as:']
-          timeout_ms: 6000
+          selector: div[role='menu'] input[aria-label='Label-as menu open']
+          timeout_ms: 4000
 
   gmail.move_menu_search:
     archetype: typeahead
     fill:
+      # `placeholder='Move to:'` is DEAD (widget 3.12.0 — same drift the
+      # Label-as input had in 3.6.0; confirmed live via the context-menu
+      # 'Move to►' submenu). Live input is input.bqf[aria-label='Move-to
+      # menu open']. aria-label first, class fallback, type fallback.
       - id: type_destination
         type: fill_text
         args:
           selector:
-            - div[role='menu'] input[placeholder='Move to:']
+            - div[role='menu'] input[aria-label='Move-to menu open']
+            - div[role='menu'] input.bqf
             - div[role='menu'] input[type='text']
           value: "{{value}}"
+      # Click the menuitem matching the destination by TEXT (not
+      # aria-label). Gmail's Move-to menuitems have NO aria-label,
+      # only text content — same Gmail-typeahead pattern as
+      # label_menu_search (fixed in 3.6.0). The prior `aria-label*='{{value}}'`
+      # selector never matched real Gmail and the nth-of-type(1)
+      # fallback would silently click the FIRST menuitem (often a
+      # category header / unrelated item) — same false-success trap
+      # as label_menu_search 3.7.0. Strict role='menuitem' +
+      # must_contain_text filter targets exactly the requested label.
+      # No per-step verify — clicking a Move-to menuitem commits
+      # immediately AND closes the menu, and the atom's outcome
+      # (positive snackbar) is the L4 proof (per /debug-atom skill
+      # 3.9.0 lesson on removing redundant per-step verifies).
       - id: pick_match
         type: click
         args:
           selector:
-            - div[role='menu'] div[role='menuitem'][aria-label*='{{value}}']
-            - div[role='menu'] div[role='menuitem']:nth-of-type(1)
-        verify:
-          type: selector_disappears
-          selector: div[role='menu'] input[placeholder='Move to:']
-          timeout_ms: 6000
+            - div[role='menu'] [role='menuitem']
+          must_contain_text: "{{value}}"
 
   # ─── Compose form fields ──────────────────────────────────────────
 
@@ -261,8 +329,15 @@ widgets:
         - div[role='dialog'] input[aria-label='To recipients']
         - div[role='dialog'] input[role='combobox'][aria-label='To recipients']
         - div[role='dialog'] div[name='to'] input[aria-label='To recipients']
-      verify_target: div[role='dialog'] div[role='option'][data-name], div[role='dialog']
-        input[name='subjectbox']
+      # The committed recipient chip: a div[role='option'] carrying the
+      # recipient email in data-hovercard-id. {{value}} ties the verify to
+      # the SPECIFIC address just typed (live-probed 2026-05-31). The old
+      # target OR'd in `div[role='dialog'] input[name='subjectbox']`, which
+      # is ALWAYS present in an open compose → the step fake-passed with no
+      # chip (Trap 2). div[role='option'][data-name] was the open suggestion,
+      # not the commit. data-hovercard-id == the email for both known and
+      # unknown contacts, so this matches either.
+      verify_target: div[role='dialog'] div[role='option'][data-hovercard-id='{{value}}']
 
   gmail.compose_cc_input:
     archetype: typeahead_chip
@@ -274,7 +349,11 @@ widgets:
         - input[aria-label='CC recipients'][role='combobox']
         - div[name='cc'] input[role='combobox']
         - input[aria-label='Cc recipients'][role='combobox']
-      verify_target: div[name='cc'] input[role='combobox']
+      # Committed chip (same PeopleKit shape as To); {{value}} = the typed
+      # email keys it uniquely so cross-field scoping isn't needed. Was
+      # `div[name='cc'] input[role='combobox']` — the input itself, always
+      # present once Cc is revealed → fake-pass with no chip.
+      verify_target: div[role='dialog'] div[role='option'][data-hovercard-id='{{value}}']
     overrides:
       verify_timeout_ms: 3000
 
@@ -288,8 +367,9 @@ widgets:
         - input[aria-label='BCC recipients']
         - div[name='bcc'] input[role='combobox']
         - input[aria-label='Bcc recipients']
-      verify_target: input[aria-label='BCC recipients'],
-        div[name='bcc'] input[role='combobox']
+      # Committed chip (same PeopleKit shape as To/Cc); was the always-present
+      # bcc input → fake-pass with no chip.
+      verify_target: div[role='dialog'] div[role='option'][data-hovercard-id='{{value}}']
     overrides:
       verify_timeout_ms: 3000
 
@@ -316,13 +396,64 @@ widgets:
     irreversible: true
     selectors:
       trigger:
-        - div[role='region'][aria-label='New Message']
-          div[role='button'][aria-label^='Send']
-        - div[role='region'][aria-label='New Message']
-          div[role='button'][data-tooltip^='Send']
         - div[role='button'][aria-label^='Send '][aria-label*='Ctrl-Enter']
         - div[role='button'][data-tooltip^='Send '][data-tooltip*='Ctrl-Enter']
-      verify_target: div[role='region'][aria-label='New Message']
+        - div[role='region'][data-compose-id]
+          div[role='button'][aria-label^='Send']
+        - div[role='region'][data-compose-id]
+          div[role='button'][data-tooltip^='Send']
+      verify_target: div[role='region'][data-compose-id]
+    overrides:
+      # Failure-race (live-probed 2026-06-17). Gmail's Send is NOT disabled on an
+      # empty/invalid To — it's clickable and pops a `[role='alertdialog']`
+      # "Please specify at least one recipient." while the compose region STAYS.
+      # Racing that against the region disappearing (success) turns a recipient/
+      # email rejection into a fast `invalid_input` (routed away from heal — the
+      # selectors are correct; the DATA is wrong) instead of the verify timing
+      # out. `[role='alertdialog']` is the stable role (the live class uW2Fw-bHo
+      # is obfuscated/drift-prone); it only appears in the post-Send error window.
+      failure_selector: "[role='alertdialog']"
+      failure_message: "Gmail rejected the Send: a recipient is missing or invalid (no To address, or a malformed email). The recipe is correct — supply a valid To/Cc/Bcc and retry, or ask the user."
+
+  # ─── Create-label modal (sidebar Create-new-label flow) ───────────
+
+  gmail.create_label_sidebar_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - div[role='button'][aria-label='Create new label']
+        - div[role='button'][data-tooltip='Create new label']
+      # Verify Closure framework has wired up its input listeners
+      # before letting fill_name run. Gmail's modal opens in ~100ms
+      # but Closure validates the empty input ~100-300ms later, at
+      # which point Create button transitions to disabled. The
+      # disabled state IS the proof that Closure is wired. Without
+      # this wait, fill_name's input event fires into a not-yet-wired
+      # listener → Closure state stays empty → Create click closes
+      # modal but does NOT create the label (false-success). See
+      # 3.8.2 changelog above. Live-verified 4-round probe 2026-05-27.
+      verify_target: "div[role='alertdialog'] button.eV8l8d:disabled"
+    overrides:
+      verify_timeout_ms: 8000
+
+  gmail.create_label_name_input:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - div[role='alertdialog'] input[type='text']
+      read_target:
+        - div[role='alertdialog'] input[type='text']
+
+  gmail.create_label_create_button:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        # Primary: Gmail's primary-action class on dialog buttons.
+        - div[role='alertdialog'] button.eV8l8d
+        # Fallback: positional — Create is the last button (Cancel first).
+        - div[role='alertdialog'] button:last-of-type
+      verify_target: div[role='alertdialog']
 
   # ─── Thread view reads ────────────────────────────────────────────
 
@@ -401,8 +532,8 @@ widgets:
     archetype: click_reveals
     selectors:
       trigger:
+        - div[role='main'] span[role='link'].ams.bkH
         - div[role='main'] button[aria-label='Reply']
-        - div[role='main'] [role='button'][aria-label='Reply']
         - div[role='main'] [aria-label='Reply']
       verify_target: div[role='main'] div[role='textbox'][aria-label*='Message Body']
     overrides:
@@ -422,6 +553,14 @@ widgets:
           selector:
             - div[role='main'] button[aria-label='More message options']
             - div[role='main'] [role='button'][aria-label='More message options']
+          # One "More message options" (⋮) per message; pick the LAST = the most
+          # recent message so reply-all replies to the LATEST message, mirroring
+          # reply/forward (which use the bottom-of-thread .ams link). Without this
+          # it opened the FIRST message's menu → replied to the wrong message
+          # (caught on the 2026-06-07 multi-message re-drive). The messages aren't
+          # same-type siblings + have no distinguishing class, so :last-of-type
+          # can't target them — hence the runtime pick_last (clickInPage).
+          pick_last: true
         verify:
           type: selector_appears
           selector: "[role='menu'][aria-label='More message options menu']

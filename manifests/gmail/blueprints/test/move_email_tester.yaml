@@ -1,0 +1,58 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: move-email-tester
+  version: '1.0.0'
+  title: Gmail move_email browser-flavor tester
+  summary: |
+    Live-verifies the move_email browser flavor end-to-end via the
+    right-click context menu's Move to► submenu (rewritten from the
+    toolbar in move_email 0.8.0, 2026-05-28 — works in all list
+    views; reuses gmail.move_menu_search 3.12.0). Proof of success:
+    move_email's
+    positive snackbar outcome (`selector_appears [role='alert']`
+    + `must_contain_text: 'Conversation moved to "<destination>".'`).
+    The snackbar text INCLUDES the destination, so the match proves
+    BOTH that the action committed AND that the right destination
+    was selected (vs the prior scoped selector_disappears which only
+    proved "row left inbox somewhere"). Per /debug-atom skill.
+
+    NOTE — destination label MUST already exist in the user's
+    Gmail. Defaults to `anvisio-hardening-2026-05-25` which is the
+    canonical test label for this integration. If it doesn't exist
+    on the target account, run /run-blueprint gmail create_label_tester
+    first OR edit `destination:` below to a label that exists.
+
+    v1.0.0 (2026-05-27): initial. Self-discovers a recent inbox
+    thread; moves it to the test label via the context-menu Move to►. The
+    snackbar text proves the SPECIFIC destination was picked. Same
+    pattern as archive_email_tester 2.0.0 + delete_email_tester
+    1.0.0.
+
+    Re-run safe: moving to a label keeps the message accessible
+    under that label; the user can move it back via Move-to → Inbox.
+
+    Drive via: /run-blueprint gmail move_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to move
+      call: gmail.atom.search_emails
+      flavor: browser
+      with:
+        query: 'in:inbox newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - move_throwaway:
+      label: Move the picked thread to the test label (proof = positive snackbar w/ destination)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'move'
+      do:
+        - move_call:
+            call: gmail.atom.move_email
+            flavor: browser
+            with:
+              thread_id: '${ $tid }'
+              destination: 'anvisio-hardening-2026-05-25'

@@ -1,35 +1,57 @@
 _meta:
   name: manifests/gmail/actions/list_inbox.yaml
-  version: 0.3.0
+  version: 0.5.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    list_inbox atom — navigate to the Inbox. Read-only; browser-only
-    (no Gmail MCP tool maps directly — MCP would use search_emails
-    with label:inbox to surface inbox messages, but list_inbox here
-    is specifically the wizard navigation primitive that lands the
-    tab on #inbox before per-row actions).
+    list_inbox atom: list / navigate to recent inbox messages. The
+    browser flavor navigates the tab to #inbox so subsequent row-scoped
+    actions (archive / delete / star / etc.) can run; it doesn't
+    scrape rows (use search_email if you need structured results from
+    the DOM). The oauth_api flavor calls the Gmail REST users.messages.list
+    endpoint with `q=in:inbox` and returns the matching message ids,
+    same shape as search_email's oauth_api flavor.
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, no mcp_tool (no direct equivalent)."
-    - "0.2.0 (2026-05-16): rename dom_submit → dom."
+    - "0.5.0 (2026-06-08): CANONICAL ACTION FORM v71. result.outcome (auto from the winning action, 'navigated') replaces the `navigated` boolean; browser resolves via a named signals: map + when:[navigated] (url_matches url_pattern '#inbox$'). No tab_mode (navigates the current tab, the default). oauth drops the literal navigated flag. Behaviour-preserving."
+    - "0.4.0 (2026-05-24): add an oauth_api flavor that returns recent inbox messages (q=in:inbox via users.messages.list), and a schema-typed result.messages list<Message> per v70 signature parity rule. The browser flavor stays a navigation primitive; it stubs messages: literal:null."
+    - "0.3.0 (2026-05-19): spec 70 shape: rename `dom` to `browser`, no mcp_tool (no direct equivalent)."
+    - "0.2.0 (2026-05-16): rename dom_submit to dom."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Navigate to the Inbox. The action assumes the user is already in Gmail; it
-  issues a navigate to the inbox URL so subsequent row-scoped actions
-  (archive/delete/star/etc.) can run. Read of individual rows is out of scope
-  for the manifest layer (use search_email + read_email for content).
+  List recent messages in the Inbox. The browser flavor navigates the tab to
+  #inbox so subsequent row-scoped actions can run (doesn't return rows). The
+  oauth_api flavor calls Gmail REST users.messages.list with q=in:inbox and
+  returns the matching message ids; pair with read_email to fetch content.
 object: Thread
 commits_changes: false
 depends_on_view: any
-inputs: {}
+mcp_tool: gmail.search_emails
+inputs:
+  maxResults:
+    type: integer
+    required: false
+    description: |
+      Caps the result list size for the oauth_api flavor. Browser flavor
+      ignores it (it doesn't return a list).
 result:
-  navigated: boolean
+  # v71: outcome = the winning action ("navigated"), auto-populated.
+  outcome: text
+  message_ids: list<id>
+  messages:
+    schema: Message
+    cardinality: list
+    nullable: true
 flavors:
   browser:
     requires_auth: session_cookie
     label: Navigate to Inbox
+    # v71 signals model: `navigated` = the URL landed on #inbox.
+    signals:
+      navigated:
+        type: url_matches
+        url_pattern: "#inbox$"
     recipe:
       - id: goto_inbox
         type: navigate
@@ -42,9 +64,28 @@ flavors:
           timeout_ms: 10000
     outcomes:
       - action: navigated
-        signal:
-          type: url_matches
-          pattern: "#inbox$"
+        when: [navigated]
         extract:
-          navigated:
-            literal: true
+          message_ids:
+            literal: []
+          messages:
+            literal: null
+  oauth_api:
+    requires_auth: oauth_token
+    label: List recent inbox messages via Gmail REST (users.messages.list q=in:inbox)
+    request:
+      provider: google
+      method: GET
+      url: https://gmail.googleapis.com/gmail/v1/users/me/messages
+      query:
+        q: in:inbox
+        maxResults: "{{inputs.maxResults}}"
+    outcomes:
+      - action: navigated
+        extract:
+          message_ids:
+            from_api_response: true
+            path: messages[*].id
+          messages:
+            from_api_response: true
+            path: messages

@@ -1,0 +1,40 @@
+_meta:
+  name: manifests/github/views/PullRequestView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Pull request detail view
+    (github.com/{owner}/{repo}/pull/{number}). Anchor for merge /
+    review / comment.
+
+name: PullRequestView
+
+entry:
+  url: "https://github.com/{owner}/{repo}/pull/{pull_number}"
+landmark_probe:
+  selector: "h1, [data-testid='pr-header']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/pull/[0-9]+"
+  - type: selector_appears
+    selector: "h1"
+    timeout_ms: 12000
+placeholders:
+  owner:
+    type: text
+    sample: anvisio-dev
+  repo:
+    type: text
+    sample: sample-project
+  pull_number:
+    type: id
+    sample: "1"
+widgets:
+  - github.global_search_input
+  - github.issue_comment_textarea
+  - github.submit_issue_comment_button
+  - github.merge_pull_request_button
+  - github.confirm_merge_button

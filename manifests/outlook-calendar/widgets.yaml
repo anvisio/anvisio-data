@@ -1,29 +1,60 @@
 _meta:
   name: manifests/outlook-calendar/widgets.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Outlook Calendar (outlook.live.com/calendar). Authored from live DOM
-    during /onboard-saas.
+    Outlook Calendar (outlook.live.com/calendar) widget library. Adapted from
+    google-calendar's widgets (the gold-standard reference) — OWA's full event
+    editor uses the SAME datetime_split shape with the SAME aria-labels
+    ('Start date'/'Start time'/'End date'/'End time'), live-confirmed 2026-06-01.
+
+    Editor flow (live-mapped): New event (Home ribbon) -> compact peek ->
+    "More options" -> FULL editor. In the full editor the datetime shows as a
+    collapsed summary button ("Mon 6/1/2026 10:00 AM - 10:30 AM"); clicking it
+    REVEALS the discrete Start date/Start time/End time inputs (handled by a
+    reveal step in create_event's recipe). Setting Start auto-shifts End
+    (duration preserved) — identical to gcal, so the schema lists Start first.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new (replaces the 60.4.2 compact-peek-only skeleton). Adds datetime_split event_start/event_end + more_options (full editor) + event_location, grounded on the live full editor. HARDEN ITEMS (flagged, Phase 4): (a) event_save selector (Save found by text; aria-label needs live confirm), (b) the datetime-reveal summary-button selector (no aria-label; needs a stable anchor — handled as a recipe step), (c) event_attendees committed-chip verify_target."
 
 defaults_by_type:
   text: outlook-calendar.event_title
-  rich_text: outlook-calendar.event_body
+  datetime: outlook-calendar.event_start
+  list<email>: outlook-calendar.event_attendees
   email: outlook-calendar.event_attendees
+  rich_text: outlook-calendar.event_body
 
 widgets:
 
+  # ─── Calendar grid: create ────────────────────────────────────────
   outlook-calendar.new_event_button:
     archetype: click_reveals
     selectors:
       trigger:
         - button[aria-label='New event']
-      verify_target: input[placeholder='Add title']
+      verify_target:
+        - input[placeholder='Add title']
     overrides:
       verify_timeout_ms: 6000
 
+  # Compact peek -> FULL editor. gcal-style: match by visible text via
+  # trigger_text (the More options control's stable attribute is unclear).
+  outlook-calendar.more_options:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button"
+        - "[role='button']"
+      verify_target:
+        - "[data-app-section='Form_Content'] input[placeholder='Add title']"
+        - input[placeholder='Add title']
+    overrides:
+      trigger_text: "More options"
+      verify_timeout_ms: 6000
+
+  # ─── Full editor: fields ──────────────────────────────────────────
   outlook-calendar.event_title:
     archetype: text_input
     selectors:
@@ -31,6 +62,47 @@ widgets:
         - input[placeholder='Add title']
       read_target:
         - input[placeholder='Add title']
+
+  # datetime_split — OWA's discrete date+time inputs (revealed by clicking the
+  # datetime summary; create_event's recipe does that reveal first). aria-labels
+  # match gcal verbatim. Setting Start auto-shifts End (live-confirmed).
+  outlook-calendar.event_start:
+    archetype: datetime_split
+    selectors:
+      date_target:
+        - input[aria-label='Start date']
+      time_target:
+        - input[aria-label='Start time']
+
+  outlook-calendar.event_end:
+    archetype: datetime_split
+    selectors:
+      date_target:
+        - input[aria-label='End date']
+      time_target:
+        - input[aria-label='End time']
+
+  outlook-calendar.event_attendees:
+    archetype: typeahead_chip
+    selectors:
+      trigger:
+        - "div[contenteditable='true'][aria-label='Invite required attendees']"
+        - "div[aria-label='Invite required attendees']"
+      input:
+        - "div[contenteditable='true'][aria-label='Invite required attendees']"
+        - "div[aria-label='Invite required attendees']"
+      verify_target:
+        # committed recipient pill — refined in harden (ties to {{value}})
+        - "[data-app-section='MailReadCompose'] [role='option'][title*='{{value}}']"
+        - "div[role='option'][aria-label*='{{value}}']"
+
+  outlook-calendar.event_location:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - input[aria-label='Search for a location']
+      read_target:
+        - input[aria-label='Search for a location']
 
   outlook-calendar.event_body:
     archetype: contenteditable_input
@@ -40,27 +112,24 @@ widgets:
       read_target:
         - "div[role='textbox'][aria-multiline='true'][contenteditable='true']"
 
-  outlook-calendar.event_attendees:
-    archetype: typeahead_chip
-    selectors:
-      trigger:
-        - "div[contenteditable='true'][aria-label='Invite required attendees']"
-      input:
-        - "div[contenteditable='true'][aria-label='Invite required attendees']"
-      verify_target: "div[contenteditable='true'][aria-label='Invite required attendees']"
-
-  outlook-calendar.save_event:
+  # ─── Commit / abandon ─────────────────────────────────────────────
+  # HARDEN: Save found by text 'Save'; confirm the aria-label live.
+  outlook-calendar.event_save:
     archetype: click_dismisses
     irreversible: true
     selectors:
       trigger:
+        - "button[aria-label='Save']"
         - "button[aria-label*='Save']"
-        - "button[aria-label*='Send']"
-      verify_target: input[placeholder='Add title']
+      verify_target:
+        - input[placeholder='Add title']
 
   outlook-calendar.close_event:
-    archetype: click_dismisses
+    archetype: click_reveals
     selectors:
       trigger:
         - button[aria-label='Close']
-      verify_target: input[placeholder='Add title']
+      # Closing a FILLED editor pops the "Discard event" dialog (the abandon
+      # signal create_event watches). Live-confirmed 2026-06-01.
+      verify_target:
+        - "[role='dialog']"

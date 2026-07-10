@@ -1,0 +1,32 @@
+_meta:
+  name: manifests/github/views/PullRequestList.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Pull request list view (github.com/{owner}/{repo}/pulls).
+
+name: PullRequestList
+
+entry:
+  url: "https://github.com/{owner}/{repo}/pulls"
+landmark_probe:
+  selector: "[aria-label='Pull requests'], main"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/pulls(\\?|$)"
+  - type: selector_appears
+    selector: "main"
+    timeout_ms: 12000
+placeholders:
+  owner:
+    type: text
+    sample: anvisio-dev
+  repo:
+    type: text
+    sample: sample-project
+widgets:
+  - github.global_search_input
+  - github.new_button

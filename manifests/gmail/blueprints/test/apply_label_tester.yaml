@@ -1,0 +1,92 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: apply-label-tester
+  version: '1.3.0'
+  title: Gmail apply_label browser-flavor tester
+  summary: |
+    Live-verifies the apply_label browser flavor end-to-end through the
+    runtime (right-click row → 'Label as►' submenu → type label name →
+    pick match). Specifically exercises:
+      - The `contextmenu` step type (chrome-step-driver.ts)
+      - The `must_contain_text` filter on the click step (needed to
+        pick 'Label as' from the contextmenu where role+aria are
+        shared with 'Move to' / 'Move to tab')
+      - The post-3.6.0 gmail.label_menu_search widget (new
+        aria-label='Label-as menu open' + menuitemcheckbox selectors)
+      - The 2026-05-26 mouseover-before-click fix in clickInPage
+        (commit 4ce523d5)
+      - The 2026-05-26 visibility-aware selectorPresentInPage fix
+        (commit 997210b2)
+
+    v1.3.0 (2026-05-27): drop the verify_applied search step. It was
+    added in 1.2.0 as a belt-and-suspenders post-condition because the
+    atom outcome was the false-positive `selector_disappears` trap.
+    apply_label 0.8.0 now uses a POSITIVE L4 snackbar match
+    (`selector_appears [role='alert']` + `must_contain_text:
+    'Conversation added to "<label>".'`) which is the SAME independent
+    proof — the snackbar only fires when Gmail's backend actually
+    persisted the label. The atom outcome IS the verification now;
+    the redundant search step (a) added a new failure surface, and
+    (b) tripped over a widget-level brittleness where Gmail smart-
+    navigates `label:X` queries to `#label/...` instead of `#search/...`
+    so the search_input widget's URL verify timed out. See /debug-atom
+    skill: don't add redundant proofs when the atom's L4 signal is
+    already honest. (NOTE: the search_input widget's URL pattern
+    brittleness is a separate follow-up — file under "harden
+    gmail.search_input for label:/starred:/in:trash smart-routes".)
+
+    v1.2.0 (2026-05-27): add post-condition verification. After
+    apply_label completes, search Gmail for `label:<name>` and
+    surface the result count so the user can visually confirm the
+    label was actually applied (not just that the recipe reported
+    success). [SUPERSEDED in 1.3.0 — atom outcome is now the same
+    proof.]
+
+    v1.1.0 (2026-05-27): self-discover thread_id via search_emails
+    (same pattern as reply_email_tester 1.1.0+) so the tester doesn't
+    rot when a previously-hardcoded id is archived/deleted. Wrapped
+    in a `for: each in:` loop with maxResults:1 (expression
+    evaluator slice 2 doesn't support array indexing). Force
+    flavor: browser on the search step (BYOK accounts default to
+    oauth_api which returns thread.id ids that fail Gmail's
+    cold-load `#all/<id>` URL routing — same gotcha as
+    reply_email_tester 1.2.0; surfaced via probe 2026-05-27).
+
+    NOTE on label: the test label below MUST exist in the target
+    account or the label_menu_search widget's typeahead will fail
+    with no_match. The default `anvisio-hardening-2026-05-25` is the
+    leftover from the 2026-05-25 audit and may have been deleted —
+    probe 2026-05-27 confirmed it was absent on chanu's account
+    (only Gmail's 4 category labels remained). Two options if you
+    hit no_match:
+      (1) create the label in Gmail (sidebar → "Create new label")
+          and re-run, OR
+      (2) edit `label:` below to one that already exists (e.g. one
+          of Gmail's built-in categories like `Promotions` —
+          confirmed to appear in the typeahead).
+
+    Drive via: /run-blueprint gmail apply_label_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to label
+      call: gmail.atom.search_emails
+      flavor: browser  # see v1.1.0 changelog re: cold-load id rejection
+      with:
+        query: 'newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - label_throwaway:
+      label: Apply test label to the picked thread (proof = positive snackbar in atom outcome)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'apply label'
+      do:
+        - label_call:
+            call: gmail.atom.apply_label
+            flavor: browser
+            with:
+              thread_id: '${ $tid }'
+              label: 'anvisio-hardening-2026-05-25'

@@ -1,17 +1,51 @@
 _meta:
   name: manifests/outlook-calendar/schemas/Event.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Outlook Calendar Event schema. Fields: title (text), attendees (email list), body (rich_text), start/end (datetime). Used by create_event / edit_event when assembling the event editor panel.
+    Outlook Calendar Event schema. Compose fields carry per-field `widget:`
+    pointers to outlook-calendar.event_* widgets (mirrors google-calendar's
+    Event schema, the gold-standard reference); read fields are readonly.
+    Field NAMES are UI/gcal-aligned (Title/StartTime/EndTime); the oauth_api
+    flavor maps them to the Graph contract (subject, start.dateTime,
+    end.dateTime — see _mcp_tools.yaml).
+
+    StartTime is listed BEFORE EndTime intentionally: setting the start in the
+    editor auto-shifts the end to preserve duration (live-confirmed 2026-06-01,
+    identical to gcal), and fill_fields fills in schema order.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new (replaces the 0.2.0 / mixed-schema skeleton). Adapted from google-calendar's Event schema; widgets live-grounded against outlook.live.com/calendar full editor 2026-06-01 (Start date/Start time/End date/End time aria-labels match gcal verbatim)."
 
 object: Event
+primary_key: [Id]
 fields:
-  id: { type: text, readonly: true }
-  title: { type: text }
-  start: { type: datetime }
-  end: { type: datetime }
-  attendees: { type: email, multivalued: true }
-  body: { type: rich_text }
+  Id:
+    type: id
+    primary: true
+    readonly: true
+  Title:
+    type: text
+    widget: outlook-calendar.event_title
+  StartTime:
+    type: datetime
+    widget: outlook-calendar.event_start
+  EndTime:
+    type: datetime
+    widget: outlook-calendar.event_end
+  Location:
+    type: text
+    widget: outlook-calendar.event_location
+  Attendees:
+    type: list<email>
+    widget: outlook-calendar.event_attendees
+  Description:
+    type: rich_text
+    widget: outlook-calendar.event_body
+  WebLink:
+    type: url
+    readonly: true
+natural_keys:
+  - Title
+  - Id

@@ -1,0 +1,44 @@
+_meta:
+  name: manifests/asana/schemas/User.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana User property schema. /api/1.0/users/{gid} or
+    /api/1.0/users/me for the authenticated user.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[gid] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: User
+object_type_id: user
+mcp_object_type: user
+primary_key: [gid]
+
+properties:
+  gid:
+    label: User ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+  name:
+    label: Name
+    type: string
+    field_type: text
+  email:
+    label: Email
+    type: string
+    field_type: text
+    description: "Only returned by /users/me by default; needs `opt_fields=email` on other lookups."
+  photo:
+    label: Photo
+    type: object
+    field_type: text
+    description: "{ image_21x21, image_27x27, image_36x36, image_60x60, image_128x128 }"
+  workspaces:
+    label: Workspaces
+    type: array
+    field_type: select
+    description: "Workspaces this user belongs to (only on /users/me)."

@@ -1,0 +1,94 @@
+_meta:
+  name: manifests/slack/schemas/User.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Slack User property schema. Shape from users.list / users.info.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[id] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: User
+object_type_id: user
+mcp_object_type: user
+primary_key: [id]
+
+properties:
+  id:
+    label: User ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: "Uxxxx (or Wxxxx for Enterprise Grid workspace users)."
+  name:
+    label: Login Name
+    type: string
+    field_type: text
+    description: "The @handle (without @)."
+  real_name:
+    label: Real Name
+    type: string
+    field_type: text
+  profile:
+    label: Profile
+    type: object
+    field_type: text
+    description: "{ display_name, email, image_*, status_text, status_emoji, title, phone }"
+  is_admin:
+    label: Workspace Admin
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_owner:
+    label: Workspace Owner
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_primary_owner:
+    label: Primary Owner
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_restricted:
+    label: Multi-Channel Guest
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_ultra_restricted:
+    label: Single-Channel Guest
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_bot:
+    label: Is Bot
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_app_user:
+    label: Is App User
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  deleted:
+    label: Deactivated
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  tz:
+    label: Timezone
+    type: string
+    field_type: text
+    description: "TZ identifier e.g. 'America/Los_Angeles'."
+  tz_offset:
+    label: Timezone Offset
+    type: number
+    field_type: number
+    description: Seconds from UTC.
+  updated:
+    label: Last Profile Update
+    type: number
+    field_type: date
+    description: Unix timestamp.

@@ -1,24 +1,43 @@
 _meta:
   name: manifests/gmail/views/ReplyComposer.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-10
+  authored_at: 2026-05-26
   description: |
-    ReplyComposer — inline reply/reply-all/forward editor at bottom of
-    open thread. Entry chains via ThreadView + reply button click. Phase
-    4 validated; exit-heal patched the close affordance to Discard.
+    ReplyComposer — inline reply/reply-all/forward editor at the
+    bottom of an open thread. Hosts the body editor and (for forward)
+    a To recipients field, plus its own Send button.
+
+    Entry-recipe scope note (2026-05-26): the entry recipe below
+    opens the PLAIN REPLY composer via the `.ams.bkH` text-link. This
+    is INTENTIONAL — it's the canonical surface for /validate-views
+    to exercise (the simplest path that gets the user to a working
+    composer). It is NOT used by reply_email / reply_all_email /
+    forward_email atoms post 0.8.0; those atoms switched to
+    depends_on_view: ThreadView and now own their trigger click
+    (see [[project-gmail-browser-flavor-audit-2026-05-25]] Finding 2
+    + bundled-manifests/gmail/app_model.yaml ThreadView affordances).
+    Single-trigger entry recipes are fundamentally incompatible with
+    a multi-flavor composer that needs different triggers per atom;
+    the architectural shape now is "view = passive verify; atoms own
+    their entry".
   changelog:
+    - "0.3.0 (2026-05-26): clarified entry-recipe scope is /validate-views only — atoms no longer chain through this view. reply_email + reply_all_email + forward_email switched to depends_on_view: ThreadView in their 0.8.0 bumps."
+    - "0.2.0 (2026-05-25): u/0 → u/{account_index} in url_patterns (entry shape is depends_on_view: ThreadView + recipe, no entry.url). verify.any_of kept as-is — ThreadView's per-instance verify (h2.hP[data-legacy-thread-id='{messageId}']) gates entry, so by the time ReplyComposer's shape-only any_of checks run we're already proven on the right thread."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
 name: ReplyComposer
 description: Inline reply / reply-all / forward editor at the bottom of an open
   thread. Hosts the body editor and (for forward) a To recipients field, plus
-  its own Send button. Wizard chooses the appropriate trigger button (reply /
-  reply_all / forward) when chaining; validation chains via the plain Reply
-  button. Must be explicitly closed (Escape) to avoid leaking a draft into the
-  next view.
+  its own Send button. Atoms own their trigger click (reply / reply_all /
+  forward); this view's entry recipe is used ONLY by /validate-views as a
+  canonical "the composer can open" probe (via the plain Reply trigger).
+  Must be explicitly closed (Escape) to avoid leaking a draft into the next
+  view.
 entry:
+  # FOR /validate-views ONLY. Atom dispatch does NOT chain through here
+  # since 0.3.0 — see _meta.description above.
   depends_on_view: ThreadView
   recipe:
     - id: click_reply
@@ -38,8 +57,8 @@ exit:
       selector: div[role='region'][data-compose-id]
         div[role='button'][aria-label^='Discard draft']
 url_patterns:
-  - https://mail.google.com/mail/u/0/#inbox/.+
-  - https://mail.google.com/mail/u/0/#search/.*/.+
+  - https://mail.google.com/mail/u/\d+/#inbox/.+
+  - https://mail.google.com/mail/u/\d+/#search/.*/.+
 identifying_selectors:
   - div[role='region'][data-compose-id] div[role='textbox'][aria-label='Message
     Body']

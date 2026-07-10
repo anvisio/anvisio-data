@@ -1,21 +1,34 @@
 _meta:
   name: manifests/outlook/views/Inbox.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Inbox folder list view at outlook.live.com/mail/. Anchor for the global search affordance. Identifying selector is the top search input.
+    Inbox folder list view at outlook.live.com/mail/. Anchor for the
+    global search affordance and the message list. The message list is a
+    div[role='listbox'][aria-label^='Message list'] of
+    div[role='option'][data-convid] rows (data-convid = the conversation
+    primary key). Search results render into the SAME listbox (live-probed
+    2026-06-01: no detached inbox cache — OWA replaces the list in place).
+  changelog:
+    - "1.0.0 (2026-06-01): net-new for v70 (replaces the 0.1.0 / 60.4.2 skeleton). Adds the message-list identifying selector + verify; url_patterns cover /mail/ + /mail/0/."
 
 name: Inbox
-description: Inbox folder list view at outlook.live.com/mail/
+description: Inbox folder list view at outlook.live.com/mail/ — hosts the global
+  search box and the message list (div[role='listbox'] of data-convid rows).
 entry:
   url: https://outlook.live.com/mail/
+verify:
+  - type: selector_appears
+    selector: "div[role='listbox'][aria-label^='Message list']"
+    timeout_ms: 10000
 url_patterns:
-  - https://outlook\.live\.com/mail/
-  - https://outlook\.live\.com/mail/0/
+  - https://outlook\.live\.com/mail/?$
+  - https://outlook\.live\.com/mail/0/?$
+  - https://outlook\.live\.com/mail/inbox/?$
 identifying_selectors:
   - input[aria-label='Search for email, meetings, files and more.']
-  - input#topSearchInput
+  - div[role='listbox'][aria-label^='Message list']
 widgets:
   - outlook.search

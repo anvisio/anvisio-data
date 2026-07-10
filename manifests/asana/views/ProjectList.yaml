@@ -1,0 +1,33 @@
+_meta:
+  name: manifests/asana/views/ProjectList.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Project list view (app.asana.com/0/{projectId}/list). Spreadsheet-
+    style rows grouped into sections.
+
+name: ProjectList
+
+entry:
+  url: "https://app.asana.com/0/{project_id}/list"
+landmark_probe:
+  selector: "[role='grid'], [role='table']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/0/[0-9]+/list"
+  - type: selector_appears
+    selector: "[role='grid'], [role='table']"
+    timeout_ms: 12000
+placeholders:
+  project_id:
+    type: text
+    sample: "1213754599092608"
+widgets:
+  - asana.global_search
+  - asana.quick_add
+  - asana.add_task_button
+  - asana.task_name_input
+  - asana.task_row_link

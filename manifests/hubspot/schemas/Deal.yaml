@@ -1,0 +1,160 @@
+_meta:
+  name: manifests/hubspot/schemas/Deal.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot Deal (objectTypeId 0-3) curated property schema. The full
+    property surface is ~100 hubspot-defined properties + per-portal
+    custom properties; this is the daily-driver subset that the SPA
+    requests on the deal board (verified live 2026-05-23 from the
+    `CrmObjectPropertyBoardGlobalQuery` GraphQL request body) plus a
+    handful of read-only computed fields callers usually want.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[hs_object_id] per v70 INTEGRATION_FORMAT signature parity rule. hs_object_id is the canonical HubSpot identifier (the REST top-level `id` maps to it)."
+    - "0.1.0 (2026-05-23): initial seed from the live deal-board
+       GraphQL query + /api/properties/v4 response on portal 245597800."
+
+name: Deal
+object_type_id: "0-3"
+mcp_object_type: deals
+primary_key: [hs_object_id]
+
+properties:
+
+  # ── Editable identity / amount / dates ────────────────────────────
+  dealname:
+    label: Deal Name
+    type: string
+    field_type: text
+    required: true
+    sample: "HubSpot - New Deal (Sample Deal)"
+  amount:
+    label: Amount
+    type: number
+    field_type: number
+    description: Deal amount in the deal's currency
+    sample: 1000
+  deal_currency_code:
+    label: Currency
+    type: string
+    field_type: text
+    description: ISO-4217 currency code. Inferred from portal default when omitted.
+    sample: USD
+  closedate:
+    label: Close Date
+    type: datetime
+    field_type: date
+    sample: "2024-01-03"
+  description:
+    label: Description
+    type: string
+    field_type: textarea
+
+  # ── Pipeline / stage / type ────────────────────────────────────────
+  pipeline:
+    label: Pipeline
+    type: enumeration
+    field_type: select
+    description: Pipeline id. Use apis.yaml/pipelines_get to enumerate.
+    sample: default
+  dealstage:
+    label: Deal Stage
+    type: enumeration
+    field_type: radio
+    description: Internal stage name. Defaults visible on portal 245597800 -- callers should query pipelines_get for the live set.
+    sample: appointmentscheduled
+    options:
+      - { value: appointmentscheduled,     label: Appointment Scheduled }
+      - { value: qualifiedtobuy,           label: Qualified To Buy }
+      - { value: presentationscheduled,    label: Presentation Scheduled }
+      - { value: decisionmakerboughtin,    label: Decision Maker Bought-In }
+      - { value: contractsent,             label: Contract Sent }
+      - { value: closedwon,                label: Closed Won }
+      - { value: closedlost,               label: Closed Lost }
+  dealtype:
+    label: Deal Type
+    type: enumeration
+    field_type: select
+    options:
+      - { value: newbusiness,    label: New Business }
+      - { value: existingbusiness, label: Existing Business }
+  hs_priority:
+    label: Priority
+    type: enumeration
+    field_type: select
+    options:
+      - { value: high,   label: High }
+      - { value: medium, label: Medium }
+      - { value: low,    label: Low }
+
+  # ── Ownership / teams ──────────────────────────────────────────────
+  hubspot_owner_id:
+    label: Deal Owner
+    type: string
+    field_type: select
+    description: Owner user id; use search_owners MCP / search_owners.json to resolve from name/email.
+  hubspot_team_id:
+    label: Deal Owner Team
+    type: string
+    field_type: select
+
+  # ── Closed-deal context ────────────────────────────────────────────
+  closed_lost_reason:
+    label: Closed Lost Reason
+    type: string
+    field_type: textarea
+  closed_won_reason:
+    label: Closed Won Reason
+    type: string
+    field_type: textarea
+
+  # ── Computed / read-only ────────────────────────────────────────────
+  hs_object_id:
+    label: Deal ID
+    type: number
+    field_type: number
+    read_only: true
+  createdate:
+    label: Create Date
+    type: datetime
+    field_type: date
+    read_only: true
+  hs_lastactivitydate:
+    label: Last Activity Date
+    type: datetime
+    field_type: date
+    read_only: true
+  hs_is_closed:
+    label: Is Closed
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+    calculated: true
+  hs_is_closed_won:
+    label: Is Closed Won
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+    calculated: true
+  hs_is_closed_lost:
+    label: Is Closed Lost
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+    calculated: true
+  hs_projected_amount:
+    label: Projected Amount
+    type: number
+    field_type: number
+    read_only: true
+    calculated: true
+    description: amount * stage probability — the weighted-amount column on the board.
+
+associations:
+  - { name: contacts,  object_type_id: "0-1" }
+  - { name: companies, object_type_id: "0-2" }
+  - { name: tickets,   object_type_id: "0-5" }
+  - { name: quotes,    object_type_id: "0-14" }
+  - { name: line_items, object_type_id: "0-8" }

@@ -1,17 +1,49 @@
 _meta:
   name: manifests/gmail/actions/send_email.yaml
-  version: 0.3.0
+  version: 0.15.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-26
   description: |
-    send_email atom — compose and send a new email. Wizard opens
+    send_email atom: compose and send a new email. Wizard opens
     compose via gmail.compose_button on Inbox before invoking. Spec 70:
     single `browser` flavor with commit-marked send step + an MCP
     flavor pointing at the gmail.send_email MCP tool for invisible
-    sends. Transport priority (commits_changes:true → browser > mcp).
+    sends. Transport priority (commits_changes:true to browser > mcp).
+
+    Result includes both the legacy flat scalars (message_id, thread_id)
+    AND a schema-typed Message object per the v70 signature parity rule.
+    Downstream callers (e.g. blueprints/definitions/gmail/triage_inbox.yaml)
+    still read result.message_id; the schema-typed result.message is the
+    forward-looking shape that blueprints should adopt. Browser flavor
+    reads both ids off the post-send ThreadView (2026-05-28 live-probe):
+    thread_id from the subject header `h2.hP[data-legacy-thread-id]`,
+    message_id from the single message wrapper
+    `div.adn.ads[data-legacy-message-id]` — both 16-hex, matching the
+    format mcp/oauth return. This is FULL cross-flavor parity for sends.
+    (Replies land on multi-message threads where the message wrapper
+    selector matches N elements first-oldest-first; reply/reply_all
+    return message_id:null until the extract DSL gains last-match.)
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool pointer + mcp flavor."
+    - "0.15.0 (2026-06-07): CANONICAL ACTION FORM v71. (1) tab_mode: new (a compose opens its own edit tab; was the wantsOwnTab default). (2) flat typed inputs (To/Subject/Body/Cc/Bcc/ThreadId/InReplyTo) replace the fields:{type:object} bag — the recipe's fill_fields has no `from` (fills from the flat inputs); mcp/oauth map the scalars. (3) result.outcome (auto from the winning action: sent | discarded | drafted) replaces the three booleans; the per-terminal literal extracts are dropped (extract carries only payload: message_id / thread_id / draft_id / message). (4) the ready_to_send pseudo-outcome is dropped — outcomes are the terminals the LLM consumes (the filled-&-ready state is the recipe + the HITL pause). Behaviour-preserving (same signals/selectors/then:/grace)."
+    - "0.14.0 (2026-06-07): slim outcome extracts to only the values the outcome produces — drop the cross-terminal literal:false + irrelevant literal:null. The result: schema still declares the full type contract; summarizeTaskOutput reads only truthy flags so the feed display is unchanged, and no consumer does a strict ===false (verified). cd2k's contract-is-what-is-returned principle."
+    - "0.13.0 (2026-06-07): SPEC 70 SIGNALS MODEL refactor (cd2k's redesign). Same behavior as 0.12.0, but the schema now expresses the model instead of three special mechanisms. The flavor-level `autosave_signal` + `abandon_signal` are replaced by a named `signals:` map (autosave / sent / discarded / closed) and the outcomes resolve by a tiny boolean predicate over it: `sent` = when:[sent]; `discarded` = when:[discarded]; **`drafted` is now a FIRST-CLASS outcome** = `when:[closed] not:[sent,discarded]` (the editor closed with neither toast → the autosaved draft persists), returning the captured handle via `from_signal: autosave.draft_id`. The `not:` guard holds a grace window so a real send/discard (whose toast lands a beat after the compose closes) wins over the fallback — the same grace race the old abandon_signal ran, now legible in the YAML. Guarded (`not:`) outcomes are HITL-only (a commit:true auto-Send never silently drafts). Runtime: watchOutcomesBySignals folds the autosave capture + the abandon grace race INTO the outcome race; `from_signal` generalizes `from_autosave`. reply/reply_all/forward/draft adopt the same shape. No live-behavior change vs 0.12.0 (re-proven 2026-06-07)."
+    - "0.12.0 (2026-06-07): FIX the HITL id gap — a previewed (commit:false) send returned null thread_id/message_id to the LLM, even though real LLM use of send_email runs in preview by default (launch contract: the human reviews + clicks Send). ROOT CAUSE: the post-send nav steps (View message → ThreadView, where the 16-hex ids live) were recipe steps marked commit:true, so HITL SKIPPED them — the previewed send stopped at the toast with no ThreadView, no ids. FIX (new runtime `then:` hook, runner.ts): the `sent` outcome's signal is now the `Message sent` toast (both modes), with a post-signal `then:` block [click '#link_vsm' (View message) -> wait ThreadView] that runs AFTER the commit is detected, in BOTH commit:true (auto-Send) and commit:false (the user's Send). So a HITL send now lands on ThreadView and extracts thread_id + message_id for the LLM to chain. Runs during the L4 phase, so it does NOT re-introduce the v0.9.x probe-mask hang (that came from a blocking wait INSIDE the recipe-steps phase). A missed transient link is non-fatal (the send already happened; ids degrade to null). reply/reply_all/forward should adopt the same `then:` pattern to get ids in HITL — follow-up."
+    - "0.11.0 (2026-06-07): SPEC 70 AUTOSAVE CAPTURE + three positive terminals (sent / discarded / drafted), live-probed 2026-06-07 with cd2k. THREE corrections to the v0.10.x model. (1) DISCARD IS NOT DOM-SILENT — it fires `Draft discarded.` in the SAME `[role='alert']` snackbar host as `Message sent` (distinct text). The v0.10.0 `abandon_signal` was built on a never-screenshotted `discard is silent` premise; discard is now a POSITIVE `discarded` outcome. (2) Gmail AUTOSAVES the draft ~190ms after content lands — the compose URL flips `?compose=new` → `?compose=<handle>`. A new flavor-level `autosave_signal` captures that handle. (3) CLOSE-X is genuinely silent (the autosaved draft just persists) — the `abandon_signal` is now the NAMED `drafted` fallback that returns the captured `?compose=` handle (via `from_autosave`), so the LLM can reopen + send/discard the draft (navigating to `?compose=<handle>` reopens the exact draft — live-verified subject+recipients intact). That handle is the web-composer namespace, NOT the REST/MCP `draft_id` (the browser DOM never exposes that; mcp/oauth flavors return it). All three terminals race `all at once` (spec 70 §6 first-to-fire + the spec-72 grace window arbitrates the shared compose-close). reply / reply_all / forward share this model — follow-up."
+    - "0.10.1 (2026-06-06): FIX the `sent` outcome timing out in the commit:true (auto-send) path. ROOT CAUSE (live, with cd2k): a CATEGORY ERROR — the recipe's TERMINAL outcome reused a PER-STEP transient. v0.9.0 moved `sent` to `transient_appears 'Message sent'` (the toaster) for the commit:false HITL path, but that toaster is the SAME signal the `wait_for_send_completion` STEP already consumes two steps earlier; by the time the outcomes phase watches, the recipe has navigated on (View message → ThreadView) and the toaster is long gone → 30s timeout → heal. GENERAL RULE: a recipe STEP proves 'the action fired' (often a transient); the recipe OUTCOME proves 'the recipe ARRIVED' (the DURABLE landing screen). Fix: `sent` is now an `any:` of selector_appears h2.hP[data-legacy-thread-id] (commit:true — the durable sent-ThreadView landing, also exactly where the extracts live) OR the transient toaster (commit:false HITL — no ThreadView nav, the toaster is its only terminal signal). Live-confirmed in the gmail CRUD chain: send ✓ (outcome: sent) → search ✓, no heal. reply_email/reply_all_email/forward_email share the same v0.9.0 regression — same any: fix pending."
+    - "0.10.0 (2026-06-04): add browser abandon_signal (selector_disappears input[name='subjectbox']) per spec 72 R1. In commit:false HITL, the compose closing WITHOUT a 'Message sent' snackbar is a discard/abandon — Gmail's discard is DOM-silent (gmail.md: no confirmation toaster) and the compose-close is shared with a real send, so the runner races the abandon against the `sent` snackbar with the default 2s grace: a real send's snackbar wins, a discard resolves as `cancelled`. Without it a discarded HITL compose hung the wait the full 600s (or until manual Skip). Surfaced live during P1 notes-agent verification (user discarded; the wait hung). reply_email/reply_all_email/forward_email need the same guard, but their compose has no subjectbox — a reply-appropriate compose-closed selector is applied to those separately."
+    - "0.9.0 (2026-05-30): RESTORE commit:false (HITL) support. Marks the 3 post-send recipe steps (wait_for_send_completion / click_view_message / wait_thread_view) as commit:true so they only run in the auto-Send pipeline. Changes the `sent` outcome signal from `selector_appears h2.hP[data-legacy-thread-id]` (ThreadView-only — required steps 3-5 to navigate there) to `transient_appears [role='alert'] must_contain_text 'Message sent'` with timeout_ms 600000. The MutationObserver latch survives the snackbar's auto-dismiss: in commit:true the latch is pre-armed before step 2's auto-click and catches the snackbar during steps 3-5; in commit:false the watcher arms post-fill with seedPresent=true and catches the snackbar when the user clicks Send themselves in Gmail (up to 10min HITL window). Extracts unchanged — degrade to null in commit:false (no ThreadView), populated in commit:true after step 5 lands on ThreadView. Restores spec-71 HITL pretense the v0.8.4 redesign broke. Same fix applies to reply_email / reply_all_email / forward_email (pending follow-up — they share the post-send extract pattern)."
+    - "0.8.5 (2026-05-28): FIX mislabeled message_id. Browser flavor was extracting message_id from h2.hP[data-legacy-thread-id] — i.e. message_id == thread_id (the same value), live-confirmed 2026-05-28. mcp/oauth return distinct message_id vs thread_id, so the browser flavor silently disagreed. Real per-message id IS in the DOM: div.adn.ads carries data-legacy-message-id (16-hex). New: message_id + message.Id read that; thread_id + message.ThreadId stay on the subject header. Full parity for single-message sends. Surfaced during the atoms-as-LLM-tools return-shape audit."
+    - "0.8.4 (2026-05-26): recover message_id + thread_id by auto-clicking 'View message' in the snackbar + reading h2.hP[data-legacy-thread-id] on the resulting ThreadView. Recipe gains 3 post-Send steps (wait_for_send_completion → click_view_message → wait_thread_view) and the sent outcome's signal moves to ThreadView's subject header. All four result fields (message_id, thread_id, message.Id, message.ThreadId) now resolve to the canonical 16-hex form that downstream atoms (apply_label, archive_email, …) consume. Side-effect: edit tab briefly navigates to the sent thread, but the tab is ephemeral and torn down on completion (spec 71 §3.3). Same change in reply_email/reply_all_email/forward_email 0.9.4."
+    - "0.8.3 (2026-05-26): switch sent outcome from network_response to selector_appears on the post-send 'Message sent' snackbar. Investigation showed /sync/u/N/i/s serves both send AND background polling (15+ polls/session); chrome.webRequest.onCompleted can't see POST bodies to distinguish them. The DOM snackbar fires ONLY on a successful send. message_id/thread_id/message.{Id,ThreadId} stubbed null — the snackbar's 'View message' link uses a Gmail-internal id format (`param=\"#thread-a:r-NNNN\"`) that downstream atoms can't consume. Blueprints needing the id should chain `gmail.atom.search_emails` filtered by subject + recency. Live-verified 2026-05-26 evening. Same fix applied to reply_email/reply_all_email/forward_email 0.9.3."
+    - "0.8.2 (2026-05-26): fix url_pattern + method split. The regex literal `POST .*/mail/.*sync/u/\\d+/i/s` requires \"POST \" IN the URL string but chrome.webRequest's details.url is just the URL (method is a separate field). The regex could never match. Fix: drop the \"POST \" prefix from url_pattern AND add `method: POST` as a sibling field. Same fix applied to reply_email/reply_all_email/forward_email 0.9.2."
+    - "0.8.1 (2026-05-26): fix browser-flavor `sent` outcome — was using `pattern:` but the network_response signal handler reads `url_pattern:` (signal-watcher.ts:151). The signal silently returned matched:false on every poll, so the recipe stalled at the HITL wait → tab closed instantly with a misleading `outcomes timeout (600000ms)` log message (the timeout reason was hardcoded). v0.5.0 updated the regex without noticing the field-name mismatch made it irrelevant. Same fix applied to reply_email/reply_all_email/forward_email 0.8.1. The MCP flavor's signal here already used url_pattern: correctly."
+    - "0.8.0 (2026-05-26): populate browser flavor's message_id + thread_id + message.{Id, ThreadId} via from_api_response_recursive against the sync response. Pattern `^[0-9a-f]{16}$`; message_id=first match, thread_id=last match. Resolves the v0.5.0 stub-to-null gap. Same pattern applied to reply_email/reply_all_email/forward_email/draft_email 0.8.0."
+    - "0.7.0 (2026-05-25): add oauth_api flavor — POST /gmail/v1/users/me/messages/send with body `{raw: <base64url RFC822>}`. Uses the new {rfc822: ...} body marker expanded by the runtime (mime.ts) into a base64url-encoded RFC 5322 message. Supports To/Subject/Body/Cc/Bcc/ThreadId/InReplyTo. Single-part text/html (Message.Body is rich_text); multipart + attachments out of scope, fall back to browser when needed. Provides a direct-REST path for headless / background blueprints (e.g. auto-replies, scheduled sends)."
+    - "0.6.0 (2026-05-25): mcp flavor: add inputs_map (was MISSING — atom passed inputs.fields directly to MCP). MCP send_email expects flat snake_case `{to, subject, body, cc, bcc, mimeType, threadId, inReplyTo}`; atom's inputs.fields is a Message-shaped object with PascalCase `{To, Subject, Body, Cc, Bcc}`. Without inputs_map the MCP transport received the wrong shape AND case — flavor swap was BROKEN. Also: set mimeType to text/html since Gmail compose produces HTML (Message.Body is rich_text)."
+    - "0.5.0 (2026-05-25): fix DEAD `sent` outcome network signal. Live-test 2026-05-25 confirmed modern Gmail send hits `POST /mail/google.com/sync/u/N/i/s` (not the legacy `/mail/u/N/.*sendmail`). The prior pattern matched ZERO traffic — the `sent` signal never fired; blueprints depending on it stalled until timeout. New pattern: `POST .*/mail/.*sync/u/\\d+/i/s`. Also covers multi-account via \\d+ instead of hardcoded u/0. result.message_id + result.thread_id stay literal:null pending a from_api_response_regex extract source (the hex IDs are in the response but at fragile array positions — see [[project-send-email-hardening-2026-05-25]] for the follow-up)."
+    - "0.4.0 (2026-05-24): add schema-typed result.message: { schema: Message, nullable: true } per v70 signature parity rule. Legacy result.{message_id, thread_id} kept for back-compat with triage_inbox + other callers. mcp flavor extracts message.Id + message.ThreadId from the MCP response; browser flavor stubs message as literal:null until the sendmail XHR response path is verified."
+    - "0.3.0 (2026-05-19): spec 70 shape: rename `dom` to `browser`, drop emits_when, add mcp_tool pointer + mcp flavor."
     - "0.2.0 (2026-05-16): collapse dom_no_submit + dom_submit into single `dom` flavor with commit:true on send step."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
@@ -21,54 +53,168 @@ description: >
   opens compose via the gmail.compose_button widget on Inbox before invoking
   this action.
 object: Message
+object_types: [Message]
 commits_changes: true
+tab_mode: new
 depends_on_view: ComposePanel
 mcp_tool: gmail.send_email
 inputs:
-  fields:
-    type: object
-    required: true
-    description: |
-      Subset of Message fields. Required: To, Subject, Body.
-      Optional: Cc, Bcc, ThreadId (when replying), InReplyTo.
+  # v71 flat typed scalars (was fields: {type: object}). The recipe assembles a
+  # Message from these via fill_fields `from: "{{inputs}}"`; mcp/oauth map them.
+  To: { type: text, required: true }
+  Subject: { type: text, required: true }
+  Body: { type: rich_text, required: true }
+  Cc: { type: text, required: false }
+  Bcc: { type: text, required: false }
+  ThreadId: { type: text, required: false, description: "When replying in-thread." }
+  InReplyTo: { type: text, required: false }
 result:
-  sent: boolean
+  # v71: outcome = the winning terminal's action (sent | discarded | drafted),
+  # auto-populated by the runtime. discarded = user threw the draft away
+  # ("Draft discarded."); drafted = user closed compose, the autosaved draft
+  # persists (draft_id is the ?compose= handle, reopen via #...?compose=<id>).
+  outcome: text
+  draft_id: text
   message_id: text
   thread_id: text
+  message:
+    schema: Message
+    nullable: true
 flavors:
   browser:
     requires_auth: session_cookie
     label: Fill compose; click Send when commit:true
+    # Spec 70 SIGNALS MODEL. The named events the runtime watches across the L4
+    # wait; the outcomes below resolve by a `when:` / `not:` predicate over them.
+    # Replaces the old flavor-level autosave_signal + abandon_signal (identical
+    # behavior — but `drafted` is now a first-class outcome, see below).
+    signals:
+      # autosave: Gmail flips ?compose=new → ?compose=<handle> ~190ms after
+      # content lands (live-probed 2026-06-07). The handle is reopenable
+      # (navigating to #...?compose=<handle> reopens the EXACT draft — subject +
+      # recipients intact); the `drafted` terminal returns it via
+      # `from_signal: autosave.draft_id`. This is the web-composer handle, NOT
+      # the REST/MCP draft_id (the DOM never exposes that; mcp/oauth return it).
+      # The {20,} length cleanly excludes the `new` sentinel.
+      autosave:
+        type: url_matches
+        pattern: "[?&]compose=(?<draft_handle>[A-Za-z0-9]{20,})"
+        extract:
+          draft_id:
+            from_url_match: draft_handle
+      # sent: the "Message sent" toast (transient — the spec-72 latch is
+      # pre-armed before the Send so it catches the flash in BOTH commit:true
+      # auto-Send AND commit:false / HITL).
+      sent:
+        type: transient_appears
+        selector: "div[role='alert']"
+        must_contain_text: "Message sent"
+      # discarded: "Draft discarded." fires in the SAME [role='alert'] host as
+      # "Message sent" (live-probed 2026-06-07 — v0.10.0's "discard is silent"
+      # premise was WRONG; only the text differs).
+      discarded:
+        type: transient_appears
+        selector: "div[role='alert']"
+        must_contain_text: "Draft discarded"
+      # closed: the compose surface vanished — SHARED by send, discard, AND
+      # close-X. On its own (no sent/discarded toast within grace) it's the
+      # `drafted` close: the autosaved draft persists.
+      closed:
+        type: selector_disappears
+        selector: "input[name='subjectbox']"
     recipe:
       - id: fill
         type: fill_fields
         args:
+          # v71: no `from` → fill the Message from the action's flat inputs
+          # (the writable-field filter drops non-Message keys like InReplyTo).
           object: Message
-          from: "{{inputs.fields}}"
       - id: send
         type: use_widget
         commit: true
         args:
           widget: gmail.compose_send_button
           op: invoke
+      # NOTE: post-send navigation (View message → ThreadView) + the 16-hex ID
+      # extraction now live in the `sent` outcome's `then:` block below, NOT as
+      # recipe steps. That's the 0.12.0 fix: as recipe steps they were marked
+      # commit:true and SKIPPED in HITL, so a previewed (commit:false) send never
+      # reached ThreadView and returned null ids to the LLM. As an outcome
+      # `then:` they run in BOTH modes — after the runtime's auto-Send AND after
+      # the user's Send in HITL — and run during the L4 phase (after the commit
+      # is detected), so they don't re-introduce the v0.9.x HITL probe-mask hang.
     outcomes:
-      - action: ready_to_send
-        signal:
-          type: element_value_equals
-          selector: input[name='subjectbox']
-          value: "{{inputs.fields.Subject}}"
       - action: sent
-        signal:
-          type: network_response
-          pattern: POST .*/mail/u/0/.*sendmail
+        # Resolves when the `sent` toast fires (BOTH modes — the latch is
+        # pre-armed before the Send). No timeout_ms — inherits the context
+        # budget (~30s auto, ~10min HITL).
+        when: [sent]
+        # 0.12.0: post-signal nav to the durable landing where the 16-hex ids
+        # live. Once "Message sent" is observed, click the toast's "View message"
+        # link → ThreadView, THEN extract below reads the ids off ThreadView. Runs
+        # in BOTH modes (the fix for HITL returning null ids). The link is
+        # transient (~5s); `then:` clicks it promptly. A miss is non-fatal — the
+        # send already happened, ids just degrade to null.
+        then:
+          - id: view_message
+            type: click
+            args:
+              selector: "[id=link_vsm]"
+          - id: wait_thread_view
+            type: wait_for_element
+            args:
+              selector: "h2.hP[data-legacy-thread-id]"
+              timeout_ms: 8000
         extract:
-          sent:
-            literal: true
+          # message_id: the REAL per-message id, live-probed 2026-05-28. A fresh
+          # send lands on a single-message ThreadView; that one message wrapper
+          # carries data-legacy-message-id (16-hex, the SAME format mcp/oauth
+          # return — distinct from the thread id). from_selector takes the first
+          # (here: only) match = the just-sent message.
+          message_id:
+            from_selector: "div.adn.ads[data-legacy-message-id]"
+            attr: "data-legacy-message-id"
+          # thread_id: 16-hex from the ThreadView subject header. The
+          # form every downstream atom (apply_label, archive_email, …)
+          # consumes.
+          thread_id:
+            from_selector: "h2.hP[data-legacy-thread-id]"
+            attr: "data-legacy-thread-id"
+          message:
+            Id:
+              from_selector: "div.adn.ads[data-legacy-message-id]"
+              attr: "data-legacy-message-id"
+            ThreadId:
+              from_selector: "h2.hP[data-legacy-thread-id]"
+              attr: "data-legacy-thread-id"
+      - action: discarded
+        # The `discarded` toast ("Draft discarded.") fired — a POSITIVE terminal.
+        when: [discarded]
+      - action: drafted
+        # The compose CLOSED with neither a `sent` nor `discarded` toast
+        # (close-X / navigate-away) — the autosaved draft persists. The `not:`
+        # guard holds a grace window so a real send/discard (whose toast lands a
+        # beat AFTER the compose closes) wins over this fallback; that is the
+        # same grace race the old abandon_signal ran, now legible. HITL-only (a
+        # commit:true auto-Send never silently drafts). Returns the captured
+        # ?compose= handle so the LLM can reopen + send/discard the draft.
+        when: [closed]
+        not: [sent, discarded]
+        extract:
+          draft_id:
+            from_signal: autosave.draft_id
   mcp:
     requires_auth: mcp_server
     label: Send via Gmail MCP server
     server: gmail
     tool: send_email
+    inputs_map:
+      to: "{{inputs.To}}"
+      subject: "{{inputs.Subject}}"
+      body: "{{inputs.Body}}"
+      cc: "{{inputs.Cc}}"
+      bcc: "{{inputs.Bcc}}"
+      mimeType: "text/html"
     outcomes:
       - action: sent
         signal:
@@ -80,5 +226,42 @@ flavors:
             from_api_response: ".message_id"
           thread_id:
             from_api_response: ".thread_id"
-          sent:
-            literal: true
+          message:
+            Id:
+              from_api_response: ".message_id"
+            ThreadId:
+              from_api_response: ".thread_id"
+  oauth_api:
+    requires_auth: oauth_token
+    label: Send via Gmail REST users.messages.send (single-part text/html)
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/messages/send
+      body:
+        raw:
+          rfc822:
+            to: "{{inputs.To}}"
+            cc: "{{inputs.Cc}}"
+            bcc: "{{inputs.Bcc}}"
+            subject: "{{inputs.Subject}}"
+            htmlBody: "{{inputs.Body}}"
+        threadId: "{{inputs.ThreadId}}"
+    outcomes:
+      - action: sent
+        extract:
+          # Gmail's users.messages.send response is { id, threadId, labelIds }
+          # — id IS the message id; threadId is the thread it landed in.
+          message_id:
+            from_api_response: true
+            path: id
+          thread_id:
+            from_api_response: true
+            path: threadId
+          message:
+            Id:
+              from_api_response: true
+              path: id
+            ThreadId:
+              from_api_response: true
+              path: threadId

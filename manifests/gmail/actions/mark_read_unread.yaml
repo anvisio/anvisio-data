@@ -1,27 +1,37 @@
 _meta:
   name: manifests/gmail/actions/mark_read_unread.yaml
-  version: 0.3.0
+  version: 0.7.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    mark_read_unread atom — toggle the UNREAD label on a thread. Spec
-    70: `browser` flavor uses ux_decision to dispatch to the matching
-    toolbar widget (mode=read|unread); `mcp` flavor calls
-    gmail.modify_email — add UNREAD for unread, remove UNREAD for read.
+    mark_read_unread atom: toggle the UNREAD label on a thread. Spec
+    70: `browser` flavor right-clicks the row + clicks the "Mark as
+    <mode>" context-menu item (mode templates read|unread into the item
+    text); `mcp` flavor calls gmail.modify_email: add UNREAD for unread,
+    remove UNREAD for read.
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.7.0 (2026-06-08): CANONICAL ACTION FORM v71. tab_mode: current; result.outcome replaces the `toggled` boolean; browser via signals: map + when:/not: — `toggled` = when:[toggled] (the 'Conversation marked as <mode>.' snackbar); `abandoned` = when:[menu_closed] not:[toggled] (context menu closed without the snackbar; grace-guarded; HITL-only). ready_to_toggle dropped. Browser-only (mcp still deferred per the note below). Mirrors archive_email; behaviour-preserving."
+    - "0.6.1 (2026-05-30): `toggled` outcome signal upgraded from `selector_appears` to `transient_appears` on the snackbar — MutationObserver latch survives auto-dismiss + is pre-armed for spec-72 commit-delta detection. Same upgrade across all gmail snackbar outcomes; see archive_email 0.8.1."
+    - "0.6.0 (2026-05-28): browser flavor moved from the top TOOLBAR Mark-as-read/unread buttons to the right-click CONTEXT MENU 'Mark as read'/'Mark as unread' menuitems; added `runs_in_home_tab: true`, `depends_on_view: Inbox → any`. Same C-rest rationale as archive_email 0.8.0 (toolbar absent in search). DROPPED the ux_decision/pick_one branch in favor of a SINGLE templated click must_contain_text:'Mark as {{inputs.mode}}'. The branch only existed because the toolbar had two DIFFERENT widgets; the context-menu items differ only by text, which templates from mode (read/unread) exactly. Simpler, fewer failure surfaces (Rule D). Only the state-relevant item is enabled (a read row enables 'Mark as unread', renders 'Mark as read' as display:none); the runtime visible-filter handles it, and marking a thread to its CURRENT state is a no-op (disabled item not clickable → honest fail, same as the old toolbar which only showed the relevant button). 'Mark as read' is NOT a substring of 'Mark as unread', so the two don't collide. row_checkbox pre-select dropped."
+    - "0.5.0 (2026-05-28): honest L4 — browser `toggled` outcome now matches the positive snackbar 'Conversation marked as {{inputs.mode}}.' instead of the always-present row selector (false-positive). Live-probed both modes 2026-05-28. /debug-atom Rule A (snackbar-first); the mode interpolation serves both ux_decision branches with one signal."
+    - "0.4.0 (2026-05-24): add schema-typed result.thread per v70 signature parity rule. browser echoes thread.Id from input. (mcp flavor remains deferred per the conditional-inputs_map note below.)"
+    - "0.3.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit:true on the dispatched widget click."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
   Mark a thread as read or unread. The caller passes mode=read|unread.
-  Browser flavor uses ux_decision to pick the matching toolbar widget. MCP
-  flavor calls gmail.modify_email — add UNREAD label for mode=unread, remove
-  UNREAD for mode=read.
+  Browser flavor right-clicks the row + clicks the matching context-menu
+  item. MCP flavor calls gmail.modify_email — add UNREAD label for
+  mode=unread, remove UNREAD for mode=read.
 object: Thread
 commits_changes: true
-depends_on_view: Inbox
+# In-place right-click context-menu action; run on home tab + act on the
+# current list (any view). Same C-rest rationale as archive_email 0.8.0.
+# contextmenu selector scoped to div[role='main'] (gmail.md #6).
+tab_mode: current
+depends_on_view: any
 mcp_tool: gmail.modify_email
 inputs:
   thread_id:
@@ -32,55 +42,68 @@ inputs:
     required: true
     description: "'read' or 'unread'"
 result:
-  toggled: boolean
+  # v71: outcome = the winning terminal's action ("toggled" | "abandoned").
+  outcome: text
+  thread:
+    schema: Thread
 flavors:
   browser:
     requires_auth: session_cookie
-    label: Select row + mark read/unread when commit:true
+    label: Right-click row → Mark as read/unread when commit:true
+    # v71 signals model: `toggled` = the 'Conversation marked as <mode>.'
+    # snackbar; `abandoned` = the context menu closed without it (grace-guarded).
+    signals:
+      toggled:
+        type: transient_appears
+        selector: "[role='alert']"
+        must_contain_text: 'Conversation marked as {{inputs.mode}}.'
+        timeout_ms: 6000
+      menu_closed:
+        type: selector_disappears
+        selector: "[role='menu']"
     recipe:
-      - id: select_row
-        type: use_widget
+      # Open Gmail's right-click context menu on the row (same path as
+      # apply_label 0.9.0). Works in all list views; scoped to
+      # div[role='main'] (gmail.md #6). Shared across both ux_decision
+      # branches — the mode picks WHICH menuitem to click.
+      - id: open_contextmenu_on_row
+        type: contextmenu
         args:
-          widget: gmail.row_checkbox
-          op: invoke
-          inputs:
-            thread_id: "{{inputs.thread_id}}"
-      - id: choose_mode
-        type: ux_decision
+          selector: "div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])"
+        verify:
+          type: selector_appears
+          selector: "[role='menu'] [role='menuitem'][aria-haspopup='true']"
+          timeout_ms: 4000
+      # Click the "Mark as <mode>" menuitem. mode ∈ {read, unread}
+      # templates EXACTLY into Gmail's item text ("Mark as read" /
+      # "Mark as unread"), so a single templated click replaces the old
+      # two-widget ux_decision branch (that branch only existed because
+      # the toolbar had two DIFFERENT buttons; the context-menu items
+      # differ only by text). Only the state-relevant item is
+      # enabled+visible (a read row enables 'Mark as unread', renders
+      # 'Mark as read' as display:none) → the visible-filter lands on
+      # it. 'Mark as read' is not a substring of 'Mark as unread', so no
+      # cross-match. If the thread is already in the target state the
+      # item is disabled → honest no-op fail (same as the old toolbar,
+      # which only showed the relevant button).
+      - id: click_mark_item
+        type: click
         commit: true
         args:
-          kind: pick_one
-          on: "{{inputs.mode}}"
-          branches:
-            read:
-              - id: click_mark_read
-                type: use_widget
-                args:
-                  widget: gmail.toolbar_mark_read_button
-                  op: invoke
-                  inputs:
-                    thread_id: "{{inputs.thread_id}}"
-            unread:
-              - id: click_mark_unread
-                type: use_widget
-                args:
-                  widget: gmail.toolbar_mark_unread_button
-                  op: invoke
-                  inputs:
-                    thread_id: "{{inputs.thread_id}}"
+          selector: "[role='menu'] [role='menuitem']"
+          must_contain_text: "Mark as {{inputs.mode}}"
     outcomes:
-      - action: ready_to_toggle
-        signal:
-          type: selector_appears
-          selector: div[role='button'][aria-label='Mark as read'][data-tooltip*='Mark as read'],
-            div[role='button'][aria-label='Mark as unread'][data-tooltip*='Mark as unread']
       - action: toggled
-        signal:
-          type: selector_appears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+        when: [toggled]
         extract:
-          toggled:
-            literal: true
+          thread:
+            Id:
+              from_input: thread_id
+      - action: abandoned
+        # The context menu closed with no `toggled` snackbar — the user
+        # cancelled. Grace-guarded so a real mark's snackbar wins. HITL-only.
+        when: [menu_closed]
+        not: [toggled]
   # NOTE: a `mcp` flavor for mark_read_unread requires conditional
   # inputs_map (add UNREAD vs remove UNREAD depending on mode). The
   # current runtime doesn't expand conditionals inside inputs_map;

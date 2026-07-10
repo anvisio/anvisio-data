@@ -1,0 +1,17 @@
+# Test/demo fixture — a single linear call. No title/summary, so it is
+# excluded from the blueprint-picker inventory. Backs blueprint-feed-runner
+# tests + /demo-feed-run. Mock-flavored (query_records has a mock), so it
+# runs tabless and deterministically.
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: smoke-linear
+  version: '1.0.0'
+
+do:
+  - listOpps:
+      label: Listing opportunities
+      call: salesforce.atom.query_records
+      with:
+        object_type: Opportunity
+        list_view: AllOpportunities

@@ -1,0 +1,16 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: list-inbox-tester
+  version: '1.0.0'
+  title: Gmail list_inbox tester
+  summary: |
+    Migrated from manifests/gmail/blueprints/list_inbox_smoke.yaml
+    (v60 PR #14). Navigates to Gmail Inbox and verifies the
+    thread-list landmark appears. Non-destructive.
+
+do:
+  - open_inbox:
+      label: Opening the inbox
+      call: gmail.atom.list_inbox
+      with: {}

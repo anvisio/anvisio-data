@@ -1,0 +1,75 @@
+_meta:
+  name: manifests/github/actions/list_issues.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    list_issues atom: fetch issues in a repo. Read; mcp > oauth_api.
+
+    No browser flavor: the issue-list page is paginated MPA HTML, so
+    extracting a structured issues array would require scraping every
+    row; REST returns the canonical shape in one call.
+  changelog:
+    - "0.3.0 (2026-05-24): adopt schema-typed result.issues: list<Issue> per v70 signature parity rule. Drop result.total + result.has_more — neither flavor extracted them (dead keys since 0.1.0)."
+    - "0.2.0 (2026-05-23): drop browser flavor; it returned literal:[]
+       which broke any caller that expected an issues array."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: List issues in a GitHub repository.
+object: "{{inputs.repo}}"
+object_types: [Issue]
+commits_changes: false
+depends_on_view: any
+mcp_tool: github.list_issues
+inputs:
+  owner:    { type: text, required: true, sample: anvisio-dev }
+  repo:     { type: text, required: true, sample: sample-project }
+  state:    { type: text, required: false, default: open, description: "open | closed | all" }
+  labels:   { type: list<text>, required: false }
+  per_page: { type: integer, required: false, default: 30, maximum: 100 }
+  page:     { type: integer, required: false, default: 1 }
+result:
+  issues:
+    schema: Issue
+    cardinality: list
+
+flavors:
+  mcp:
+    requires_auth: mcp_server
+    label: Official github-mcp-server list_issues
+    server: github
+    tool: list_issues
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          issues:
+            from_api_response: true
+            path: issues
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: REST GET /repos/{owner}/{repo}/issues
+    request:
+      method: GET
+      url: "https://api.github.com/repos/{{inputs.owner}}/{{inputs.repo}}/issues"
+      query:
+        state:    "{{inputs.state}}"
+        labels:   "{{inputs.labels}}"
+        per_page: "{{inputs.per_page}}"
+        page:     "{{inputs.page}}"
+    outcomes:
+      - action: listed
+        signal:
+          type: network_response
+          url_pattern: "api.github.com/repos/*/issues*"
+          status: 200
+        extract:
+          issues:
+            from_api_response: true
+            path: ""
+

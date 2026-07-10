@@ -1,0 +1,28 @@
+document:
+  dsl: '1.0.0'
+  namespace: outlook
+  name: send-email-tester
+  version: '1.0.0'
+  title: Outlook send_email tester (auto-send to self)
+  summary: |
+    Auto-fills compose with throwaway values and clicks Send (commit:true).
+    **WILL ACTUALLY SEND** a self-addressed email each run.
+
+    Hardened 2026-06-01: send_email's commit signal is the compose
+    surface-disappear (Send button gone) — OWA has NO send toast (send fires
+    from a Worker). The discard path is covered by send_email's spec-72
+    abandon_signal (the "discard this draft" dialog), so a Discard reports
+    cancelled, not sent. Drive via: /run-blueprint outlook send_email_tester
+
+do:
+  - fill_and_send:
+      label: Filling compose and sending a throwaway (set the To field to your own address)
+      call: outlook.atom.send_email
+      commit: true
+      with:
+        fields:
+          To: ['you@example.com']
+          Subject: 'Anvisio Outlook send_email smoke (auto-test)'
+          Body: |
+            This compose was filled + sent by the outlook send_email_tester
+            blueprint during browser-flavor hardening. Safe to ignore.

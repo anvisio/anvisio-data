@@ -1,0 +1,185 @@
+_meta:
+  name: manifests/github/schemas/PullRequest.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    GitHub Pull Request property schema. PRs are issues at the
+    REST layer (PR `number` shares the same sequence as issue
+    numbers in the repo) plus the PR-specific fields below.
+
+    owner + repo are contextual identity fields scoping the PR to its
+    repository — part of the (owner, repo, number) composite
+    primary_key but not on the REST response top-level.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[owner, repo, number] per v70 INTEGRATION_FORMAT signature parity rule. Add owner + repo as contextual identity properties so the composite PK fields exist in the property set."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: PullRequest
+object_type_id: pull_request
+mcp_object_type: pull_request
+primary_key: [owner, repo, number]
+
+properties:
+  owner:
+    label: Repository Owner
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: Login of the user or organization that owns the repository (contextual identity).
+    sample: anvisio-dev
+  repo:
+    label: Repository Name
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: Repository name (contextual identity; not on the REST response top-level).
+    sample: sample-project
+  number:
+    label: PR Number
+    type: number
+    field_type: number
+    required: true
+    read_only: true
+    sample: 1
+  title:
+    label: Title
+    type: string
+    field_type: text
+    required: true
+  body:
+    label: Description
+    type: string
+    field_type: textarea
+  state:
+    label: State
+    type: enumeration
+    field_type: select
+    options:
+      - { value: open,   label: Open }
+      - { value: closed, label: Closed }
+  draft:
+    label: Draft
+    type: bool
+    field_type: booleancheckbox
+    description: Cannot be merged until marked Ready for review.
+  head:
+    label: Head Branch
+    type: object
+    field_type: text
+    description: "{ ref, sha, label, repo }"
+  base:
+    label: Base Branch
+    type: object
+    field_type: text
+    description: "{ ref, sha, label, repo }"
+  merged:
+    label: Merged
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  mergeable:
+    label: Mergeable
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+    description: Null while GitHub is computing the merge result.
+  mergeable_state:
+    label: Mergeable State
+    type: enumeration
+    field_type: select
+    read_only: true
+    description: GitHub's merge-readiness signal.
+    options:
+      - { value: clean,     label: Clean (ready to merge) }
+      - { value: dirty,     label: Dirty (conflicts) }
+      - { value: blocked,   label: Blocked (required checks failing or review missing) }
+      - { value: unstable,  label: Unstable (non-required checks failing) }
+      - { value: behind,    label: Behind (base has new commits) }
+      - { value: unknown,   label: Unknown (still computing) }
+  assignees:
+    label: Assignees
+    type: array
+    field_type: select
+  requested_reviewers:
+    label: Requested Reviewers
+    type: array
+    field_type: select
+  labels:
+    label: Labels
+    type: array
+    field_type: select
+  milestone:
+    label: Milestone
+    type: number
+    field_type: select
+  user:
+    label: Author
+    type: object
+    field_type: select
+    read_only: true
+  comments:
+    label: Comment Count
+    type: number
+    field_type: number
+    read_only: true
+  review_comments:
+    label: Review Comment Count
+    type: number
+    field_type: number
+    read_only: true
+  commits:
+    label: Commit Count
+    type: number
+    field_type: number
+    read_only: true
+  additions:
+    label: Additions
+    type: number
+    field_type: number
+    read_only: true
+  deletions:
+    label: Deletions
+    type: number
+    field_type: number
+    read_only: true
+  changed_files:
+    label: Changed Files
+    type: number
+    field_type: number
+    read_only: true
+  created_at:
+    label: Created At
+    type: datetime
+    field_type: date
+    read_only: true
+  updated_at:
+    label: Updated At
+    type: datetime
+    field_type: date
+    read_only: true
+  merged_at:
+    label: Merged At
+    type: datetime
+    field_type: date
+    read_only: true
+  closed_at:
+    label: Closed At
+    type: datetime
+    field_type: date
+    read_only: true
+  html_url:
+    label: URL
+    type: string
+    field_type: text
+    read_only: true
+
+associations:
+  - { name: reviews,  object_type_id: review,         description: "PR review timeline" }
+  - { name: comments, object_type_id: issue_comment,  description: "Conversation tab comments" }
+  - { name: commits,  object_type_id: commit,         description: "Commits in this PR" }
+  - { name: files,    object_type_id: file,           description: "Changed files" }
+  - { name: checks,   object_type_id: check_run,      description: "CI check runs" }

@@ -1,0 +1,281 @@
+_meta:
+  name: manifests/github/app_model.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Semantic-layer model for GitHub (github.com web app). Catalogs the
+    screens the Anvisio atoms touch, the affordances on each, currently
+    known-dead / deferred paths, and the navigation transitions between
+    screens. Consumed by propose / heal / Claude when authoring or
+    auditing atoms. The runtime ignores this file.
+
+    Coverage is INTENTIONALLY shallow. github has NOT had a live
+    browser-flavor hardening session as of 2026-06-01 — every screen
+    below is derived from the manifest (views/*.yaml URL patterns +
+    landmark probes, widgets.yaml affordance scoping, actions/*.yaml
+    recipes), NOT from a live DOM probe. Distinctives are limited to
+    what the manifest already asserts; per-screen DOM nuance (state-
+    dependent buttons, the way the merge dropdown branches, the
+    template-picker interstitial) will be filled in when github is
+    first hardened. Selectors are NOT restated here — they live in
+    widgets.yaml; URLs/endpoints live in views/ + apis.yaml; fields
+    live in schemas/. This file is the SEMANTIC layer only.
+
+    GitHub's web app is an MPA + Turbo (server-rendered HTML, NOT a
+    SPA), so navigation between screens is full-page / Turbo-frame
+    navigation keyed on URL — not hash routing. That makes the
+    `url_matches` view verifies (see views/*.yaml) the primary
+    landmark signal.
+
+    Format-spec: planning/tech_design/integrations/INTEGRATION_FORMAT.md
+    (Surface 1, app_model.yaml section). Gold-standard shape mirrored
+    from bundled-manifests/gmail/app_model.yaml.
+  changelog:
+    - "0.1.0 (2026-06-01): initial seed, authored from the manifest
+       tree only (no live probe). Six screens map 1:1 to views/*.yaml
+       (RepositoryView, IssueList, IssueView, NewIssue,
+       PullRequestList, PullRequestView). Affordances reference the
+       widgets.yaml primitives each view declares + the actions that
+       exercise them. known_dead_paths captures the DEFERRED /
+       DROPPED paths already documented in the manifest changelogs
+       (sidebar pickers deferred to heal-time; browser read flavors
+       dropped from get/list/search_issues; open_record ternary URL
+       dropped; update_issue browser flavor restricted to the close
+       gesture). Transitions cover the atom-relevant nav edges
+       (repo/list -> detail -> new-issue) derived from the recipe
+       `navigate` steps + the obvious GitHub URL hierarchy. Every
+       screen carries status: undocumented_live until a hardening
+       session verifies its DOM."
+
+# ─── Screens ──────────────────────────────────────────────────────
+# One screen per views/*.yaml. url_pattern + landmark are summarized
+# from the view file (the authoritative copy); see the named view for
+# the exact probe selector + verify chain.
+
+screens:
+  RepositoryView:
+    view: RepositoryView
+    url_pattern: "https://github.com/{owner}/{repo}"
+    purpose: "Repository home. The default landing anchor for any repo-scoped action that needs the user to be somewhere in the repo first (depends_on_view:any atoms can start here)."
+    affordances_summary: "Global search, the Create-new (+) menu, repo-card links into sub-pages."
+    distinctives:
+      - "Landmark probe is the repo PJAX container (`[data-pjax-container='#js-repo-pjax-container']`) with a `main` fallback — GitHub still ships PJAX/Turbo containers, not a SPA root. See views/RepositoryView.yaml for the exact selector."
+      - "URL verify is anchored (`^https://github.com/[^/]+/[^/]+/?$`) so it does NOT false-match the deeper /issues, /pulls, /pull/N, /issues/N pages."
+    source: "derived from views/RepositoryView.yaml + widgets.yaml; not live-probed"
+    status: undocumented_live
+
+  IssueList:
+    view: IssueList
+    url_pattern: "https://github.com/{owner}/{repo}/issues"
+    purpose: "The repo's issue table (defaults to open issues). Entry point for finding an issue before a per-issue action; also the create-issue jump-off via the New menu."
+    affordances_summary: "Global search (also the in-page issue filter), the New (issue) button."
+    distinctives:
+      - "Landmark probe is `[aria-label='Issues'], [data-testid='issue-list']` (view file). Per-row scraping is NOT modeled — list_issues uses the REST flavor instead of DOM extraction (see actions/list_issues.yaml changelog 0.2.0: the browser flavor was DROPPED because the list is paginated MPA HTML)."
+    source: "derived from views/IssueList.yaml; not live-probed"
+    status: undocumented_live
+
+  IssueView:
+    view: IssueView
+    url_pattern: "https://github.com/{owner}/{repo}/issues/{issue_number}"
+    purpose: "A single issue's detail page. Anchor for add_issue_comment + update_issue (close gesture)."
+    affordances_summary: "Comment textarea + Comment submit, Close/Reopen issue, Edit-title."
+    distinctives:
+      - "depends_on_view for add_issue_comment and update_issue (both navigate here first via the recipe `nav_*` step)."
+      - "Issues and PRs share one number sequence in a repo (PRs are issues at the REST layer); a `/issues/{n}` URL for a number that is actually a PR redirects to `/pull/{n}`. The Issue schema's composite PK is (owner, repo, number) — see schemas/Issue.yaml."
+      - "Comment + close/reopen widgets are the SAME comment widgets reused on PullRequestView (the comment textarea/submit are shared)."
+    source: "derived from views/IssueView.yaml + actions/{add_issue_comment,update_issue}.yaml; not live-probed"
+    status: undocumented_live
+
+  NewIssue:
+    view: NewIssue
+    url_pattern: "https://github.com/{owner}/{repo}/issues/new"
+    purpose: "The new-issue form. depends_on_view target for create_issue (the recipe navigates here, fills title + body, user clicks Submit)."
+    affordances_summary: "Title input, Markdown body textarea, Submit-new-issue button."
+    distinctives:
+      - "The view file's own description flags a TEMPLATE-PICKER interstitial: if the repo defines issue templates, `/issues/new` shows a chooser first and the form only mounts after a template is picked. The create_issue browser recipe navigates straight to `/issues/new` and the title-input landmark may not be present until the template is chosen. This interstitial is NOT yet handled in the recipe — flag for the first hardening session (see known_dead_paths.new_issue_template_picker_unhandled)."
+      - "Submit verify is the `/issues/{number}` URL transition (the created issue's page) — a real positive rung, captured by create_issue's `url_matches` outcome."
+    source: "derived from views/NewIssue.yaml + actions/create_issue.yaml; not live-probed"
+    status: undocumented_live
+
+  PullRequestList:
+    view: PullRequestList
+    url_pattern: "https://github.com/{owner}/{repo}/pulls"
+    purpose: "The repo's pull-request table. Navigation anchor for finding a PR before merge_pull_request."
+    affordances_summary: "Global search, the New (PR) button."
+    distinctives:
+      - "No atom scrapes this list (no list_pull_requests atom is authored yet — the MCP/REST list_pull_requests tools exist in the catalog but no atom wraps them). Modeled for navigation completeness."
+    source: "derived from views/PullRequestList.yaml; not live-probed"
+    status: undocumented_live
+
+  PullRequestView:
+    view: PullRequestView
+    url_pattern: "https://github.com/{owner}/{repo}/pull/{pull_number}"
+    purpose: "A single PR's detail (Conversation tab). Anchor for merge_pull_request + (shared) comment widgets."
+    affordances_summary: "Comment textarea + Comment submit (shared with IssueView), the Merge-pull-request button + the Confirm-merge button (two-step merge)."
+    distinctives:
+      - "Merge is a TWO-STEP gesture in the browser flavor: click the merge button (which may read 'Merge pull request' / 'Squash and merge' / 'Rebase and merge' depending on repo settings — the widget lists all three), THEN click the revealed Confirm button. See merge_pull_request.yaml recipe (click_merge -> click_confirm, commit:true on confirm)."
+      - "The merge button's available label is repo-configured (allowed merge methods); the widget anchors on `:has-text(...)` across the three variants. This `:has-text` reliance is a fragility flagged in known_dead_paths until a live probe confirms the real DOM."
+      - "Mergeability is server-computed and may be null on first read (see schemas/PullRequest.yaml mergeable / mergeable_state) — a PR can be blocked by branch protection; merge_pull_request's REST flavor surfaces 405 in that case (apis.yaml rest_merge_pull_request notes)."
+    source: "derived from views/PullRequestView.yaml + actions/merge_pull_request.yaml; not live-probed"
+    status: undocumented_live
+
+  # ── Screens referenced by the catalog/schemas but NOT yet given a view ──
+  # The MCP catalog + schemas reference these surfaces; no views/*.yaml
+  # exists for them yet because no atom navigates there. Listed so propose
+  # knows they're real GitHub screens, not invented.
+  UserProfile:
+    url_pattern: "https://github.com/{login}"
+    purpose: "A user/org profile page (schemas/User.yaml; the get_me / search_users MCP tools target this data via API, not the DOM)."
+    status: undocumented
+  Search:
+    url_pattern: "https://github.com/search?q={query}&type={issues|pull_requests|repositories|users}"
+    purpose: "GitHub global search results. search_issues uses the REST/MCP search endpoints (no browser flavor), so this screen is API-backed, not DOM-driven, in the current atoms."
+    status: undocumented
+
+# ─── Affordances ──────────────────────────────────────────────────
+# What each screen offers + which widget primitive backs it + which
+# atom(s) exercise it. Selectors are NOT restated — see widgets.yaml.
+# `widget:` values are widgets.yaml ids; `atoms:` is derived from the
+# actions/*.yaml recipes (keep in sync by hand for now).
+
+affordances:
+  RepositoryView:
+    global_search:
+      - { label: "Global / repo search", widget: github.global_search_input, atoms: [], note: "available on every repo screen; no atom drives it yet (search_issues uses the REST flavor, not this box)" }
+    create_menu:
+      - { label: "Create new (+) menu", widget: github.new_button, atoms: [], note: "click_reveals the New menu (new repo / issue / etc.)" }
+    navigation:
+      - { label: "Repo-card link", widget: github.repo_card_link, atoms: [], note: "click_navigates into a repo from a card/listing; nav affordance only" }
+
+  IssueList:
+    search:
+      - { label: "Issue search / filter", widget: github.global_search_input, atoms: [] }
+    create:
+      - { label: "New issue", widget: github.new_button, atoms: [], note: "jump-off to NewIssue; create_issue navigates to /issues/new directly rather than clicking this" }
+
+  IssueView:
+    comment:
+      - { label: "Comment body", widget: github.issue_comment_textarea, atoms: [add_issue_comment] }
+      - { label: "Submit comment", widget: github.submit_issue_comment_button, atoms: [add_issue_comment], commit: true, l4: "selector_appears `[data-testid='issue-comment'], .timeline-comment` (the new comment renders) — see actions/add_issue_comment.yaml" }
+    state_change:
+      - { label: "Close issue", widget: github.close_issue_button, atoms: [update_issue], commit: true, note: "the ONLY update gesture wired in the browser flavor (update_issue 0.2.0); l4 is a network_response on PATCH /issues/{n}" }
+      - { label: "Reopen issue", widget: github.reopen_issue_button, atoms: [], note: "widget exists; NOT wired in any browser recipe yet — reopen routes through mcp/oauth_api (update_issue changelog 0.2.0)" }
+    edit:
+      - { label: "Edit issue title", widget: github.edit_issue_title_button, atoms: [], note: "click_reveals the title input; no atom drives a title edit in the browser flavor yet (title edits route through mcp/oauth_api)" }
+    deferred:
+      - "Sidebar pickers (Assignees, Labels, Milestones, Projects) have NO widget — explicitly deferred in widgets.yaml (they need an open-picker + select-option + verify composite the current archetypes don't model). update_issue's assignees/labels/milestone inputs route through mcp/oauth_api today; heal-time will author the pickers. See known_dead_paths.sidebar_pickers_deferred."
+
+  PullRequestList:
+    search:
+      - { label: "PR search / filter", widget: github.global_search_input, atoms: [] }
+    create:
+      - { label: "New PR", widget: github.new_button, atoms: [] }
+
+  PullRequestView:
+    comment:
+      - { label: "Comment body", widget: github.issue_comment_textarea, atoms: [add_issue_comment], note: "same comment widget as IssueView; add_issue_comment accepts a PR number (PRs are issues server-side)" }
+      - { label: "Submit comment", widget: github.submit_issue_comment_button, atoms: [add_issue_comment], commit: true }
+    merge:
+      - { label: "Merge pull request (step 1)", widget: github.merge_pull_request_button, atoms: [merge_pull_request], note: "click_reveals the confirm button; label varies by allowed merge method (merge/squash/rebase)" }
+      - { label: "Confirm merge (step 2)", widget: github.confirm_merge_button, atoms: [merge_pull_request], commit: true, l4: "selector_appears `[class*='State']:has-text('Merged')` — see actions/merge_pull_request.yaml" }
+
+# ─── Known-dead / deferred paths ──────────────────────────────────
+# Forward-facing only: currently-dead, deferred, or known-fragile
+# paths. Because github has NOT been live-hardened, MOST entries here
+# are DEFERRALS already declared in the manifest changelogs (a real
+# probe may later promote some to confirmed-dead or clear them). No
+# entry below is a confirmed live DOM drift — none has been probed.
+
+known_dead_paths:
+  - id: sidebar_pickers_deferred
+    description: "Issue/PR sidebar pickers — Assignees, Labels, Milestones, Projects — have NO widget primitive. They need an open-picker + select-option + verify composite the current archetypes (text_input / contenteditable_input / click_reveals / click_navigates / click_toggles) don't model cleanly."
+    deferred: true
+    discovered: 2026-05-23
+    discovered_in: widgets.yaml _meta.description (coverage note)
+    alternative: "update_issue / create_issue route assignees/labels/milestone through the mcp + oauth_api flavors (which take them as structured inputs). Browser-flavor picker authoring is deferred to heal-time. Confirm the live picker DOM in the first hardening session before authoring."
+    status: deferred
+
+  - id: read_atoms_have_no_browser_flavor
+    description: "get_issue, list_issues, and search_issues ship NO browser flavor (mcp > oauth_api only). The list/search pages are paginated MPA HTML; scraping a structured issues/items array off the DOM was judged less reliable than one REST call, and an early literal:[] / literal:{} browser flavor broke callers expecting real objects."
+    dead_path: "browser-flavor DOM scrape of get_issue / list_issues / search_issues"
+    discovered: 2026-05-23
+    discovered_in: actions/{get_issue,list_issues}.yaml changelog 0.2.0
+    alternative: "Use the mcp or oauth_api flavor for all three reads (spec 70 §7: reads prefer mcp/oauth > browser). Only add a browser read flavor if a future need requires the user to SEE the scrape."
+    status: by_design
+
+  - id: open_record_ternary_url_dropped
+    description: "open_record originally used a multi-branch ternary URL template to map object_type -> path segment (issues/N vs pull/N vs repo home). The runtime template engine supports neither ternaries nor string concatenation, so that template never rendered."
+    dead_path: "ternary URL template in open_record keyed on object_type"
+    discovered: 2026-05-23
+    discovered_in: actions/open_record.yaml changelog 0.2.0
+    alternative: "The CALLER pre-computes `record_path` (e.g. 'issues/1', 'pull/1', or '' for repo home) and open_record just navigates `https://github.com/{owner}/{repo}/{record_path}`. object_type stays as an informational input."
+    status: resolved
+
+  - id: update_issue_browser_close_only
+    description: "update_issue's browser flavor wires ONLY the close gesture. Reopen needs the issue to currently be closed (a different button), and title/body/assignees/labels edits depend on the deferred sidebar pickers + an edit-title reveal that isn't wired into a recipe."
+    dead_path: "browser-flavor reopen / title / body / metadata edit"
+    discovered: 2026-05-23
+    discovered_in: actions/update_issue.yaml changelog 0.2.0 + _meta.description
+    alternative: "Non-close updates route through the mcp / oauth_api flavors (PATCH /issues/{n} takes all fields). Wire the browser reopen + edit paths when the sidebar pickers are authored at heal-time."
+    status: deferred
+
+  - id: merge_button_has_text_fragility
+    description: "github.merge_pull_request_button + github.confirm_merge_button anchor on `:has-text('Merge pull request' | 'Squash and merge' | 'Rebase and merge')` (and the matching Confirm variants). Text-anchored selectors are brittle (i18n, label rewording, the button being disabled by branch protection). NOT yet live-verified against the real PR DOM."
+    suspected: true
+    discovered: 2026-05-23
+    discovered_in: widgets.yaml github.merge_pull_request_button / github.confirm_merge_button
+    alternative: "First hardening session: probe the real merge button DOM (data-testid / aria-label / disabled state when blocked) and replace/augment the :has-text anchors. Prefer the oauth_api merge flavor for headless reliability (handles the 405-on-blocked case explicitly per apis.yaml)."
+    status: suspected_unverified
+
+  - id: new_issue_template_picker_unhandled
+    description: "If the repo defines issue templates, /issues/new shows a template CHOOSER interstitial before the form mounts. create_issue's browser recipe navigates straight to /issues/new and expects the title input; on a template repo the title-input landmark may be absent until a template is picked."
+    suspected: true
+    discovered: 2026-05-23
+    discovered_in: views/NewIssue.yaml _meta.description (template-picker note)
+    alternative: "First hardening session: detect the chooser and either pick a blank/default template or deep-link the blank form (`/issues/new?template=` / the 'Open a blank issue' link). For now create_issue is reliable only on repos WITHOUT issue templates; mcp/oauth_api create_issue is template-agnostic."
+    status: suspected_unverified
+
+# ─── Transitions ──────────────────────────────────────────────────
+# Atom-relevant navigation edges. GitHub is URL-keyed (MPA + Turbo),
+# so most edges are a direct URL navigation (the recipe `navigate`
+# steps) or a link/menu click. Derived from the views' URL patterns +
+# the actions/*.yaml `nav_*` recipe steps + the obvious GitHub URL
+# hierarchy.
+
+transitions:
+  - { from: RepositoryView, to: IssueList, via: "Issues tab, OR navigate /{owner}/{repo}/issues" }
+  - { from: RepositoryView, to: PullRequestList, via: "Pull requests tab, OR navigate /{owner}/{repo}/pulls" }
+  - { from: IssueList, to: IssueView, via: "click an issue row, OR navigate /{owner}/{repo}/issues/{n} (add_issue_comment / update_issue recipe `nav_*` step)" }
+  - { from: IssueList, to: NewIssue, via: "New issue button (github.new_button), OR navigate /{owner}/{repo}/issues/new (create_issue recipe `nav_new` step)" }
+  - { from: NewIssue, to: IssueView, via: "Submit new issue (github.submit_new_issue_button, commit) → lands on /issues/{number} (create_issue url_matches outcome)" }
+  - { from: PullRequestList, to: PullRequestView, via: "click a PR row, OR navigate /{owner}/{repo}/pull/{n} (merge_pull_request recipe `nav_pr` step)" }
+  - { from: PullRequestView, to: PullRequestView, via: "Merge (github.merge_pull_request_button) → Confirm (github.confirm_merge_button, commit) — same URL, state badge flips to Merged" }
+  - { from: any, to: RepositoryView, via: "navigate /{owner}/{repo} (open_record with record_path='')" }
+  - { from: any, to: IssueView, via: "navigate /{owner}/{repo}/issues/{n} (open_record with record_path='issues/{n}')" }
+  - { from: any, to: PullRequestView, via: "navigate /{owner}/{repo}/pull/{n} (open_record with record_path='pull/{n}')" }
+
+# ─── Atoms cross-reference ────────────────────────────────────────
+# Which atoms exercise which screen / affordance. Helps propose see
+# precedent + helps the user audit "if I change widget X, what
+# breaks?". Derived from actions/*.yaml; keep in sync by hand.
+# Note: get_issue / list_issues / search_issues are API-only (no
+# screen) — they don't appear here.
+
+atoms_using:
+  IssueView.issue_comment_textarea: [add_issue_comment]
+  IssueView.submit_issue_comment_button: [add_issue_comment]
+  IssueView.close_issue_button: [update_issue]
+  IssueView.reopen_issue_button: []          # widget exists; routed through mcp/oauth_api
+  IssueView.edit_issue_title_button: []       # widget exists; routed through mcp/oauth_api
+  NewIssue.new_issue_title_input: [create_issue]
+  NewIssue.new_issue_body_textarea: [create_issue]
+  NewIssue.submit_new_issue_button: [create_issue]
+  PullRequestView.issue_comment_textarea: [add_issue_comment]   # PRs are issues
+  PullRequestView.submit_issue_comment_button: [add_issue_comment]
+  PullRequestView.merge_pull_request_button: [merge_pull_request]
+  PullRequestView.confirm_merge_button: [merge_pull_request]
+  RepositoryView.global_search_input: []      # no atom drives the search box (search_issues uses REST)
+  RepositoryView.new_button: []
+  RepositoryView.repo_card_link: []           # nav affordance; open_record navigates by URL instead

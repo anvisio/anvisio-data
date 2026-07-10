@@ -1,0 +1,17 @@
+_meta:
+  name: manifests/coffee/blueprints/object_crud_smoke.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    CRUDS smoke over the object-generic atoms (create -> search -> get -> update -> delete).
+
+name: object_crud_smoke
+steps:
+  - id: create
+    call: coffee.atom.create_object
+    with: { object: Person, fields: { first: "Smoke", email: "smoke@example.com" } }
+  - id: find
+    call: coffee.atom.search_objects
+    with: { object: Person, query: "Smoke" }

@@ -1,0 +1,105 @@
+_meta:
+  name: manifests/salesforce/actions/run_report.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-19
+  description: |
+    run_report atom — run a SAVED Salesforce report by id and return its
+    server-computed aggregates (the factMap grand total + any group totals).
+    The Report (R) primitive for "run report X / what's the total in report X".
+
+    runReport(reportId) ALONE runs the report from its saved definition (no
+    metadata needed) — live-proven 2026-06-19. Reachable via the session
+    cookie + Aura (ReportPageController.runReport, callingDescriptor:'UNKNOWN').
+    The `browser` flavor NAVIGATES to the report first so the user SEES it
+    (show-your-work); `session_api` is the headless read. (No mcp flavor — the
+    Analytics REST API 401s on the session cookie; Aura is the reachable path.)
+
+    To DISCOVER which reports exist, use list_reports. To AGGREGATE over an
+    object with NO saved report, an ad-hoc summary report is the follow-up
+    (compose reportMetadata + runReport, no save).
+  changelog:
+    - "0.1.0 (2026-06-19): initial — call_platform_api → aura runReport(reportId) → from_report_factmap (grand_total + aggregate_names + per-group totals). NOTE: SUMMARY reports compute the grand total server-side over ALL matching rows; a TABULAR report caps its total at the 10k row limit (hasExceededTabularRowLimit / allData:false), so a tabular report's total can UNDERCOUNT a large object — prefer a summary report for a true total. Live-proven: 'jobber jobs for checkup' → grand total $21,936,026.80 / 10,000 (tabular, capped)."
+
+description: >
+  Run a saved Salesforce report by id; returns its server-computed
+  aggregates (grand total + group totals) from the report factMap.
+object: Report
+commits_changes: false
+depends_on_view: any
+mcp_tool: salesforce.run_report
+inputs:
+  report_id:
+    type: text
+    required: true
+    sample: "00OOG000006DIDN2A4"
+result:
+  # v71: outcome = the winning action ("ran"), auto-populated by the runtime.
+  outcome: text
+  report:
+    type: object
+    description: >
+      The report's computed aggregates:
+      { grand_total: [{label, value}],  # in reportMetadata.aggregates order
+        aggregate_names: [...],          # e.g. ['s!Jobber_Jobs__c.Job_Total__c','RowCount']
+        groups: [{label, value, aggregates: [{label, value}]}] }  # summary reports
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: Run a saved SF report via Aura runReport (session cookie)
+    recipe:
+      - id: run_report
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "serviceComponent://ui.analytics.reporting.runpage.ReportPageController/ACTION$runReport"
+            # Container so from_report_factmap reads .factMap / .reportMetadata
+            # / .groupingsDown off the step result.
+            extract_path: "actions[0].returnValue"
+          args:
+            reportId: "{{inputs.report_id}}"
+    outcomes:
+      - action: ran
+        # runReport runs entirely inside the call_platform_api step (no DOM/URL
+        # transition); url_matches on the SF domain resolves on the first poll
+        # and extract then reads the step result. (Same pattern as query_records.)
+        signal:
+          type: url_matches
+          pattern: "lightning\\.force\\.com"
+          timeout_ms: 15000
+        extract:
+          report:
+            from_report_factmap: run_report
+  browser:
+    requires_auth: session_cookie
+    label: Show the report (for user context) + read its aggregates via runReport
+    # SHOW the report (navigate to its /view so the user sees the filters,
+    # columns and totals — context + trust) AND return the structured aggregates
+    # from the SAME runReport Aura call (the data source is the call, not the
+    # DOM; the navigate is purely for human context). No DOM wait — the Aura
+    # call doesn't depend on the report having rendered.
+    recipe:
+      - id: goto_report
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/r/Report/{{inputs.report_id}}/view"
+      - id: run_report
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "serviceComponent://ui.analytics.reporting.runpage.ReportPageController/ACTION$runReport"
+            extract_path: "actions[0].returnValue"
+          args:
+            reportId: "{{inputs.report_id}}"
+    outcomes:
+      - action: ran
+        signal:
+          type: url_matches
+          pattern: "/lightning/r/Report/"
+          timeout_ms: 20000
+        extract:
+          report:
+            from_report_factmap: run_report

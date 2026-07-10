@@ -1,0 +1,39 @@
+_meta:
+  name: manifests/slack/actions/open_channel.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    open_channel atom: navigate to a Slack channel or DM. Browser-
+    only; read-only navigation primitive.
+
+description: Open a Slack channel or DM.
+object: "{{inputs.channel_id}}"
+object_types: [Channel]
+commits_changes: false
+depends_on_view: any
+inputs:
+  workspace_id: { type: text, required: true, sample: "T0AMCC1EXRV" }
+  channel_id:   { type: text, required: true, description: "Channel (C), DM (D), group DM (G), or multi-party im (M) id.", sample: "C0AMQCYHKE1" }
+result:
+  opened: boolean
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Navigate to the channel SPA URL
+    recipe:
+      - id: nav_channel
+        type: navigate
+        args:
+          url: "https://app.slack.com/client/{{inputs.workspace_id}}/{{inputs.channel_id}}"
+    outcomes:
+      - action: opened
+        signal:
+          type: url_matches
+          pattern: "/client/[A-Z0-9]+/[CDGM][A-Z0-9]+"
+          timeout_ms: 10000
+        extract:
+          opened:
+            literal: true

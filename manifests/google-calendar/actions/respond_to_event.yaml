@@ -1,0 +1,106 @@
+_meta:
+  name: manifests/google-calendar/actions/respond_to_event.yaml
+  version: 0.4.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    respond_to_event atom: RSVP to an event invitation. The browser
+    flavor reaches the event via EventDetail and, on commit, clicks the
+    matching RSVP button; the mcp flavor calls the respond-to-event tool.
+    LIVE-HARDENED 2026-06-08 against a real invitation.
+  changelog:
+    - "0.4.0 (2026-06-08): CANONICAL ACTION FORM v71 + browser flavor LIVE-FIXED (the prior browser flavor was 100% research-grounded and 100% WRONG — verified against a real invitation 2026-06-08). FINDINGS: the RSVP buttons are plain <button aria-label='Respond Yes'|'Respond No'|'Respond Maybe'> (text Yes/No/Maybe); the API enum (accepted/declined/tentative) appears NOWHERE in the DOM. ALL prior guesses were dead: [data-response-status='{{response}}'] (0), [aria-label*='{{response}}'] (0), and the responded signal [role='button'][aria-pressed='true'] (0 — there is NO aria-pressed). After an RSVP the popup CLOSES + a generic 'Loading...' toast fires (no specific success toast). FIX: (1) the browser recipe now uses a new resolve_rsvp step that maps the enum → the button aria-label (response_label) and clicks it (the enum→label map can't live in a widget). (2) responded outcome signal = the EventDetail popup closing (selector_disappears [role='dialog']) — the only reliable post-RSVP signal. (3) v71: result.outcome:text replaces the `responded` boolean; the ready_to_respond pseudo-outcome is dropped. (4) the rsvp_button WIDGET is removed (unused — the browser flavor uses resolve_rsvp). KNOWN HITL limitation: dialog-closed is shared with Escape/close (no specific RSVP toast to disambiguate). FOLLOW-UP: a session_api flavor IS possible (gapi events.patch self responseStatus — PROVEN to work live 2026-06-08, 200), but events.patch REPLACES the attendees array (needs the full list + the self email), which the declarative recipe DSL can't construct in one call — needs a small read-modify-write runtime helper."
+    - "0.3.0 (2026-05-28): add optional occurrence_date input — the EventDetail entry navigates the grid to that day before clicking the chip, so RSVP reaches an event off the currently-shown range (gotcha #2)."
+    - "0.2.0 (2026-05-24): add schema-typed result.event per v70 signature parity rule. Both flavors echo event.Id from the event_id input."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.respond-to-event. No oauth_api flavor: Calendar API v3 has no dedicated RSVP endpoint."
+
+description: >
+  RSVP to an event invitation on the user's behalf — accept, decline, or
+  mark tentative. The browser flavor opens the event detail popup and, on
+  commit, clicks the matching RSVP button (Yes / No / Maybe); preview mode
+  reaches the popup and stops. The mcp flavor calls the respond-to-event tool.
+object: Event
+commits_changes: true
+depends_on_view: EventDetail
+mcp_tool: google-calendar.respond-to-event
+inputs:
+  event_id:
+    type: text
+    required: true
+    description: Google Calendar event id to RSVP to.
+  response:
+    type: text
+    required: true
+    description: "RSVP response: one of accepted, declined, tentative."
+  calendar_id:
+    type: text
+    description: Calendar id the event belongs to. Defaults to the primary calendar.
+  occurrence_date:
+    type: text
+    description: |
+      Optional ISO date of the event's occurrence. When set, the browser
+      flavor navigates the grid to that day so the chip renders even if it's
+      off the currently-shown range (gotcha #2). Omit when already on the
+      visible grid.
+result:
+  # v71: outcome = the winning action ("responded"), auto-populated.
+  outcome: text
+  event:
+    schema: Event
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Click the matching RSVP button in the event popup when commit:true
+    # v71 signals model: responded = the EventDetail popup closes after the RSVP
+    # commits. LIVE-VERIFIED 2026-06-08: clicking 'Respond Yes' closes the popup
+    # + fires a generic 'Loading...' toast (NO specific success toast, NO
+    # aria-pressed state). The popup-close is the only reliable signal; it is
+    # shared with Escape/close (HITL limitation — there is no RSVP-specific
+    # toast to disambiguate a real RSVP from the user dismissing the popup).
+    signals:
+      responded:
+        type: selector_disappears
+        selector: "[role='dialog']"
+    recipe:
+      # resolve_rsvp maps the API enum (accepted/declined/tentative) → the
+      # button aria-label (Respond Yes/No/Maybe) and clicks it. The enum never
+      # appears in the DOM, so the map lives here (no widget can express it).
+      - id: rsvp
+        type: resolve_rsvp
+        commit: true
+        args:
+          response: "{{inputs.response}}"
+          response_label:
+            accepted: "Respond Yes"
+            declined: "Respond No"
+            tentative: "Respond Maybe"
+          button_target:
+            - "[role='dialog'] button"
+            - button
+    outcomes:
+      - action: responded
+        when: [responded]
+        extract:
+          event:
+            Id:
+              from_input: event_id
+  mcp:
+    requires_auth: mcp_server
+    label: RSVP via the google-calendar respond-to-event MCP tool
+    server: google-calendar
+    tool: respond-to-event
+    inputs_map:
+      eventId: "{{inputs.event_id}}"
+      calendarId: "{{inputs.calendar_id}}"
+      response: "{{inputs.response}}"
+    outcomes:
+      - action: responded
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          event:
+            Id:
+              from_input: event_id

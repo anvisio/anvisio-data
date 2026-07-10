@@ -1,0 +1,101 @@
+_meta:
+  name: manifests/asana/actions/add_task_comment.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    add_task_comment atom: post a comment (story) on a task.
+    commits_changes:true.
+
+    Browser flavor cannot surface comment_gid (Asana puts it only in
+    the POST response body, not the DOM). Callers needing the gid
+    should pick the mcp or oauth_api flavor. The browser-flavor signal
+    is the SPA's own POST to /stories.
+  changelog:
+    - "0.2.0 (2026-05-23): drop misleading literal:null on
+       comment_gid; document browser flavor limitation. Switch
+       browser-flavor signal to the SPA's network POST so we detect
+       the actual write instead of an arbitrary DOM landmark."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Post a comment on an Asana task.
+object: "{{inputs.task_gid}}"
+object_types: [Task]
+commits_changes: true
+depends_on_view: TaskDetail
+mcp_tool: asana.add_task_comment
+inputs:
+  project_id: { type: text, required: false, default: "0" }
+  task_gid:   { type: text, required: true }
+  text:       { type: text, required: true }
+  html_text:  { type: text, required: false, description: "HTML-formatted comment (mutually exclusive with text)." }
+result:
+  comment_gid: string
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open task pane + fill comment + send (user confirms on commit:true)
+    recipe:
+      - id: nav_task
+        type: navigate
+        args:
+          url: "https://app.asana.com/0/{{inputs.project_id}}/{{inputs.task_gid}}"
+      - id: fill_comment
+        type: use_widget
+        args:
+          widget: asana.task_comment_input
+          op: fill
+          value: "{{inputs.text}}"
+      - id: send
+        type: use_widget
+        args:
+          widget: asana.submit_comment_button
+          op: invoke
+        commit: true
+    outcomes:
+      - action: commented
+        signal:
+          type: network_response
+          url_pattern: "app.asana.com/api/1.0/tasks/*/stories"
+          status: 201
+          timeout_ms: 8000
+        extract: {}
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Asana MCP add_task_comment
+    server: asana
+    tool: add_task_comment
+    outcomes:
+      - action: commented
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          comment_gid:
+            from_api_response: true
+            path: data.gid
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST POST /tasks/{gid}/stories
+    request:
+      method: POST
+      url: "https://app.asana.com/api/1.0/tasks/{{inputs.task_gid}}/stories"
+      body:
+        data:
+          text:      "{{inputs.text}}"
+          html_text: "{{inputs.html_text}}"
+    outcomes:
+      - action: commented
+        signal:
+          type: network_response
+          url_pattern: "asana.com/api/1.0/tasks/*/stories"
+          status: 201
+        extract:
+          comment_gid:
+            from_api_response: true
+            path: data.gid

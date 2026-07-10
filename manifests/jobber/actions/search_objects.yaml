@@ -1,0 +1,100 @@
+_meta:
+  name: manifests/jobber/actions/search_objects.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    search_objects — the OBJECT-GENERIC search atom (Rule Q). ONE atom searches
+    any Jobber object; the per-object Relay query (<objects>(searchTerm, first))
+    lives in each schema's `graphql.search` descriptor. Read-only. NOTE: a few
+    objects (Visit) have no searchTerm arg — their descriptor omits it.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Replaces search_clients/search_properties/
+       search_jobs. session_api = resolve_object → call_platform_api; browser =
+       the object's list page (FLAGGED; some objects have no standalone list)."
+
+description: Search any Jobber object by term (Client, Property, Job, Quote, Invoice, Request, Visit).
+object: "{{inputs.object}}"
+object_types: [Client, Property, Job, Quote, Invoice, Request, Visit]
+commits_changes: false
+depends_on_view: any
+inputs:
+  object:
+    type: text
+    required: true
+    sample: Client
+  query:
+    type: text
+    required: false
+    description: Free-text search term (omitted for objects with no searchTerm, e.g. Visit).
+    sample: "Acme"
+  limit:
+    type: number
+    required: false
+    default: 25
+    description: Max results (Relay `first`).
+result:
+  records:
+    schema_list_union: [Client, Property, Job, Quote, Invoice, Request, Visit]
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL <objects>(searchTerm, first) via the session cookie (resolve_object dispatch)
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: search
+      - id: gql
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            query: "{{steps.desc.query}}"
+            extract_path: "{{steps.desc.extract_path}}"
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+          args: "{{steps.desc.variables}}"
+    outcomes:
+      - action: searched
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          records:
+            from_step: gql
+            path: ""
+
+  browser:
+    requires_auth: session_cookie
+    label: Open the object's list page filtered by the term
+    # FLAGGED: {segment} list page; some objects have no standalone list (Property
+    # under clients; Visit in a job schedule). session_api is the proven path.
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: search
+      - id: nav
+        type: navigate
+        args:
+          url: "{instance.origin}/{{steps.desc.url_segment}}?search={{inputs.query}}"
+      - id: wait_list
+        type: wait_for_element
+        args:
+          selector: "table, [role='table'], h1"
+          timeout_ms: 10000
+    outcomes:
+      - action: searched
+        signal:
+          type: selector_appears
+          selector: "table, [role='table'], h1"
+        extract:
+          records:
+            from_input: query

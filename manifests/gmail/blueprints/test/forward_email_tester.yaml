@@ -1,0 +1,58 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: forward-email-tester
+  version: '1.2.0'
+  title: Gmail forward_email browser-flavor tester
+  summary: |
+    Live-verifies the forward_email browser flavor end-to-end. Same
+    shape as reply_email_tester but uses gmail.thread_forward_button
+    to open the forward composer (which DOES require an explicit To
+    address — the atom's inputs.fields.To is mandatory, unlike reply
+    where Gmail auto-fills).
+
+    v1.2.0 (2026-05-26): force `flavor: browser` on the search step —
+    same rationale as reply_email_tester 1.2.0 (BYOK accounts default
+    to oauth_api which returns thread.id ids that fail Gmail's
+    cold-load `#all/<id>` URL routing).
+
+    v1.1.0 (2026-05-26): self-discover the thread_id via
+    search_emails so the tester doesn't rot when the previously-
+    hardcoded id is archived/deleted. Forward address is
+    forward-test@anvisio.com (a sink — not a real mailbox); the
+    commit:false Send-skip keeps the tester non-destructive.
+
+    Drive via: /run-blueprint gmail forward_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to forward
+      call: gmail.atom.search_emails
+      flavor: browser  # see v1.2.0 changelog above
+      with:
+        query: 'newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - forward_throwaway:
+      label: Forward the picked thread (preview mode — no Send)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'forward thread'
+        item_link:
+          view: ThreadView
+          with:
+            messageId: '${ $tid }'
+      do:
+        - forward:
+            call: gmail.atom.forward_email
+            commit: false
+            with:
+              messageId: '${ $tid }'
+              To: ['forward-test@anvisio.com']
+              Body: |
+                This forward was drafted by the gmail
+                forward_email_tester blueprint. The Send step is
+                skipped (commit:false) so no email leaves your
+                account; click Send manually to verify the
+                post-commit sent outcome.

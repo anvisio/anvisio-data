@@ -1,0 +1,61 @@
+_meta:
+  name: manifests/outlook/actions/read_email.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    read_email atom: return subject/from/body of the latest message in a
+    conversation. Read-only.
+
+    Browser flavor: MessageView's entry recipe row-clicks the matching
+    data-convid in the persistent message list (OWA reads side-by-side, so
+    the list stays put — no fresh-tab clone like gmail), then read_fields
+    scrapes Subject/From/Body off the ConversationContainer reading pane via
+    the outlook.conv_* read widgets. messageId is the data-convid from
+    search_emails.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new. read_fields over the Conversation read object (separate from the compose Message object, per the gmail Thread/Message split). KNOWN HARDEN ITEMS (#2): the conv_subject scoping (first L3 heading came back empty in one CC-scoped probe) and the conv_body selector (inline div for simple messages; iframe for rich bodies) are confirmed live in Phase 4."
+
+object: Conversation
+commits_changes: false
+depends_on_view: MessageView
+mcp_tool: outlook.read_email
+inputs:
+  messageId:
+    type: text
+    required: true
+    description: Conversation id (data-convid) from search_emails.
+result:
+  subject: text
+  from: email
+  body: rich_text
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Read the open conversation (latest message)
+    recipe:
+      - id: read_conv
+        type: read_fields
+        args:
+          object: Conversation
+          only:
+            - Subject
+            - From
+            - Body
+    outcomes:
+      - action: read
+        signal:
+          type: selector_appears
+          selector: "[data-app-section='ConversationContainer']"
+          timeout_ms: 8000
+        extract:
+          subject:
+            from_step: read_conv
+            path: fields.Subject
+          from:
+            from_step: read_conv
+            path: fields.From
+          body:
+            from_step: read_conv
+            path: fields.Body

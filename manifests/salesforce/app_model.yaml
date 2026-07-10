@@ -1,0 +1,294 @@
+_meta:
+  name: manifests/salesforce/app_model.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-30
+  description: |
+    Semantic-layer model for Salesforce Lightning Experience. Catalogs
+    the screens of the *.lightning.force.com UI, the affordances on each,
+    known/suspected dead paths the audit/heal/propose loops should NOT
+    keep rediscovering, and the transitions between screens. Consumed by
+    propose / heal / Claude when authoring or auditing atoms. The runtime
+    ignores this file.
+
+    Seeded 2026-05-30 from: the live-tested 8/8-CRUD spec-70 manifest
+    (2026-05-15/16, salesforce.widgets.yaml 4.x), the spec-72 write
+    hardening pass (2026-05-29), and the search_record v3.0.0 rewire +
+    runtime isVisible fix (2026-05-30). Every screen, affordance, and
+    transition below has been EXERCISED end-to-end on the cd2k dev org
+    (CRUD chain + update/delete tester + opportunity_crud) — this is a
+    documented file, not research_only. The companion narrative is
+    salesforce.md.
+
+    Format-spec: planning/tech_design/integrations/INTEGRATION_FORMAT.md
+    (Surface 1, app_model.yaml section).
+  changelog:
+    - "0.2.0 (2026-05-30): flip known_dead_paths.listview_lag_for_just_created_records from confirmed_open → resolved (blueprint-level harden). opportunity_crud.search_for_created_opp now passes list_view_api_name: RecentlyViewedOpportunities — the blueprint's prior open_created_opp step warms LDS so RecentlyViewed sees the row immediately. Atom-level retry-with-backoff (option 2) deferred. Bundled search_and_summarize blueprint gained the now-required object_type + list_view_api_name inputs (search_record 3.0.0 required them when the broken browser flavor was removed)."
+    - "0.1.0 (2026-05-30): initial seed. Dashboard / RecordListView / RecordView / RecordEditModal / RecordNewModal / GlobalSearchResults screens. Headline content: transport_reality (SOSL-via-session-cookie unavailable, only Aura postListRecordsByName + client-filter), known_dead_paths (10 entries — REST 401 / Aura SOSL dead / listview-lag / CSS Error interstitial / welcome redirect / stage_picklist no anchor / delete button neutral class / position:fixed offsetParent / selector_disappears L4 fake-success / lightning/search deep-link), affordances live-verified on the dev org."
+
+# ─── Transport reality (salesforce-specific; the most important block) ──
+# See salesforce.md "Transport priority (spec 70 §7)" + "Three sources
+# feeding propose" for the full rationale. Summary: SF is browser-first
+# for writes (HITL visibility) and Aura session_api-first for reads — the
+# Lightning REST + GraphQL surface is unreachable from the session cookie.
+
+transport_reality:
+  verified_at: 2026-05-30   # CRUD chain re-verified end-to-end on the cd2k dev org (writes via spec 72 ladders, reads via Aura postListRecordsByName + filter primitive)
+  rest_needs_real_token: true                # /services/data/* 401 INVALID_SESSION_ID on Lightning cookie
+  rest_session_works: false                  # SOQL / SOSL / GraphQL / LWC wire adapters all route through REST
+  aura_session_works_no_oauth: true          # /aura POST with $A.clientService CSRF (MAIN-world) — postListRecordsByName proven since 2026-04-16
+  reads_are_session_api_first: true          # spec 70 §7 reads prefer session_api > mcp > browser
+  writes_are_browser_first: true             # spec 70 §7 + user-sees-the-record HITL gate (spec 72)
+  session_api_present_on: [search_record, query_records, list_records, open_record]   # writes intentionally browser-only
+  session_api_MISSING_on: []                 # the search_record v3.0.0 + filter primitive (2026-05-30) closed the last gap
+  sosl_via_session_cookie_unavailable: true  # every Aura SOSL descriptor returns callingDescriptor:'UNKNOWN' (LightningExperienceFinder/searchEntities, globalSearch, SearchController/execute, getLookupRecords, getRecentRecords — verified live 2026-05-30, searchEntities returns actions:[])
+  realistic_search_shape: per_object_listview_fetch_plus_client_filter
+  no_working_transport_in_default_posture: []   # writes always have browser; reads always have aura session_api
+  rest_classic_domain_works: true            # the {org}.my.salesforce.com REST hostname authenticates via the session cookie too, but unused at run time — Lightning is the canonical surface
+
+# ─── Screens ──────────────────────────────────────────────────────
+
+screens:
+  Dashboard:
+    view: Dashboard
+    url_pattern: "{instance.origin}/lightning/page/home"
+    purpose: "SF Lightning home / launchpad. Operating surface for global_search_input; gateway to every other view via the app launcher / Object nav (not modeled as widgets — out-of-scope for our atom set, the URL deeplinks suffice)."
+    distinctives:
+      - "Always-on chrome: header#oneHeader + .slds-global-header_container. Every Lightning route renders these — they're how the runtime knows the SPA is up at all."
+      - "The global search button is what reveals the search input — typeahead_search archetype (click trigger → type → Enter)."
+      - "Path-based routing, NOT hash. The Lightning URL grammar is /lightning/{page|o|r|n}/<rest>."
+    verified_mechanic_at: 2026-05-15   # global header + global search button live-verified in the CRUD chain
+    status: documented
+
+  RecordListView:
+    view: RecordListView
+    url_pattern: "{instance.origin}/lightning/o/{object_type}/list"
+    purpose: "Per-object list view (Recently Viewed by default). Operating surface for list_records; launchpad for create_record (New button → RecordNewModal) and open_record (row_link → RecordView)."
+    distinctives:
+      - "URL is the SAME for RecordList (v1, 60.4.2) and RecordListView (v0.1.0, 70.0.0) — two view definitions, one URL. RecordListView is the v70 successor with richer affordances; RecordList is kept for back-compat with older actions that still reference it."
+      - "Landmark: one-list-view-manager (v70) or lst-list-view-manager (v60.4.2). Both are real custom elements on the page."
+      - "list_search_input filters the visible rows in-place; it does NOT navigate. The list_view_dropdown switches between standard listviews (AllOpportunities, RecentlyViewedOpportunities, etc.)."
+      - "row_link is `a[data-refid='recordId']` (an LWC link rendered by lwc-data-table). Clicking goes straight to RecordView."
+    verified_mechanic_at: 2026-05-15   # New + row-click + list nav all part of CRUD 8/8
+    status: documented
+
+  RecordView:
+    view: RecordView
+    url_pattern: "{instance.origin}/lightning/r/{object_type}/{record_id}/view"
+    purpose: "Record detail page. Operating surface for open_record; anchor for update_record (overflow → Edit → RecordEditModal) and delete_record (overflow → Delete → confirm dialog)."
+    distinctives:
+      - "Landmark: records-highlights2 (the colored hero band with the record name + key fields). Always present on a live record."
+      - "All mutating affordances live behind the overflow caret (the down-arrow icon in the highlights toolbar). The caret reveals a dropdown menu (.slds-dropdown__item) containing Edit / Delete / Clone / etc."
+      - "The overflow `button.slds-button_icon-border-filled` is reused across pages; scoping with `records-highlights2` makes it deterministic."
+      - "The delete flow opens a confirm dialog on top of /view; cancelling stays on /view (live-confirmed 2026-05-29) — the spec-72 abandon_signal relies on this discard-safety."
+    verified_mechanic_at: 2026-05-15   # overflow + edit/delete entries proven; live-re-verified 2026-05-29 (spec-72 writes)
+    status: documented
+
+  RecordEditModal:
+    view: RecordEditModal
+    url_pattern: "{instance.origin}/lightning/r/{object_type}/{record_id}/edit?count=1&backgroundContext=%2Flightning%2Fr%2F{object_type}%2F{record_id}%2Fview"
+    purpose: "Modal that edits an existing record (own URL, not a true overlay). Operating surface for update_record. Reaches a record's editable form via the field-label anchor (records-record-layout-item[field-label='<on-page label>']) shared with RecordNewModal."
+    distinctives:
+      - "The raw `/lightning/r/{Object}/{Id}/edit` (even with `?count=1`) post-save-redirects to the org Welcome page (`/lightning/n/<app>__Welcome`) — NOT back to /view. FIXED by baking `?count=1&backgroundContext=<urlenc /view>` into entry.url (v1.1.0, 2026-05-29). See known_dead_paths.edit_deeplink_welcome_redirect."
+      - "Landmark: records-record-layout-item OR div[role='dialog'][aria-label^='Edit '] (the entry waits for either)."
+      - "Save: real `button[name='SaveEdit']` — same widget as RecordNewModal."
+      - "Opportunity.StageName needs the special `salesforce.stage_picklist` widget (wrapped in sfa-input-stage-name — no field-label anchor). See known_dead_paths.stage_picklist_no_field_label_anchor."
+    verified_mechanic_at: 2026-05-29   # spec 72 update_record_tester live-run; backgroundContext fix verified
+    status: documented
+
+  RecordNewModal:
+    view: RecordNewModal
+    url_pattern: "{instance.origin}/lightning/o/{object_type}/new"
+    purpose: "Modal that creates a new record of the given object type. Operating surface for create_record. Field-fill is identical to RecordEditModal (same field-label anchor + same Save widget)."
+    distinctives:
+      - "Landmark: records-record-layout-item OR div[role='dialog'][aria-label^='New ']."
+      - "Cancel: `button[name='CancelEdit']` OR `button[title='Cancel and close']` (the × icon)."
+      - "Discard = cancel modal: Save button gone, no 'was created' toast, nav back to the object's /list. The spec-72 abandon_signal keys on `selector_disappears SaveEdit`."
+    verified_mechanic_at: 2026-05-15   # part of CRUD 8/8; live-re-verified 2026-05-29 (spec-72 writes)
+    status: documented
+
+  GlobalSearchResults:
+    view: GlobalSearchResults
+    url_pattern: "{instance.origin}/lightning/search/..."
+    purpose: "Result list reached by typing in the global search bar (NOT by URL deeplink — see known_dead_paths.lightning_search_deeplink_broken). Only reached today by the global_search_input recipe (click search button → type query → Enter); no scrape recipe consumes its rows."
+    distinctives:
+      - "GlobalSearchResults.entry is a RECIPE (depends_on_view Dashboard + use_widget global_search_input). The URL deeplink form is NOT reliable — see known_dead_paths."
+      - "Landmark: div[role='main'] OR .forceSearchResults OR lst-list-view-manager."
+      - "search_record DOES NOT use this view (browser flavor was removed 2026-05-30); search_record v3.0.0 is Aura session_api only. GlobalSearchResults exists as a placeholder for a possible future search-box-driven recipe atom."
+    verified_mechanic_at: 2026-05-15   # global search input + landing URL proven; the structured-results scrape was never authored
+    status: partially_documented   # the recipe-entry mechanic is verified; no atom consumes the results today
+
+# ─── Affordances ──────────────────────────────────────────────────
+
+affordances:
+  Dashboard:
+    search_flow:
+      - { label: "Search", widget: salesforce.global_search_input, archetype: typeahead_search, behavior: "click search button reveals input; type query + Enter lands /lightning/search/" }
+    status: documented
+
+  RecordListView:
+    create_flow:
+      - { label: "New", widget: salesforce.new_button, archetype: click_reveals, opens: RecordNewModal, note: "Trigger is `a[title='New']` or `button[name='New']`; appearance of `button[name='SaveEdit']` proves the modal landed." }
+    list_ops:
+      - { label: "List search input", widget: salesforce.list_search_input, behavior: "in-place row filter; NOT a navigation" }
+      - { label: "List view dropdown", widget: salesforce.list_view_dropdown, behavior: "switches between standard listviews (e.g. AllOpportunities, RecentlyViewedOpportunities)" }
+      - { label: "Row link", widget: salesforce.row_link, opens: RecordView, key: "data-refid='recordId'" }
+    status: documented
+
+  RecordView:
+    overflow:
+      - { label: "Overflow caret", widget: salesforce.record_overflow_caret, archetype: click_reveals, opens: "Edit / Delete / Clone dropdown menu" }
+      - { label: "Edit (menu item)", widget: salesforce.edit_menu_item, archetype: click_reveals, opens: RecordEditModal, key: "[data-target-selection-name$='.Edit']" }
+      - { label: "Delete (menu item)", widget: salesforce.delete_menu_item, archetype: click_reveals, opens: "delete confirm dialog", key: "[data-target-selection-name$='.Delete']" }
+    delete_dialog:
+      - { label: "Delete (confirm)", widget: salesforce.delete_confirm_button, archetype: click_navigates, irreversible: true, commits: true, key: "div[role='dialog'] button[title='Delete']", note: "class is slds-button_neutral NOT slds-button_brand — see known_dead_paths.delete_button_neutral_class_ambiguous" }
+    status: documented
+
+  RecordEditModal:
+    # All field selectors live in salesforce.widgets.yaml (extends salesforce widget-library).
+    # Field anchor: records-record-layout-item[field-label='<on-page label>'] — see salesforce.md gotcha #3 for the API-name → on-page-label mapping.
+    fields:
+      - { name: text/textarea/number/id, widget: salesforce.text, archetype: text_input, anchor: "records-record-layout-item[field-label='{{field_label}}'] input|textarea" }
+      - { name: picklist, widget: salesforce.picklist, archetype: picklist_select, anchor: "records-record-layout-item[field-label='{{field_label}}'] button[role='combobox']" }
+      - { name: "Opportunity.StageName", widget: salesforce.stage_picklist, archetype: picklist_select, anchor: "sfa-input-stage-name button[role='combobox']", note: "special-cased: wrapped in sfa-input-stage-name custom element, no field-label anchor" }
+      - { name: lookup, widget: salesforce.lookup, archetype: typeahead_lookup, anchor: "records-record-layout-item[field-label='{{field_label}}'] input" }
+      - { name: date, widget: salesforce.date_input, archetype: text_input, anchor: "records-record-layout-item[field-label='{{field_label}}'] input" }
+      - { name: boolean, widget: salesforce.toggle, archetype: click_toggles, anchor: "records-record-layout-item[field-label='{{field_label}}'] input[type='checkbox']" }
+    buttons:
+      - { label: "Save", widget: salesforce.save_button, archetype: click_dismisses, irreversible: true, commits: true, selector: "button[name='SaveEdit']", note: "the selector_disappears verify is L3 click-landed (NOT L4 commit); L4 commit signal is the spec-72 toaster ladder in the atom" }
+      - { label: "Cancel", widget: salesforce.cancel_button, archetype: click_dismisses, selector: "button[name='CancelEdit']" }
+    status: documented
+
+  RecordNewModal:
+    # Same widget set as RecordEditModal (the field-fill machinery is shared
+    # — same anchor, same library widgets). The only NEW affordance here is
+    # the cancel button (RecordEditModal includes one too via the library).
+    fields: { same_as: RecordEditModal.fields }
+    buttons:
+      - { label: "Save", widget: salesforce.save_button, archetype: click_dismisses, irreversible: true, commits: true, selector: "button[name='SaveEdit']" }
+      - { label: "Cancel", widget: salesforce.cancel_button, archetype: click_dismisses, selector: "button[name='CancelEdit']" }
+    status: documented
+
+  GlobalSearchResults:
+    fields:
+      - { label: "Global search input", widget: salesforce.global_search_input, archetype: typeahead_search, behavior: "click trigger (button[aria-label='Search']) → type query → URL lands /lightning/search" }
+    status: partially_documented
+
+# ─── Known / suspected dead paths ─────────────────────────────────
+
+known_dead_paths:
+  - id: salesforce_rest_session_cookie_401
+    description: "Every Salesforce REST endpoint under /services/data/v62.0/* returns 401 INVALID_SESSION_ID when called with the Lightning session cookie alone. SOQL (/query/), SOSL (/search/), GraphQL (/graphql), and the LWC wire adapters all route through this REST surface and inherit the same 401. The classic-domain REST hostname ({org}.my.salesforce.com) DOES authenticate via the session cookie but is unused at run time."
+    dead_for: "session-cookie-only posture (no configured OAuth token)"
+    works_for: "BYO-OAuth posture (real bearer token present)"
+    discovered: 2026-04-16
+    discovered_in: reference_sf_browser_session_paths
+    alternative: "Use Aura session_api (/aura POST with $A.clientService CSRF, MAIN-world). Aura ListUiController.postListRecordsByName is the only stateless read proven to work for listview fetches."
+    status: verified
+
+  - id: aura_sosl_descriptors_dead
+    description: "Every Aura SOSL search descriptor returns callingDescriptor:'UNKNOWN' when called via /aura with the session cookie. Verified live 2026-05-30: LightningExperienceFinder/searchEntities returns actions:[]; globalSearch / SearchController.execute / getLookupRecords / getRecentRecords also fail. So cross-object SOSL via session cookie is unachievable."
+    dead_descriptor: "aura://LightningExperienceFinder/ACTION$searchEntities (and friends)"
+    discovered: 2026-05-30
+    alternative: "Per-object listview-fetch + client-filter is the realistic search shape. salesforce.actions/search_record v3.0.0 wraps ListUiController.postListRecordsByName in call_platform_api with the filter primitive (field: fields.Name.value, contains: inputs.query). Caller MUST supply object_type + list_view_api_name (e.g. AllAccounts, AllOpportunities)."
+    status: verified
+
+  - id: lightning_search_deeplink_broken
+    description: "The deep-link `/lightning/search/?q=<query>` redirects to /home on healthy dev orgs — NOT a session-degradation artifact, just SF behavior. Live-confirmed 2026-05-30."
+    dead_url: "/lightning/search/?q=<query>"
+    discovered: 2026-05-30
+    alternative: "The only way to reach GlobalSearchResults is the search-box-driven recipe: click global search button → type query → Enter (the existing GlobalSearchResults.entry recipe). search_record v3.0.0 removed its broken browser flavor; cross-object search is now Aura session_api only."
+    status: verified
+
+  - id: listview_lag_for_just_created_records
+    description: "PARTIALLY RESOLVED 2026-05-30 (blueprint-level harden). Aura ListUiController.postListRecordsByName against a STANDARD listview (e.g. AllOpportunities) does NOT immediately reflect records created seconds-to-minutes earlier in the same session — even though the Lightning UI already shows them. Live-confirmed 2026-05-30 with opportunity_crud (search_for_created_opp returned 0 matches for a record just created+updated in the same run; an out-of-band probe confirmed the record was absent from the AllOpportunities API response while older records with the same name substring were present). The Lightning UI's LDS (Lightning Data Service) caches reads on a different path than the raw POST to /aura, so LDS sees the new row immediately but the standard listview API doesn't."
+    dead_for: "search_record against AllOpportunities (or other standard listviews) on records created in the SAME session that haven't been LDS-warmed (open_record / row click)"
+    discovered: 2026-05-30
+    discovered_in: project_pickup_2026_05_29_session_close_3   # opportunity_crud run
+    alternative: "PARTIAL — opportunity_crud.search_for_created_opp now uses list_view_api_name: RecentlyViewedOpportunities (per-user listview). The prior open_created_opp step warms LDS so RecentlyViewed sees the row immediately on the next read. Confirmed reasoning live 2026-05-30. Other callers (e.g. search_and_summarize) that search pre-existing records still use the standard AllAccounts / AllOpportunities listviews — they're unaffected. NOT DONE: option (b) atom-level retry-with-backoff on `searched · 0` (more general, no caller-side change required); deferred until a non-opportunity_crud blueprint hits the lag."
+    status: partially_resolved
+
+  - id: css_error_interstitial_on_ignorecache
+    description: "An ignoreCache / hard-reload of a Lightning page can desync the loaded app-version vs the versioned CSS static resource, producing a persistent 'Sorry to interrupt — CSS Error — Refresh' div[role='dialog'] overlay. The page WORKS behind it (rows render, in-app nav works) — synthetic .click() bypasses the overlay backdrop."
+    dead_for: "hard-reload as a recovery mechanism (it makes the problem worse)"
+    discovered: 2026-05-23   # earlier sessions
+    alternative: "Recover via in-app SPA navigation (click a link) or a normal cache-respecting reload. When probing for dialogs, scope queries to EXCLUDE the CSS Error overlay (e.g. the delete dialog is the div[role='dialog'] containing button[title='Delete'])."
+    status: verified
+
+  - id: edit_deeplink_welcome_redirect
+    description: "RESOLVED 2026-05-29. The /lightning/r/{Object}/{Id}/edit deeplink (even with ?count=1) post-save-redirects to /lightning/n/<app>__Welcome — NOT back to /view. The transform-interpreter's sf_edit_url helper already did the rewrite for the wizard/notes path, but the v70 view-entry navigates entry.url RAW so the path was broken in data."
+    dead_url: "/lightning/r/{Object}/{Id}/edit?count=1"
+    discovered: 2026-05-29
+    alternative: "DONE — RecordEditModal.entry.url 1.1.0 bakes in `?count=1&backgroundContext=%2Flightning%2Fr%2F{object_type}%2F{record_id}%2Fview`. Post-save now returns to /view; the spec-72 toaster ladder corroborates that the save committed."
+    status: resolved
+
+  - id: stage_picklist_no_field_label_anchor
+    description: "RESOLVED 2026-05-22. The Opportunity Stage picklist is wrapped in an sfa-input-stage-name custom element (it drives the closed-stage sales-path UI) and lacks the records-record-layout-item field-label anchor every other picklist uses. The generic salesforce.picklist widget matched nothing for StageName."
+    dead_selector: "records-record-layout-item[field-label='Stage'] button[role='combobox']"
+    discovered: 2026-05-22
+    alternative: "DONE — salesforce.stage_picklist widget (4.1.0). Same picklist_select archetype, Stage-specific trigger (sfa-input-stage-name button[role='combobox']). Wired via a per-field widget: ref on Opportunity.StageName. Live stage options 2026-05-29: Prospecting / Qualification / Needs Analysis / Value Proposition / Id. Decision Makers / Perception Analysis / Proposal/Price Quote / Negotiation/Review / Closed Won / Closed Lost."
+    status: resolved
+
+  - id: delete_button_neutral_class_ambiguous
+    description: "RESOLVED 2026-05-29. The live delete confirm button is class `slds-button_neutral` NOT `slds-button_brand` (verified live on the dev org). The delete confirm dialog's Cancel button is ALSO slds-button_neutral, so a class-based fallback like `button.slds-button_neutral` would ambiguously match Cancel. The old widget carried a `button.slds-button_brand` fallback that matched nothing AND was misleading."
+    dead_selector: "button.slds-button_brand (in the delete confirm dialog)"
+    discovered: 2026-05-29
+    alternative: "DONE — salesforce.delete_confirm_button (4.2.0) now uses ONLY `div[role='dialog'] button[title='Delete']`. The title selector is reliable and unambiguous. Per salesforce.md gotcha #5."
+    status: resolved
+
+  - id: modal_position_fixed_offsetparent_null
+    description: "RESOLVED 2026-05-30. SLDS modals are position:fixed, so their offsetParent is null even while fully on screen. The runtime's isVisible() in chrome-signal-driver.ts used to gate on offsetParent===null, so selectorPresentInPage reported an OPEN delete-confirm modal as ABSENT. That made the spec-72 abandon_signal (selector_disappears div[role='dialog']) fire on the first poll → the delete HITL step false-cancelled before the user could confirm. Live-probed: dialog 917x937, display:block, visibility:visible, offsetParent null."
+    dead_check: "offsetParent === null as a visibility signal (in chrome-signal-driver.ts isVisible, chrome-runtime.ts captureVisibleAlertState, chrome-step-driver.ts findVisible)"
+    discovered: 2026-05-30
+    alternative: "DONE — f368e7bb dropped the offsetParent gate in the 3 signal-driver sites; a sister commit on 2026-05-30 replicated the fix to chrome-runtime.ts captureVisibleAlertState (which was suppressing SLDS toasters from heal) and the two findVisible sites in chrome-step-driver.ts. Rect-size > 0 + aria-hidden filter still exclude display:none. Regression test in chrome-signal-driver.test.ts (`position:fixed element ... SLDS modal/toaster case`). Affects every SLDS modal AND toaster across integrations."
+    status: resolved
+
+  - id: l4_disappears_fake_success
+    description: "RESOLVED 2026-05-29. Bare `selector_disappears button[name='SaveEdit']` as the L4 commit outcome for update_record was Trap-2 fake-success: SaveEdit also vanishes on Cancel, so a discard false-reported `saved`. Same risk for the create/delete atoms had been deferred."
+    dead_signal: "selector_disappears button[name='SaveEdit'] (as a stand-alone L4 commit proof)"
+    discovered: 2026-05-29
+    alternative: "DONE — spec 72 ladders (update_record 2.2.0, create_record 2.2.0, delete_record 2.2.0). Each atom's commit outcome is now all:[transient_appears .toastMessage '<verb>', <corroborating rung>] — the positive toaster rung corroborates the surface-disappear, so a discard (no toaster) reports NOT committed. Verified with the discard test in the update_record_tester blueprint (commit-mode discard reports cancelled, not saved)."
+    status: resolved
+
+# ─── Transitions ──────────────────────────────────────────────────
+
+transitions:
+  - { from: Dashboard,         to: RecordListView,    via: "URL deeplink /lightning/o/<Object>/list (list_records entry) OR app launcher" }
+  - { from: Dashboard,         to: RecordView,        via: "URL deeplink /lightning/r/<Object>/<Id>/view (open_record entry)" }
+  - { from: Dashboard,         to: GlobalSearchResults, via: "global_search_input recipe (click search button → type → Enter)" }
+  - { from: RecordListView,    to: RecordNewModal,    via: "salesforce.new_button" }
+  - { from: RecordListView,    to: RecordView,        via: "salesforce.row_link (a[data-refid='recordId'])" }
+  - { from: RecordView,        to: RecordEditModal,   via: "salesforce.record_overflow_caret → salesforce.edit_menu_item" }
+  - { from: RecordView,        to: "delete dialog",   via: "salesforce.record_overflow_caret → salesforce.delete_menu_item" }
+  - { from: "delete dialog",   to: RecordListView,    via: "salesforce.delete_confirm_button (commits) — toaster ladder + nav to /o/<Object>/list" }
+  - { from: "delete dialog",   to: RecordView,        via: "Cancel (button[title='Cancel']) — stays on /view, no toaster" }
+  - { from: RecordEditModal,   to: RecordView,        via: "salesforce.save_button (commits) — backgroundContext returns to /view + toaster 'was saved'" }
+  - { from: RecordEditModal,   to: RecordView,        via: "salesforce.cancel_button — Save gone, no toaster" }
+  - { from: RecordNewModal,    to: RecordView,        via: "salesforce.save_button (commits) — nav to /lightning/r/<Id>/view (object-LESS redirect) + toaster 'was created'" }
+  - { from: RecordNewModal,    to: RecordListView,    via: "salesforce.cancel_button — Save gone, no toaster" }
+
+# ─── Atoms cross-reference ────────────────────────────────────────
+# Which atoms exercise which screen / widget. Derived from actions/*.yaml;
+# keep in sync by hand. (n/a = atom is session_api/MCP-only, no DOM affordance.)
+
+atoms_using:
+  Dashboard.global_search_input:              [search_record(future GlobalSearchResults flavor; no atom today)]
+  RecordListView.new_button:                  [create_record]
+  RecordListView.list_search_input:           []                           # not consumed by any atom today
+  RecordListView.list_view_dropdown:          []                           # not consumed by any atom today
+  RecordListView.row_link:                    []                           # navigation only — open_record uses URL deeplink directly
+  RecordView.record_overflow_caret:           [update_record, delete_record]
+  RecordView.edit_menu_item:                  [update_record]              # via RecordView entry; update_record's entry deeplinks straight to /edit so the menu_item isn't on its hot path today
+  RecordView.delete_menu_item:                [delete_record]
+  RecordView.delete_confirm_button:           [delete_record]              # commit step
+  RecordEditModal.fields_via_field_label_anchor:    [update_record(read+write), create_record(write via shared widget library)]
+  RecordEditModal.stage_picklist:             [create_record, update_record]   # Opportunity.StageName only
+  RecordEditModal.save_button:                [update_record]              # commit step
+  RecordNewModal.save_button:                 [create_record]              # commit step
+  RecordNewModal.cancel_button:               []                           # not invoked by any atom (cancel is a USER action; abandon_signal detects it)
+  # session_api / MCP-only (NO DOM affordance — atoms run via Aura postListRecordsByName / SF MCP server):
+  search_record:                              []                           # browser flavor removed 2026-05-30; session_api Aura + filter primitive only
+  query_records:                              []                           # session_api Aura + MCP only
+  list_records:                               [salesforce.new_button(via RecordListView entry)]   # browser flavor is a URL-only nav, no DOM step
+  open_record:                                []                           # browser flavor is a URL-only nav, no DOM step

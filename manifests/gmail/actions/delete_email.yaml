@@ -1,17 +1,27 @@
 _meta:
   name: manifests/gmail/actions/delete_email.yaml
-  version: 0.3.0
+  version: 0.9.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-27
   description: |
-    delete_email atom — permanently delete a thread / message. Spec 70
-    shape (`browser` flavor with commit-marked Delete click + `mcp`
-    flavor for invisible delete via gmail.delete_email). Writes
-    prefer `browser > mcp` per spec 70 §7 — the user sees the row
-    disappear from the inbox before the destructive call commits.
+    delete_email atom: move a thread to Trash (browser) / permanently
+    delete (mcp + oauth). Spec 70 shape: `browser` flavor with a
+    commit-marked "Delete" context-menu click (→ Trash, soft), `mcp`
+    flavor for invisible delete via gmail.delete_email, `oauth_api`
+    flavor for direct REST. Writes prefer `browser > mcp` per spec 70
+    §7: the user sees the row disappear from the list before the
+    destructive call commits. The oauth_api flavor exists as an
+    opt-in fast path for headless / background blueprints.
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.9.0 (2026-06-07): CANONICAL ACTION FORM v71. (1) tab_mode: current (was runs_in_home_tab). (2) result.outcome (auto from the winning action) replaces the `deleted` boolean. (3) browser resolves over a named signals: map via when:/not: — `deleted` = when:[deleted]; `abandoned` = when:[menu_closed] not:[deleted] (the user reviewed + closed the menu without deleting; a real delete's snackbar wins the grace race; HITL-only). The ready_to_delete pseudo-outcome is DROPPED: 'menu opened' is the open_contextmenu step's verify:, and outcomes are the terminals the LLM consumes. mcp/oauth drop the literal `deleted` flag (auto from action). Behaviour-preserving (same selectors/signals/grace)."
+    - "0.8.1 (2026-05-30): `deleted` outcome signal upgraded from `selector_appears` to `transient_appears` on the snackbar — MutationObserver latch survives auto-dismiss + is pre-armed for spec-72 commit-delta detection. Same upgrade across all gmail snackbar outcomes; see archive_email 0.8.1."
+    - "0.8.0 (2026-05-28): browser flavor moved from the top TOOLBAR Delete button to the right-click CONTEXT MENU 'Delete' menuitem (template = apply_label 0.9.0), `depends_on_view: Inbox → any`. Same C-rest rationale as archive_email 0.8.0 (toolbar absent in search). DISAMBIGUATION: the context menu has BOTH 'Delete' (→Trash, soft) and 'Delete forever' (permanent) — but they are MUTUALLY EXCLUSIVE by thread state ('Delete' enabled outside Trash/Spam, 'Delete forever' only inside), and the disabled twin is display:none, so `must_contain_text:'Delete'` + the runtime visible-filter reliably hits the soft-delete item. The honest L4 snackbar 'Conversation moved to Trash.' is the safety net — it only fires on a real soft-delete, so even the pathological 'run delete on an already-Trashed thread' case reports deleted=false rather than silently permanently-deleting. browser=Trash vs oauth/mcp=permanent split unchanged (tracked: known_dead_paths.delete_flavor_semantic_mismatch). row_checkbox pre-select dropped."
+    - "0.7.0 (2026-05-27): add `runs_in_home_tab: true`. Delete (= toolbar Trash) is in-place on the inbox row; same opt-in pattern as the sibling archive/apply_label/move atoms."
+    - "0.6.0 (2026-05-27): replace browser flavor `deleted` outcome from scoped `selector_disappears tr.zA:has(...)` to POSITIVE snackbar — `selector_appears [role='alert']` with `must_contain_text: 'Conversation moved to Trash.'`. (NOTE: browser flavor Delete moves to Trash, not permanent delete — semantic mismatch with oauth_api documented elsewhere.) Live-probed 2026-05-27 via MCP CDP-trusted click. Same pattern as archive_email 0.6.0."
+    - "0.5.0 (2026-05-25): add oauth_api flavor — DELETE /gmail/v1/users/me/threads/{thread_id}. No body needed; OAuth bearer auth. Returns 204 No Content on success. Provides direct-REST option for background/headless blueprints that don't need the visible row-disappearance UX (per [feedback-user-clicks-save] the browser-via-HITL flavor remains the canonical user-facing path)."
+    - "0.4.0 (2026-05-24): add schema-typed result.thread per v70 signature parity rule. Both flavors echo thread.Id from input (gmail.delete_email returns only {deleted: bool}, no id)."
+    - "0.3.0 (2026-05-19): spec 70 shape: rename `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
@@ -22,7 +32,13 @@ description: >
   takes a message_id and calls gmail.delete_email directly.
 object: Thread
 commits_changes: true
-depends_on_view: Inbox
+# Gmail's Delete (→ Trash) is an in-place right-click context-menu action
+# on the row in whatever list is current. Same C-rest rationale as
+# archive_email 0.8.0: no separate edit URL (run on home tab) +
+# depends_on_view: any (no force-nav to #inbox; act on the current list).
+# contextmenu selector scoped to div[role='main'] (gmail.md #6).
+tab_mode: current
+depends_on_view: any
 mcp_tool: gmail.delete_email
 inputs:
   thread_id:
@@ -30,39 +46,71 @@ inputs:
     required: true
     description: data-legacy-thread-id of the row (browser flavor) OR message id (mcp flavor)
 result:
-  deleted: boolean
+  # v71: outcome = the winning terminal's action ("deleted" | "abandoned"),
+  # auto-populated by the runtime. thread echoes the input id.
+  outcome: text
+  thread:
+    schema: Thread
 flavors:
   browser:
     requires_auth: session_cookie
-    label: Select row; click Delete when commit:true
+    label: Right-click row → Delete when commit:true
+    # v71 signals model: named events the outcomes resolve over via when:/not:.
+    signals:
+      # Positive L4 proof: "Conversation moved to Trash." fires in a
+      # [role='alert'] snackbar within ~100-500ms of a real soft-delete (only
+      # on a real soft-delete, so it can't false-positive an already-trashed
+      # thread). Live-probed 2026-05-27.
+      deleted:
+        type: transient_appears
+        selector: "[role='alert']"
+        must_contain_text: 'Conversation moved to Trash.'
+        timeout_ms: 6000
+      # The context menu closed — SHARED by a real Delete AND a cancel
+      # (Escape / click-away). On its own (no `deleted` snackbar within grace)
+      # it is the `abandoned` close.
+      menu_closed:
+        type: selector_disappears
+        selector: "[role='menu']"
     recipe:
-      - id: select_row
-        type: use_widget
+      # Open Gmail's right-click context menu on the row (same path as
+      # apply_label 0.9.0). Works in all list views; scoped to
+      # div[role='main'] (gmail.md #6).
+      - id: open_contextmenu_on_row
+        type: contextmenu
         args:
-          widget: gmail.row_checkbox
-          op: invoke
-          inputs:
-            thread_id: "{{inputs.thread_id}}"
-      - id: click_delete
-        type: use_widget
+          selector: "div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])"
+        verify:
+          type: selector_appears
+          selector: "[role='menu'] [role='menuitem'][aria-haspopup='true']"
+          timeout_ms: 4000
+      # Click "Delete" (→ Trash). "Delete forever" (permanent) ALSO
+      # contains the substring "Delete", BUT the two are mutually
+      # exclusive by thread state ('Delete' enabled outside Trash/Spam,
+      # 'Delete forever' only inside) and the disabled one is
+      # display:none → the runtime's visible-filter + must_contain_text
+      # land on the soft-delete item. The "moved to Trash" snackbar
+      # outcome is the safety net (only fires on a real soft-delete).
+      - id: click_delete_item
+        type: click
         commit: true
         args:
-          widget: gmail.toolbar_delete_button
-          op: invoke
-          inputs:
-            thread_id: "{{inputs.thread_id}}"
+          selector: "[role='menu'] [role='menuitem']"
+          must_contain_text: "Delete"
     outcomes:
-      - action: ready_to_delete
-        signal:
-          type: selector_appears
-          selector: div[role='button'][aria-label='Delete'][data-tooltip*='Delete']
       - action: deleted
-        signal:
-          type: selector_disappears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+        when: [deleted]
         extract:
-          deleted:
-            literal: true
+          thread:
+            Id:
+              from_input: thread_id
+      - action: abandoned
+        # The menu closed with no `deleted` snackbar — the user reviewed and
+        # cancelled (Escape / click-away). The `not:` guard holds a grace
+        # window so a real delete's snackbar wins. HITL-only (a commit:true
+        # auto-delete never abandons).
+        when: [menu_closed]
+        not: [deleted]
   mcp:
     requires_auth: mcp_server
     label: Delete via Gmail MCP server
@@ -75,5 +123,19 @@ flavors:
           url_pattern: "*/mcp/*"
           status: 200
         extract:
-          deleted:
-            literal: true
+          thread:
+            Id:
+              from_input: thread_id
+  oauth_api:
+    requires_auth: oauth_token
+    label: Permanently delete thread via Gmail REST users.threads.delete
+    request:
+      provider: google
+      method: DELETE
+      url: https://gmail.googleapis.com/gmail/v1/users/me/threads/{{inputs.thread_id}}
+    outcomes:
+      - action: deleted
+        extract:
+          thread:
+            Id:
+              from_input: thread_id

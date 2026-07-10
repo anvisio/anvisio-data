@@ -1,19 +1,22 @@
 _meta:
   name: manifests/gmail/schemas/Thread.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
-    Gmail Thread schema — conversation entity (collection of messages
+    Gmail Thread schema: conversation entity (collection of messages
     sharing subject + participants). Used by read/archive/delete/star/
     label/move actions that operate at thread granularity.
   changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[Id] per v70 INTEGRATION_FORMAT signature parity rule."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
-description: A Gmail conversation (thread) — a collection of messages sharing a
-  subject and participants. Used by read/archive/delete/star/label/move actions
-  that operate at thread granularity.
+description: |
+  A Gmail conversation (thread). A collection of messages sharing a
+  subject and participants. Used by read/archive/delete/star/label/move
+  actions that operate at thread granularity.
+primary_key: [Id]
 fields:
   Id:
     type: id

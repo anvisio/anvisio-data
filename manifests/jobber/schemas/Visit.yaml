@@ -1,0 +1,160 @@
+_meta:
+  name: manifests/jobber/schemas/Visit.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Visit schema — a scheduled appointment on a Job. Single per-object
+    source for the object-generic atoms. Live-introspected 2026-07-08. IRREGULAR:
+    visitCreate takes a `jobId` arg + a `{visits:[…]}` input; visitEdit uses `id`
+    + `attributes:` (not visitId/input); visitDelete takes a LIST; `visits` has NO
+    searchTerm (filter/sort only); Visit has NO standalone web page (no jobberWebUri).
+  changelog:
+    - "0.1.0 (2026-07-08): initial (object-generic era). Absorbs the Visit
+       irregularities in its graphql descriptor."
+
+description: A Jobber Visit — a scheduled appointment on a Job (at a Property, for a Client).
+primary_key: [id]
+
+# Visit lives in a Job's schedule (no standalone web page); browser fallback is
+# weak — session_api is the path. Search has no searchTerm (list-only).
+url_segment: visits
+graphql:
+  create:
+    # visitCreate(jobId, input:{visits:[{title, instructions, …}]}) → payload
+    # field is `createdVisits` (a list), NOT `visits`. Live-confirmed.
+    query: >
+      mutation($jobId: EncodedId!, $input: VisitCreateInput!) {
+        visitCreate(jobId: $jobId, input: $input) {
+          createdVisits { id title visitStatus job { id } property { id } client { id } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.visitCreate.createdVisits[0]
+    reject_path: data.visitCreate.userErrors
+    variables:
+      jobId: "{{inputs.fields.jobId}}"
+      input:
+        visits:
+          - title: "{{inputs.fields.title}}"
+            instructions: "{{inputs.fields.instructions}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        visit(id: $id) {
+          id title visitStatus startAt endAt allDay duration instructions
+          completedAt createdAt
+          client { id name } job { id } property { id }
+        }
+      }
+    extract_path: data.visit
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($id: EncodedId!, $attributes: VisitEditAttributes!) {
+        visitEdit(id: $id, attributes: $attributes) {
+          visit { id title visitStatus }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.visitEdit.visit
+    reject_path: data.visitEdit.userErrors
+    variables:
+      id: "{{inputs.record_id}}"
+      attributes: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($visitIds: [EncodedId!]!) {
+        visitDelete(visitIds: $visitIds) { userErrors { message path } }
+      }
+    extract_path: data.visitDelete
+    reject_path: data.visitDelete.userErrors
+    variables:
+      visitIds:
+        - "{{inputs.record_id}}"
+  search:
+    query: >
+      query($first: Int) {
+        visits(first: $first) {
+          nodes { id title visitStatus startAt job { id } client { id name } }
+        }
+      }
+    extract_path: data.visits.nodes
+    variables:
+      first: "{{inputs.limit}}"
+
+fields:
+  id:
+    type: id
+    label: Visit ID
+    primary: true
+    readonly: true
+    required: true
+  title:
+    type: text
+    label: Title
+    required: false
+  visitStatus:
+    type: text
+    label: Status
+    readonly: true
+    required: true
+    description: "VisitStatusTypeEnum."
+  startAt:
+    type: datetime
+    label: Start at
+    required: false
+  endAt:
+    type: datetime
+    label: End at
+    required: false
+  allDay:
+    type: boolean
+    label: All day
+    readonly: true
+    required: true
+  duration:
+    type: number
+    label: Duration
+    readonly: true
+    required: true
+  instructions:
+    type: text
+    label: Instructions
+    required: false
+  jobId:
+    type: id
+    label: Job ID
+    required: false
+    ref: Job.id
+    description: The Job this visit belongs to (visitCreate `jobId` arg, required).
+  clientId:
+    type: id
+    label: Client ID
+    readonly: true
+    required: true
+    ref: Client.id
+  propertyId:
+    type: id
+    label: Property ID
+    readonly: true
+    required: true
+    ref: Property.id
+  invoiceId:
+    type: id
+    label: Invoice ID
+    readonly: true
+    required: true
+    ref: Invoice.id
+  completedAt:
+    type: datetime
+    label: Completed at
+    readonly: true
+    required: true
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+    required: true

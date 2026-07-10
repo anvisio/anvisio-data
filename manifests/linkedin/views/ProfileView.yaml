@@ -1,0 +1,50 @@
+_meta:
+  name: manifests/linkedin/views/ProfileView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    A LinkedIn member's profile page (linkedin.com/in/<slug>/). Operating
+    surface for view_profile. Entry deep-links to the slug and waits for
+    the name heading; the page is a URL-addressable SPA route, so no
+    clicking is needed to reach it. Read-only view (no exit / dismiss).
+  changelog:
+    - "0.1.0 (2026-06-01): initial."
+
+name: ProfileView
+description: >
+  A member's profile page at linkedin.com/in/<profile_slug>/. The hero
+  card carries name, headline, location, current company, and
+  connection / follower counts; the About section follows below.
+entry:
+  depends_on_view: any
+  recipe:
+    - id: nav_profile
+      type: navigate
+      args:
+        url: "https://www.linkedin.com/in/{{inputs.profile_slug}}/"
+        timeout_ms: 15000
+    - id: wait_name
+      type: wait_for_element
+      args:
+        # CSS (the wait/step resolver is CSS-only): the name <h2> inside the
+        # /in/ link. querySelector returns the hero name (first in document
+        # order). The xpath read selectors take over once the page is loaded.
+        selector: "main a[href*='/in/'] h2"
+        timeout_ms: 12000
+identifying_selectors:
+  - "main a[href*='/in/'] h2"
+placeholders:
+  profile_slug:
+    type: text
+    sample: "chanudamarla"
+widgets:
+  - linkedin.profile_name
+  - linkedin.profile_headline
+  - linkedin.profile_location
+  - linkedin.profile_company
+  - linkedin.profile_company_url
+  - linkedin.profile_connections
+  - linkedin.profile_followers
+  - linkedin.profile_about

@@ -1,0 +1,39 @@
+_meta:
+  name: manifests/coffee/app_model.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    coffee.ai (fresh.coffee.ai) semantic model. Multi-object CRM (SOR): People/Companies/Deals/Tasks/Notes. GraphQL API at coffee.prd.coffee.work authed by an Auth0 bearer (session_api bearer_source), introspection disabled. Person create-flow live-observed 2026-07-09; others FLAGGED.
+
+kind: system_of_record
+transports: [session_api, browser]
+
+screens:
+  ObjectList:
+    view: ObjectList
+    url_pattern: "{instance.origin}/{object_segment}"
+    purpose: "The object list/table (search box + Add button). People live-verified 2026-07-09."
+    status: partially_documented
+  RecordView:
+    view: RecordView
+    url_pattern: "{instance.origin}/{object_segment}/{record_id}"
+    purpose: "Record detail as a right-side drawer (Person Details). Post-click landing; get_object landmark."
+    status: partially_documented
+  NewRecordForm:
+    view: NewRecordForm
+    url_pattern: "{instance.origin}/{object_segment}"
+    purpose: "The Add-object modal (role=dialog). Person form live-probed: #person-first/#person-email + a primary 'Add Person' submit."
+    status: partially_documented
+
+affordances:
+  add_object: { on: ObjectList, control: "Add <Object> button", opens: NewRecordForm }
+  search: { on: ObjectList, control: "search box (typeahead)" }
+  open_record: { on: ObjectList, control: "table row / search result", opens: RecordView }
+
+known_dead_paths: []
+
+transitions:
+  - { from: ObjectList, to: NewRecordForm, via: add_object }
+  - { from: ObjectList, to: RecordView, via: open_record }

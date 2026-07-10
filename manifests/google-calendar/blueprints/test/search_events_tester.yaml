@@ -1,0 +1,22 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: search-events-tester
+  version: '1.0.0'
+  title: Google Calendar search_events tester (gapi read)
+  summary: |
+    Calls search_events. In the default posture (session cookie, no OAuth
+    token) the flavor-picker uses session_api — gapi events.list with `q`,
+    no OAuth. The result carries the matched events. NOTE the session_api
+    flavor is q-only (gapi rejects empty time bounds), so time_min/time_max
+    are honored only by the oauth_api / mcp flavors.
+
+    Drive via: /run-blueprint google-calendar search_events_tester
+do:
+  - search:
+      label: Search events by query (gapi)
+      call: google-calendar.atom.search_events
+      with:
+        query: 'meeting'
+        time_min: '2026-05-01T00:00:00-07:00'
+        time_max: '2026-07-01T00:00:00-07:00'

@@ -1,0 +1,30 @@
+_meta:
+  name: manifests/google-calendar/views/SearchResults.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Search results view — the list shown after running a query through
+    the calendar search bar at /r/search. Same event-chip affordances as
+    CalendarGrid, scoped to the matched events. URL-deeplink entry with a
+    placeholder query for validation.
+  changelog:
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70)."
+
+name: SearchResults
+description: >
+  The result list shown after running a query through the calendar search
+  bar. Same event-chip affordances as CalendarGrid, scoped to the matched
+  events. Validation enters via a deeplink with a benign placeholder
+  query; production wizards build the URL with the user's real query.
+entry:
+  url: https://calendar.google.com/calendar/u/0/r/search?q=anvisio
+url_patterns:
+  - https://calendar\.google\.com/calendar/u/\d+/r/search
+identifying_selectors:
+  - input[aria-label='Search']
+  - "[role='main'] [role='list']"
+widgets:
+  - google-calendar.search_input
+  - google-calendar.event_chip

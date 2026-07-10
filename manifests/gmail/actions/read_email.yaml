@@ -1,46 +1,90 @@
 _meta:
   name: manifests/gmail/actions/read_email.yaml
-  version: 0.4.0
+  version: 0.10.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    read_email atom — return Subject/From/Body of a message. A `browser`
-    flavor scrapes the open ThreadView; an `oauth_api` flavor fetches a
-    message by id via the Gmail REST users.messages.get endpoint. Reads
-    prefer oauth_api > browser per spec 70 §7.
+    read_email atom: return subject/from/body of the latest message in
+    a thread. A `browser` flavor scrapes the open ThreadView; an
+    `oauth_api` flavor fetches the thread via Gmail REST users.threads.get
+    and extracts the latest message. Reads prefer oauth_api > browser
+    per spec 70 §7.
+
+    Output shape matches the official `gmail.read_email` MCP tool exactly
+    (subject/from/to/body/attachments — flat, lowercase). Both flavors
+    produce identical shape so flavor-swap is a no-op for consuming
+    blueprints. The input `messageId` is treated as a thread id by both
+    flavors (browser opens the thread by row-click in a fresh cloned tab;
+    oauth uses users.threads.get). This is consistent with search_emails'
+    output where `id == threadId` (browser scrapes only thread ids from
+    the inbox view; oauth dedupes by threadId for parity).
   changelog:
+    - "0.10.0 (2026-06-08): CANONICAL ACTION FORM v71. tab_mode: new (was reads_in_fresh_tab — a read in a cloned fresh tab so the user's view never moves); result.outcome (auto from the winning action, always 'read'); the single `read` terminal resolves over a named signals: map via when:[read] (the durable h2.hP ThreadView header). oauth_api unchanged (synchronous; auto-outcome). No terminal boolean to drop. Behaviour-preserving."
+    - "0.9.0 (2026-06-07): browser flavor now populates `to` (was `literal: null`). Live-probed 2026-06-07 on 3 threads (bounce + 2 self-sends): recipients render as `span.g2[email]` chips inside the recipient summary `span.hb`, and the `email` attribute carries the full address even when the display shows a name. Extracted via `from_selector_all: div[role='main'] span.hb span.g2[email]` + `attr: email` in the OUTCOME extract block (NOT read_fields — read_field/read_fields collapse a list<> field to a single value, step-executor.ts:721, so a schema-routed To would silently drop all but the first recipient). Disproves the prior 'Browser can't cheaply enumerate To' comment. CAVEAT: complete for typical threads (1..few recipients); Gmail lazily renders very large recipient lists into the expand-details table, so `span.hb` CAN be partial on bulk-recipient threads — oauth_api (full headers) is the guaranteed-complete path (and the preferred read path per spec 70 §7). `attachments` stays `literal: []` in BOTH browser AND oauth — a cross-flavor gap (oauth has payload.parts but the extract DSL lacks array filter/map; browser would scrape .aZo chips). Tracked, not closed here."
+    - "0.8.0 (2026-05-29): add `reads_in_fresh_tab: true`. The browser flavor now runs in a fresh ephemeral tab CLONED from the home tab's current list URL (#search / #inbox / #label), row-clicks the target thread THERE, scrapes it, and closes the tab — leaving the user's search-results view frozen. Fixes the Inbox-thrash bug from the 2026-05-28 /agent smoke (follow-up #2): the prior cold-open force-navigated the home tab to Inbox via ThreadView's depends_on_view, which (a) discarded the caller's search context and (b) failed with `click: no selector matched` for threads below the first rendered inbox page. Pairs with ThreadView 0.7.0 (current-view recipe-only entry + scroll_into_view) and the runtime's cloned-read-tab path + `{recipe}` current-view entry shape (all 2026-05-29). oauth_api flavor unchanged — id-agnostic users.threads.get, no tab/nav; still the robust path for out-of-list threads per spec 70 §7."
+    - "0.7.1 (2026-05-28): no atom change — note the ThreadView 0.6.0 nav fix this atom depends on. The browser flavor's cold-open (no prior thread nav) was broken: ThreadView used a #all/{messageId} URL deeplink that silently no-ops (the 16-hex thread id isn't URL-routable). ThreadView 0.6.0 switched to clicking the inbox row; this atom's browser flavor now opens threads cold. Surfaced by the first /agent tool-use loop smoke 2026-05-28 (read_email had no tester, so cold-open was never exercised — blueprints always opened the thread upstream). Browser cold-open requires the thread be in the Inbox list; out-of-inbox threads use the oauth_api flavor (id-agnostic users.threads.get)."
+    - "0.7.0 (2026-05-25): contract align to MCP — flat result {subject, from, to, body, attachments} (lowercase, drops the nested schema-typed `message` object from 0.5.0/0.6.0). Input renamed message_id → messageId (MCP-aligned). Browser flavor deletes the wait_for_thread step (subsumed by ThreadView v0.4.0's per-instance verify selector, now substituted with action inputs by the runtime). OAuth flavor switches from users.messages.get/{id} to users.threads.get/{id}?format=full + extracts the latest message — works for both thread-ids (search_emails browser) AND message-ids (single-message threads where they're literally equal). `to` and `attachments` initially populated as stubs (null/empty) on browser; oauth populates `to` from the latest message's headers."
+    - "0.6.0 (2026-05-24): browser flavor recipe gains a wait_for_element step keyed on {{inputs.message_id}} so read_fields scrapes the right thread, not the stale DOM from the previous iteration. (Superseded by 0.7.0 — view verify now does per-instance substitution.)"
+    - "0.5.0 (2026-05-24): add schema-typed result.message per v70 signature parity rule. (Superseded by 0.7.0 — reverted to flat MCP shape for true MCP parity.)"
     - "0.4.0 (2026-05-19): replace the unbuildable `mcp` flavor with an `oauth_api` flavor (inline Gmail REST request, reads a message by id); the runtime oauth_api transport executes it."
-    - "0.3.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.3.0 (2026-05-19): spec 70 shape: rename `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): collapse legacy two-flavor read into single `dom` flavor."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
-  Read a message, returning subject, from, and body. The browser flavor
-  scrapes whatever thread is open in the ThreadView. The oauth_api flavor
-  takes a message_id and fetches it via the Gmail REST API — no thread
-  navigation; Subject/From come from the message headers and Body is the
-  Gmail snippet preview.
+  Read a thread, returning subject + from + body of the latest message.
+  The browser flavor opens a fresh tab cloned from the home tab's current
+  list (#search / #inbox / #label), clicks the matching row THERE
+  (ThreadView v0.7.0 current-view entry — the 16-hex thread id isn't
+  URL-deeplinkable, so a row click is what mints Gmail's routable URL),
+  confirms the right thread rendered at the view verify layer, scrapes
+  Subject/From/Body, and closes the tab so the user's view never moves.
+  The oauth_api flavor calls Gmail REST users.threads.get/{messageId} with
+  format=full and extracts headers + snippet from the most recent message.
+  Both flavors produce the MCP-aligned shape {subject, from, to, body,
+  attachments}. `messageId` is in practice always a thread id (matches
+  search_emails' browser-scraped output).
 object: Thread
 commits_changes: false
+# Browser flavor reads in a fresh tab cloned from the home tab's current
+# list URL, so the user's search-results view never moves. See the 0.8.0
+# changelog + ThreadView 0.7.0's current-view entry. API flavors ignore
+# this (no tab). Out-of-list threads fall to oauth_api.
+tab_mode: new
 depends_on_view: ThreadView
 mcp_tool: gmail.read_email
 inputs:
-  message_id:
+  messageId:
     type: text
     required: true
     description: |
-      Gmail message id. Required by the oauth_api flavor (it fetches that
-      message). The browser flavor ignores it and reads the open thread.
+      Thread id (typically from search_emails). Both flavors accept; both
+      operate at thread granularity and return the latest message's
+      content. For single-message threads, Gmail makes thread_id ==
+      message_id literally, so either id form works in either flavor.
 result:
-  Subject: text
-  From: email
-  Body: rich_text
+  # v71: outcome = the winning action ("read"), auto-populated by the runtime.
+  outcome: text
+  subject: text
+  from: email
+  to: list<email>
+  body: rich_text
+  attachments: list<object>
 flavors:
   browser:
     requires_auth: session_cookie
-    label: Read open thread
+    label: Read open thread (latest message)
+    # v71 signals model: the single `read` terminal — ThreadView's durable
+    # subject header (h2.hP) is present once the right thread has rendered.
+    signals:
+      read:
+        type: selector_appears
+        selector: h2.hP
     recipe:
+      # No per-thread wait here — ThreadView v0.4.0's verify selector
+      # substitutes {message_id} from action inputs and confirms the
+      # right thread loaded BEFORE this recipe runs.
       - id: read_thread
         type: read_fields
         args:
@@ -51,37 +95,61 @@ flavors:
             - Body
     outcomes:
       - action: read
-        signal:
-          type: selector_appears
-          selector: h2.hP
+        when: [read]
         extract:
-          Subject:
+          subject:
             from_step: read_thread
             path: fields.Subject
-          From:
+          from:
             from_step: read_thread
             path: fields.From
-          Body:
+          body:
             from_step: read_thread
             path: fields.Body
+          # `to`: live-probed 2026-06-07 — the recipient summary
+          # `span.hb` holds one `span.g2[email]` chip per recipient, and
+          # the `email` attribute carries the FULL address even when the
+          # display shows a name ("to me"). from_selector_all + attr:email
+          # returns the list (read_fields/read_field can't — they collapse
+          # to a single value per field, step-executor.ts:721). COMPLETE
+          # for typical threads (1..few recipients); Gmail lazily renders
+          # very large recipient lists into the expand-details table, so
+          # the summary CAN be partial on bulk-recipient threads — use the
+          # oauth_api flavor (full headers) for guaranteed-complete
+          # enumeration there (reads prefer oauth per spec 70 §7 anyway).
+          to:
+            from_selector_all: div[role='main'] span.hb span.g2[email]
+            attr: email
+          # attachments: still stubbed [] in BOTH flavors. oauth HAS the
+          # data (payload.parts[].filename/attachmentId) but extracting a
+          # FILTERED+MAPPED array needs extract-DSL support the path syntax
+          # lacks today; browser would scrape the .aZo attachment chips.
+          # Tracked follow-up — not a browser-only gap, so not closed here.
+          attachments:
+            literal: []
   oauth_api:
     requires_auth: oauth_token
-    label: Fetch a message by id via the Gmail REST API (users.messages.get)
+    label: Fetch thread via Gmail REST (users.threads.get) and extract latest message
     request:
       provider: google
       method: GET
-      url: https://gmail.googleapis.com/gmail/v1/users/me/messages/{{inputs.message_id}}
+      url: https://gmail.googleapis.com/gmail/v1/users/me/threads/{{inputs.messageId}}
       query:
-        format: metadata
+        format: full
     outcomes:
       - action: read
         extract:
-          Subject:
+          subject:
             from_api_response: true
-            path: payload.headers[name=Subject].value
-          From:
+            path: messages[-1].payload.headers[name=Subject].value
+          from:
             from_api_response: true
-            path: payload.headers[name=From].value
-          Body:
+            path: messages[-1].payload.headers[name=From].value
+          to:
             from_api_response: true
-            path: snippet
+            path: messages[-1].payload.headers[name=To].value
+          body:
+            from_api_response: true
+            path: messages[-1].snippet
+          attachments:
+            literal: []

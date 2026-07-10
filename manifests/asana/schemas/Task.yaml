@@ -1,0 +1,130 @@
+_meta:
+  name: manifests/asana/schemas/Task.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana Task property schema. Shape from /api/1.0/tasks/{gid}.
+    `gid` is Asana's global id (numeric string).
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[gid] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Task
+object_type_id: task
+mcp_object_type: task
+primary_key: [gid]
+
+properties:
+  gid:
+    label: Task ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    sample: "1213754599099000"
+  name:
+    label: Name
+    type: string
+    field_type: text
+    required: true
+    sample: "Design system architecture"
+  notes:
+    label: Description (plain text)
+    type: string
+    field_type: textarea
+    description: Asana renders this as the rich description; pass plain text here OR html_notes for formatted.
+  html_notes:
+    label: Description (HTML)
+    type: string
+    field_type: textarea
+  assignee:
+    label: Assignee
+    type: object
+    field_type: select
+    description: '{ gid, name } or null'
+  due_on:
+    label: Due Date
+    type: string
+    field_type: date
+    description: "YYYY-MM-DD; mutually exclusive with due_at."
+  due_at:
+    label: Due Datetime
+    type: datetime
+    field_type: date
+    description: ISO8601 datetime; presence implies a specific time-of-day.
+  start_on:
+    label: Start Date
+    type: string
+    field_type: date
+  completed:
+    label: Completed
+    type: bool
+    field_type: booleancheckbox
+  completed_at:
+    label: Completed At
+    type: datetime
+    field_type: date
+    read_only: true
+  parent:
+    label: Parent Task
+    type: object
+    field_type: select
+    description: 'For subtasks: { gid, name } of the parent. Null for top-level.'
+  projects:
+    label: Projects
+    type: array
+    field_type: select
+    description: "Multi-homing: array of { gid, name } across all projects this task is in."
+  memberships:
+    label: Memberships
+    type: array
+    field_type: select
+    description: "Array of { project: { gid, name }, section: { gid, name } }: the section per project."
+  tags:
+    label: Tags
+    type: array
+    field_type: select
+  followers:
+    label: Followers
+    type: array
+    field_type: select
+    description: "Users notified on activity. Auto-includes the assignee + author."
+  num_subtasks:
+    label: Subtask Count
+    type: number
+    field_type: number
+    read_only: true
+  num_likes:
+    label: Like Count
+    type: number
+    field_type: number
+    read_only: true
+  custom_fields:
+    label: Custom Fields
+    type: array
+    field_type: select
+    description: |
+      Array of { gid, name, type, enum_value? | text_value? | number_value? | date_value? }.
+      Project-level custom fields (Priority, Status, etc.) live here.
+  permalink_url:
+    label: URL
+    type: string
+    field_type: text
+    read_only: true
+  created_at:
+    label: Created At
+    type: datetime
+    field_type: date
+    read_only: true
+  modified_at:
+    label: Modified At
+    type: datetime
+    field_type: date
+    read_only: true
+
+associations:
+  - { name: subtasks, object_type_id: task,    description: "Children: fetched separately at /tasks/{gid}/subtasks" }
+  - { name: stories,  object_type_id: story,   description: "Activity + comments" }
+  - { name: projects, object_type_id: project, description: "All projects this task is in (multi-homed)" }

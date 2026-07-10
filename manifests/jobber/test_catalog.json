@@ -1,0 +1,79 @@
+{
+  "integration_id": "jobber",
+  "generated_at": "2026-07-08T00:00:00Z",
+  "_meta": {
+    "format": "id-based chain (depends_on + input_from + expect) over the OBJECT-GENERIC atoms (create_object/get_object/update_object/delete_object). Each step passes `object` + a `fields` bag; the per-object GraphQL is dispatched by resolve_object from the object schema's graphql descriptor. session_api (kind: graphql) is the proven path.",
+    "purpose": "The CRUDS reference run-chain (Rule Q era): create_object Client → create_object Property (Property→Client via fields.clientId) → create_object Job (Job→Property via fields.propertyId) → get_object Job + ASSERT the 2-hop link → update_object → self-cleaning delete_object. Proves the generic dispatch + reference resolution across create→create→create + the round-trip on read-back.",
+    "notes": [
+      "The reference is injected into the `fields` bag via a NESTED input_from path (fields.clientId ← create_client.outcomes.record_id); the E2E run-chain runner must support nested-path input_from for this to drive (the mechanism was proven LIVE via direct GraphQL 2026-07-08 — see jobber.md).",
+      "run_token tags every record; sampleData:true isolates + sweeps test data.",
+      "Quote/Invoice/Visit create need richer required `fields` (lineItems / origin+dueDetails+tax / nested visit) — enumerated by their schema descriptors, not driven here.",
+      "invalid_input is unit-proven (platform-api reject_path) + live-confirmed (jobCreate bogus propertyId → userErrors 'Property not found')."
+    ]
+  },
+  "tests": [
+    {
+      "id": "create_client",
+      "action": "create_object",
+      "flavor": "session_api",
+      "commit": true,
+      "expected_outcome": "created",
+      "inputs": { "object": "Client", "fields": { "firstName": "Anvisio", "lastName": "Chain {{run_token}}", "companyName": "Anvisio Test {{run_token}}", "sampleData": true } },
+      "expect": { "record_id": "<nonempty>" }
+    },
+    {
+      "id": "create_property",
+      "action": "create_object",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": "create_client",
+      "expected_outcome": "created",
+      "inputs": { "object": "Property", "fields": { "street1": "1 Test Way", "city": "Austin", "province": "TX", "postalCode": "78701", "name": "Chain Property {{run_token}}" } },
+      "input_from": { "fields.clientId": "create_client.outcomes.record_id" },
+      "expect": { "record_id": "<nonempty>" }
+    },
+    {
+      "id": "create_job",
+      "action": "create_object",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": "create_property",
+      "expected_outcome": "created",
+      "inputs": { "object": "Job", "fields": { "title": "Chain Job {{run_token}}", "jobType": "ONE_OFF", "invoicingType": "FIXED_PRICE", "invoicingSchedule": "ON_COMPLETION" } },
+      "input_from": { "fields.propertyId": "create_property.outcomes.record_id" },
+      "expect": { "record_id": "<nonempty>" }
+    },
+    {
+      "id": "read_job",
+      "action": "get_object",
+      "flavor": "session_api",
+      "depends_on": ["create_job", "create_client", "create_property"],
+      "expected_outcome": "fetched",
+      "inputs": { "object": "Job" },
+      "input_from": { "record_id": "create_job.outcomes.record_id" },
+      "expect": { "record": { "result_includes": "<nonempty>" } }
+    },
+    {
+      "id": "update_client",
+      "action": "update_object",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": ["create_client", "read_job"],
+      "expected_outcome": "saved",
+      "inputs": { "object": "Client", "fields": { "lastName": "Chain-Updated {{run_token}}" } },
+      "input_from": { "record_id": "create_client.outcomes.record_id" },
+      "expect": { "record_id": "<nonempty>" }
+    },
+    {
+      "id": "delete_client",
+      "action": "delete_object",
+      "flavor": "session_api",
+      "commit": true,
+      "depends_on": ["update_client", "read_job"],
+      "expected_outcome": "deleted",
+      "inputs": { "object": "Client" },
+      "input_from": { "record_id": "create_client.outcomes.record_id" },
+      "expect": { "record_id": "<nonempty>" }
+    }
+  ]
+}

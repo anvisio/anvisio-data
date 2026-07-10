@@ -1,6 +1,6 @@
 _meta:
   name: manifests/gmail/actions/download_attachment.yaml
-  version: 0.3.0
+  version: 0.5.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
@@ -12,6 +12,8 @@ _meta:
     (no server-side state change) — the local filesystem effect is
     handled by the caller's download manager.
   changelog:
+    - "0.5.0 (2026-06-08): CANONICAL ACTION FORM v71. result.outcome (auto from the winning action, 'downloaded') replaces the `downloaded` boolean; browser resolves via a named signals: map + when:[downloaded]; mcp drops the literal. KNOWN ISSUE (carried, NOT fixed here): the browser `downloaded` signal is a likely FALSE-POSITIVE — selector_appears on the attachment chip, which is present BEFORE the download too (it's the click target). An honest download proof needs a live probe + rethink (pickup follow-up #3). Structure is v71; the signal is unchanged + still suspect."
+    - "0.4.0 (2026-05-25): rename inputs message_id → messageId + attachment_id → attachmentId to match MCP gmail.download_attachment signature AND ThreadView v0.4.0's {messageId} placeholder. Without this rename the runtime substitutes the placeholder sample (a literal '18b39c0000000000') into the deeplink URL because actionInputs.messageId is undefined."
     - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker on download click."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
@@ -26,11 +28,11 @@ commits_changes: false
 depends_on_view: ThreadView
 mcp_tool: gmail.download_attachment
 inputs:
-  message_id:
+  messageId:
     type: text
     required: false
     description: Only consulted by the mcp flavor.
-  attachment_id:
+  attachmentId:
     type: text
     required: false
     description: Only consulted by the mcp flavor.
@@ -39,11 +41,19 @@ inputs:
     required: true
     description: Attachment filename (or substring) shown in the thread
 result:
-  downloaded: boolean
+  # v71: outcome = the winning action ("downloaded"), auto-populated.
+  outcome: text
 flavors:
   browser:
     requires_auth: session_cookie
     label: Click download on attachment
+    # KNOWN-SUSPECT: selector_appears on the attachment chip — present BEFORE
+    # the download too (it's the click target), so this likely false-positives.
+    # Needs a live probe + honest-download-signal rethink (pickup follow-up #3).
+    signals:
+      downloaded:
+        type: selector_appears
+        selector: div[role='main'] div[aria-label*='{{inputs.filename}}']
     recipe:
       - id: download
         type: use_widget
@@ -54,20 +64,15 @@ flavors:
             filename: "{{inputs.filename}}"
     outcomes:
       - action: downloaded
-        signal:
-          type: selector_appears
-          selector: div[role='main'] div[aria-label*='{{inputs.filename}}']
-        extract:
-          downloaded:
-            literal: true
+        when: [downloaded]
   mcp:
     requires_auth: mcp_server
     label: Download via gmail.download_attachment MCP tool
     server: gmail
     tool: download_attachment
     inputs_map:
-      messageId: "{{inputs.message_id}}"
-      attachmentId: "{{inputs.attachment_id}}"
+      messageId: "{{inputs.messageId}}"
+      attachmentId: "{{inputs.attachmentId}}"
       filename: "{{inputs.filename}}"
     outcomes:
       - action: downloaded
@@ -75,6 +80,3 @@ flavors:
           type: network_response
           url_pattern: "*/mcp/*"
           status: 200
-        extract:
-          downloaded:
-            literal: true

@@ -1,0 +1,59 @@
+_meta:
+  name: manifests/outlook/views/ComposePanel.yaml
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    ComposePanel — the new-message compose surface
+    ([data-app-section='MailReadCompose']). Hosts To / Subject / Body +
+    Send. Opened by clicking outlook.compose_button ('New mail') on Inbox;
+    closed via the Discard button in the exit recipe so the draft doesn't
+    leak onto the next view. send_email depends_on_view: ComposePanel.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new. Entry opens compose via outlook.compose_button + waits on the Subject input; exit discards. Selectors live-grounded 2026-06-01 (To=div[aria-label='To'] PeopleKit picker, Subject=input[aria-label='Subject'], Body=div[aria-label='Message body'], Send/Discard buttons by aria-label)."
+
+name: ComposePanel
+description: Compose window for drafting a new email. Hosts the To/Subject/Body
+  fields and the Send button. Opened by clicking outlook.compose_button on Inbox;
+  must be explicitly discarded to avoid leaking the draft onto the next view.
+entry:
+  depends_on_view: Inbox
+  recipe:
+    - id: open_compose
+      type: use_widget
+      args:
+        widget: outlook.compose_button
+        op: invoke
+    - id: wait_compose
+      type: wait_for_element
+      args:
+        selector: input[aria-label='Subject']
+        timeout_ms: 8000
+exit:
+  - id: discard_compose
+    type: click
+    args:
+      selector: button[aria-label='Discard']
+  - id: wait_compose_gone
+    type: wait_for_element
+    args:
+      selector: input[aria-label='Subject']
+      state: absent
+      timeout_ms: 5000
+verify:
+  - type: selector_appears
+    selector: input[aria-label='Subject']
+    timeout_ms: 8000
+url_patterns:
+  - https://outlook\.live\.com/mail/.*
+identifying_selectors:
+  - input[aria-label='Subject']
+  - div[aria-label='Message body']
+  - button[aria-label='Send']
+widgets:
+  - outlook.compose_to
+  - outlook.compose_subject
+  - outlook.compose_body
+  - outlook.send_button
+  - outlook.discard_button

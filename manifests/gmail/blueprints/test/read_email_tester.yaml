@@ -1,0 +1,61 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: read-email-tester
+  version: '1.0.0'
+  title: Gmail read_email browser-flavor tester (cold open)
+  summary: |
+    Live-verifies read_email's browser flavor opening a thread COLD —
+    the path the /agent tool-use loop hit 2026-05-28 (search -> read
+    with no prior thread nav). Self-discovers a recent inbox thread via
+    search_emails, then reads it.
+
+    This is the regression guard for the read_email cold-open path:
+    read_email had NO tester before, so its broken cold-open shipped
+    undetected. In blueprints read_email was always called after a prior
+    step opened the thread, short-circuiting pre-nav; the tool-use loop is
+    the first cold caller. Today (read_email 0.8.0) the browser read opens
+    a fresh tab CLONED from the home tab's current list URL and row-clicks
+    the thread there (ThreadView 0.7.0 current-view entry), then closes the
+    tab — leaving the user's view frozen instead of force-navving to Inbox.
+
+    The assertion IS the atom completing without a pre_nav_failed: a
+    successful read proves (a) ThreadView's row-click entry opened the
+    right thread (verify selector = h2.hP[data-legacy-thread-id matches]),
+    and (b) read_fields scraped it. read_call's outcome carries the
+    scraped subject/from/body in the run result (Rule G: the read result
+    IS the data; no separate read-back, and no LLM synthesize step — that
+    would add cost + a bridge dependency to a pure nav/scrape test).
+
+    Force flavor: browser on BOTH steps — search so the discovered id is
+    the 16-hex DOM form (oauth returns an id form that fails cold-load
+    routing), and read so we exercise the browser cold-open (not the
+    oauth_api flavor, which is id-agnostic and wouldn't test the nav fix).
+
+    Limitation: the discovered thread must be in the cloned list. search
+    uses `in:inbox`, and the fresh tab re-renders the same results, so the
+    row is present. Out-of-list threads use the oauth_api read flavor.
+
+    Drive via: /run-blueprint gmail read_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to read
+      call: gmail.atom.search_emails
+      flavor: browser
+      with:
+        query: 'in:inbox newer_than:7d'
+        maxResults: 1
+
+  - read_each:
+      label: Read the picked thread cold (proof = no pre_nav_failed + scraped fields)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'read thread'
+      do:
+        - read_call:
+            call: gmail.atom.read_email
+            flavor: browser
+            with:
+              messageId: '${ $tid }'

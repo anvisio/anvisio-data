@@ -1,0 +1,29 @@
+_meta:
+  name: manifests/jobber/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber API catalog. ONE GraphQL endpoint serves both the web app (session
+    cookie) and third parties (OAuth bearer). The session_api atoms inline their
+    query in the `call_platform_api` api_def (kind: graphql), so this file is the
+    endpoint reference, not a per-operation catalog. Live-verified 2026-07-08.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. The single graphql endpoint + auth/version notes."
+
+apis:
+  graphql:
+    transport: graphql
+    auth: session_cookie
+    method: POST
+    endpoint_pattern: "https://api.getjobber.com/api/graphql"
+    headers:
+      x-jobber-graphql-version: "2026-05-12"
+    notes: |
+      credentials:'include' (cookie _jobber_session_id, domain .getjobber.com).
+      NO CSRF token — CORS-gated to origin https://secure.getjobber.com. Response
+      envelope is standard GraphQL { data, errors }; a mutation's business
+      rejections ride data.<mutation>.userErrors (non-null, empty on success).
+    confidence: high
+    verified_at: 2026-07-08

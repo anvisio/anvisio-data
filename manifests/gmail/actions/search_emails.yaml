@@ -1,0 +1,152 @@
+_meta:
+  name: manifests/gmail/actions/search_emails.yaml
+  version: 1.6.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-27
+  description: |
+    search_emails atom: find threads matching a Gmail search query and
+    return their thread ids. Read-only.
+
+    Two flavors produce IDENTICAL output shape (flavor-swap is a no-op
+    for any consuming blueprint):
+      - `browser` — types the query into the global search bar, waits
+        for the URL to transition to #search/<query>, scrapes each
+        result row's data-legacy-thread-id.
+      - `oauth_api` — calls Gmail REST users.threads.list?q=...,
+        extracts each thread's id.
+
+    Output is `thread_ids: list<id>` — a flat list. Downstream calls
+    read_email(messageId: $thread_id) which is honored by every flavor
+    of read_email (browser deeplinks #inbox/<id>; oauth uses
+    users.threads.get/<id>; both work uniformly for a thread id).
+
+    Divergence note from raw MCP: the official gmail.search_emails MCP
+    tool returns `messages: [{id, threadId}]`. We diverge on field name
+    (`thread_ids` not `messages`) and shape (flat list of ids, not list
+    of {id, threadId} objects) to make browser-flavor parity feasible
+    without extending the extract DSL with a per-item wrap primitive.
+    The browser DOM only exposes thread ids — never a separate messageId
+    — so a wrapped MCP-shape would need oauth to also collapse messages
+    to threads + provide both fields. The flat shape preserves the
+    semantic (each id is what read_email accepts) AND ships today; the
+    MCP-exact wrapped shape is a future DSL extension if needed.
+  changelog:
+    - "1.6.0 (2026-06-08): CANONICAL ACTION FORM v71. result.outcome (auto from the winning action, 'searched') replaces the `searched` boolean; the per-flavor literal searched flag is dropped. The browser outcome KEEPS its inline `any:` signal (results OR empty-state) — `when:` is AND-only, so an OR terminal can't move to a named signals: map; this is the one atom that stays on an inline signal. No tab_mode (a read in the current tab, default). Behaviour-preserving."
+    - "1.5.0 (2026-05-28): browser flavor handles ZERO-RESULT searches cleanly. The 1.4.0 `await_search_results` gate (`wait_for_element div[role='main'] [data-query]`) was a RECIPE STEP, so on an empty search — where `[data-query]` never renders (live-verified 2026-05-28: an empty search has NO `[data-query]` anywhere) — it timed out at 8s, which is a STEP FAILURE → fired HEAL (burned ~$8 / 17 LLM calls in a live smoke for what should be an instant 'no results'). Fix: remove the gate step; the outcome `signal` is now an `any:` of (a) `selector_appears div[role='main'] [data-query]` (results committed) and (b) `selector_appears div[role='main']` + `must_contain_text: 'No messages matched your search'` (empty committed). Neither fires on the pre-search inbox, so the `any:` self-gates against the inbox-leak too — no separate wait step. A zero-result search now fires the empty branch → extract scrapes 0 rows → `thread_ids: []`, no heal. Empty-state matched on TEXT (the `td.TC` class is generated/fragile per gmail.md). Also a Rule E fix: a valid empty search is a happy path and must not trigger heal."
+    - "1.4.0 (2026-05-28): browser flavor scrape + outcome + `[data-query]` gate all scoped to `div[role='main']`. REAL ROOT CAUSE (live chrome-devtools probe 2026-05-28, after 1.3.0's chip-gate alone didn't fix it): a `from:sadie bamboohr` search showed 52 `tr.zA` rows in the DOM but only 2 were inside `div[role='main']` (the real results, visible); the other 50 were the INBOX, which Gmail keeps as a DETACHED list OUTSIDE `div[role='main']` (`closest(\"div[role='main']\")===null`) for fast back-nav. The unscoped `tr.zA span[data-legacy-thread-id]` matched all 52, inbox-first in DOM order, so the scrape returned inbox ids for a 2-result query → the /agent read loop. Scoping every selector to `div[role='main']` drops the detached inbox (verified: scoped scrape → exactly [19e49f0a, 19dd3630]). Also kept the `span.bog` qualifier — each row carries TWO `span[data-legacy-thread-id]` (subject + another), so the unqualified selector double-counts. The 1.3.0 `[data-query]` gate is RETAINED + scoped (`div[role='main'] [data-query]`): live-confirmed `[data-query]` renders INSIDE main as part of the search view (dqInsideMain=true), so it only appears once main has repainted from inbox to search — the correct 'don't scrape the pre-search inbox-in-main' gate. Both row-clicks verified to open their thread."
+    - "1.3.0 (2026-05-28): browser flavor gates the scrape on the search-results chip bar (`[data-query]`) BEFORE the `tr.zA` outcome fires. Root cause (live /agent smoke 2026-05-28): searching from #inbox, the outcome signal `selector_appears tr.zA span[data-legacy-thread-id]` matched the LEFTOVER INBOX rows during the #inbox→#search transition — Gmail leaves the inbox rows in the DOM for a beat after the URL flips — so the extract scraped the INBOX (9 inbox ids for a 2-result Sadie query). The model then tried to read 9 inbox threads, 8 of which aren't in the Sadie search, and looped forever. `[data-query]` is Gmail's search-refinement chip bar — present ONLY on a search page, NEVER on inbox (SearchResults view 0.2.0 live-verified this; it rejected `button[aria-label='Clear search']` as a persistent false-positive). Waiting for it guarantees the inbox has been replaced by THIS search's results before scraping. NOTE: the 1.2.0 selector_appears fix addressed a DIFFERENT race (scraped 0 rows when the URL flipped before any row painted); it did not account for the inbox rows persisting THROUGH the transition."
+    - "1.2.0 (2026-05-27): browser flavor outcome signal switched from `url_matches '#search/.*'` to `selector_appears 'tr.zA span[data-legacy-thread-id]'` with 8s timeout. Fixes a TOC race: Gmail flips the URL hash to `#search/<query>` BEFORE rendering the result rows, so the prior url_matches fired immediately, extract scraped 0 rows, thread_ids came back empty, and any `for: each in:` consumer iterated zero times silently. Live-failure 2026-05-27: forward_email_tester completed-silently in this race while reply_email_tester won it. selector_appears doesn't fire until at least one row is in the DOM, so extract always sees real data; legitimately empty searches time out at 8s and return no_match (more accurate than silent empty thread_ids)."
+    - "1.1.0 (2026-05-25): browser flavor now honors maxResults via the new from_selector_all `limit_input: maxResults` clause. Prior to this, browser scrape returned all rendered rows (50-100) regardless of the caller's maxResults — diverging from oauth_api's behavior, breaking flavor-swap parity. Confirmed live: search-only-debug returned 100 ids with maxResults:10 ignored."
+    - "1.0.0 (2026-05-25): atom renamed from search_email (singular) → search_emails (plural, matches MCP gmail.search_emails). Output reshaped to `thread_ids: list<id>` (flat). Both flavors produce identical shape. OAuth flavor switches from users.messages.list?q= to users.threads.list?q= so we get thread-level dedupe natively (matches browser scrape which is also thread-level). Old shape (`message_ids` + nullable `messages: list<Message>`) dropped — the `messages: literal:null` on browser flavor meant flavor swap was never actually a no-op. New shape proves out at a real signed-in account live."
+    - "Prior versions lived under search_email.yaml — see git history for changelog 0.1.0 → 0.6.0."
+
+description: >
+  Search the mailbox using Gmail's search query syntax (from:, subject:,
+  has:attachment, label:...) and return a list of matching thread ids.
+  Both flavors return the same flat shape so the consuming blueprint
+  doesn't care which flavor ran.
+object: Thread
+commits_changes: false
+depends_on_view: any
+mcp_tool: gmail.search_emails
+inputs:
+  query:
+    type: text
+    required: true
+  maxResults:
+    type: integer
+    required: false
+    description: |
+      Caps the result list size — honored by both flavors. The oauth_api
+      flavor passes through as the Gmail API maxResults query param. The
+      browser flavor scrapes whatever Gmail rendered and then slices to
+      maxResults via the from_selector_all extract's limit_input clause.
+result:
+  # v71: outcome = the winning action ("searched"), auto-populated.
+  outcome: text
+  thread_ids: list<id>
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Type query into search bar; wait for URL transition
+    recipe:
+      - id: run_search
+        type: use_widget
+        args:
+          widget: gmail.search_input
+          op: fill
+          inputs:
+            value: "{{inputs.query}}"
+    outcomes:
+      - action: searched
+        # Fire when the search has COMMITTED — main shows EITHER results
+        # (the `[data-query]` chip, which renders inside div[role='main']
+        # only when there ARE results) OR the empty-state ("No messages
+        # matched your search", also inside main). Neither marker is present
+        # on the pre-search inbox, so this `any:` ALSO gates against scraping
+        # the inbox rows that linger in main during the #inbox→#search
+        # repaint — no separate wait step is needed (it replaced the prior
+        # await_search_results gate).
+        #
+        # The empty branch is what makes a ZERO-RESULT search return
+        # thread_ids: [] cleanly instead of timing out → heal (live-verified
+        # 2026-05-28: an empty search has NO `[data-query]` ANYWHERE in the
+        # DOM; the "No messages matched" text IS inside div[role='main']).
+        # Matched on TEXT, not the generated `td.TC` class, so it survives
+        # Gmail class churn.
+        signal:
+          any:
+            - type: selector_appears
+              selector: "div[role='main'] [data-query]"
+              timeout_ms: 10000
+            - type: selector_appears
+              selector: "div[role='main']"
+              must_contain_text: "No messages matched your search"
+              timeout_ms: 10000
+        extract:
+          # Scrape ONLY the rows inside div[role='main'] — the live search
+          # results. The detached inbox cache (50 rows outside main, live-
+          # verified 2026-05-28) must NOT be scraped, or the caller gets
+          # inbox ids for a search query → the /agent read loop. The
+          # `span.bog` (subject) qualifier de-dupes: each row carries TWO
+          # span[data-legacy-thread-id] (subject + another), so the
+          # unqualified fallback double-counts — kept only as a fallback.
+          # from_selector_all returns [] (not undefined) when no row
+          # matches, so a downstream `for: each in:` iterates zero times.
+          # limit_input: maxResults honors the caller's cap (parity with
+          # the oauth_api flavor).
+          thread_ids:
+            from_selector_all:
+              - "div[role='main'] tr.zA span.bog span[data-legacy-thread-id]"
+              - "div[role='main'] tr.zA span[data-legacy-thread-id]"
+            attr: data-legacy-thread-id
+            limit_input: maxResults
+          # Single thread_id of the FIRST (top) result — for chained tests that
+          # must target the FOUND thread (read/modify off the search, not blindly
+          # off the producer). With a UNIQUE search (a {{run_token}} subject) the
+          # top row IS the target; from_selector takes the first match. This is
+          # what makes a search outcome PROVE it found our entity, not merely that
+          # a results page rendered (atom-methodology Rule I).
+          thread_id:
+            from_selector: "div[role='main'] tr.zA span.bog span[data-legacy-thread-id]"
+            attr: data-legacy-thread-id
+  oauth_api:
+    requires_auth: oauth_token
+    label: Search via the Gmail REST API (users.threads.list)
+    request:
+      provider: google
+      method: GET
+      url: https://gmail.googleapis.com/gmail/v1/users/me/threads
+      query:
+        q: "{{inputs.query}}"
+        maxResults: "{{inputs.maxResults}}"
+    outcomes:
+      - action: searched
+        extract:
+          # users.threads.list returns { threads: [{id, snippet, historyId}, ...] }
+          # — natively thread-level, no dedupe needed (vs users.messages.list
+          # which would return N entries for an N-message thread).
+          thread_ids:
+            from_api_response: true
+            path: threads[*].id

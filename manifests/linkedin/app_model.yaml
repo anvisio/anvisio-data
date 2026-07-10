@@ -1,0 +1,91 @@
+_meta:
+  name: manifests/linkedin/app_model.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Semantic-layer model for LinkedIn (linkedin.com). Screens, per-screen
+    affordances, known-dead paths, screen transitions. Consumed by
+    propose / heal / Claude when authoring or auditing atoms. PR #1 covers
+    ProfileView (people / lead research); messaging, content, and
+    connections screens are placeholders for later PRs.
+  changelog:
+    - "0.1.0 (2026-06-01): initial. ProfileView grounded live; other screens status:undocumented."
+
+# ─── Screens ──────────────────────────────────────────────────────
+screens:
+  ProfileView:
+    view: ProfileView
+    url_pattern: "*/in/*"
+    purpose: "A member's profile; the surface for prospect / lead research."
+    distinctives:
+      - "Vanity slug is the identity: linkedin.com/in/<slug>/. Own profile redirects to /in/<slug>/?isSelfProfile=true."
+      - "ROTATING HASHED class names (e.g. `_5c527a07`); ZERO <h1> elements; NO id anchors. Selectors MUST be xpath on text / structure / href, never class. See linkedin.md."
+      - "Name is an <h2> inside the /in/ link. Hero card = that h2's NEAREST ancestor <section> (the broad 'first /in/ link' and 'first follower-text' anchors over-match nested wrappers, 100+ links)."
+      - "Hero text order: name, headline, [company-dot-school row], location, '·', 'Contact info', company link, school link, 'N followers', '·', 'M connections'."
+      - "Experience / Education sections are LAZY-LOADED below the fold: 0 <li> until scrolled into view. About (near top) renders eagerly."
+    verified_at: 2026-06-01
+  MessagingView:
+    view: null
+    status: undocumented
+    purpose: "Message threads + composer. Later PR (messaging slice)."
+  FeedView:
+    view: null
+    status: undocumented
+    purpose: "Home feed + Start-a-post composer. Later PR (content slice)."
+
+# ─── Affordances ──────────────────────────────────────────────────
+affordances:
+  ProfileView:
+    hero_card:
+      reads:
+        - { field: name, widget: linkedin.profile_name, note: "<h2> inside the /in/ link; no <h1> exists" }
+        - { field: headline, widget: linkedin.profile_headline }
+        - { field: location, widget: linkedin.profile_location, note: "position-fragile (hero p[3]); FLAGGED" }
+        - { field: current_company, widget: linkedin.profile_company }
+        - { field: connections, widget: linkedin.profile_connections }
+        - { field: followers, widget: linkedin.profile_followers }
+      buttons:
+        # On a PROSPECT's (non-self) profile the hero carries the action row.
+        # Not yet live-probed on a non-self profile (own profile shows
+        # Open-to / Add-section / Enhance instead). For later write PRs.
+        - { label: "Connect", widget: null, state_condition: "non-self profile; later connections PR" }
+        - { label: "Message", widget: null, state_condition: "non-self profile; later messaging PR" }
+        - { label: "Follow", widget: null }
+      missing:
+        - "No <h1> anywhere on the profile; the name is an <h2>."
+        - "No id anchors (#about / #experience / #education were REMOVED in the current redesign). Address sections by <h2> text."
+    about_section:
+      reads:
+        - { field: about, widget: linkedin.profile_about, note: "section addressed by <h2> text 'About'; includes the heading; FLAGGED" }
+
+# ─── Known-dead paths ─────────────────────────────────────────────
+known_dead_paths:
+  - id: class-name-selectors
+    description: "Selectors scoped on LinkedIn CSS class names. Classes are hashed and rotate across deploys (e.g. `_5c527a07`), so any class-based selector is dead-on-arrival or short-lived."
+    dead_selector: ".text-body-medium, .pv-top-card, [class^='_']"
+    discovered: 2026-06-01
+    discovered_in: linkedin.md
+    alternative: "xpath anchored on text (h2 content, 'connections' / 'About'), structure (ancestor::section), and href patterns (/in/, /company/, /school/)."
+  - id: h1-name-anchor
+    description: "Anchoring the member name on an <h1>. The current profile has ZERO <h1> elements; the name is an <h2> inside the /in/ link."
+    dead_selector: "h1, main h1"
+    discovered: 2026-06-01
+    discovered_in: linkedin.md
+    alternative: "xpath=(//main//a[contains(@href,'/in/')]//h2)[1]"
+  - id: section-id-anchors
+    description: "Anchoring profile sections on id (#about / #experience / #education). These id anchors were removed in the current redesign."
+    dead_selector: "#about, #experience, #education"
+    discovered: 2026-06-01
+    discovered_in: linkedin.md
+    alternative: "xpath=//main//h2[normalize-space()='<Section>']/ancestor::section[1]"
+
+# ─── Transitions ──────────────────────────────────────────────────
+transitions:
+  - from: FeedView
+    to: ProfileView
+    via: "click a member's name / photo, or deep-link to /in/<slug>/"
+  - from: any
+    to: ProfileView
+    via: "navigate to https://www.linkedin.com/in/<slug>/ (URL-addressable SPA route)"

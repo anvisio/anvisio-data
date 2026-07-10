@@ -1,7 +1,7 @@
 _meta:
   name: manifests/gmail/views/SearchResults.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
@@ -9,19 +9,29 @@ _meta:
     affordances as Inbox, scoped to matched conversations. URL-deeplink
     entry with placeholder query for validation.
   changelog:
+    - "0.2.0 (2026-05-25): u/0 → u/{account_index} in entry.url + url_patterns. Verify upgraded to input-aware `[data-query*='{query}']` after live-verify discovered: (a) the previously-authored `button[aria-label='Clear search']` is PERSISTENT in the Gmail header (always-on, count: 1 on plain #inbox = false-positive for SearchResults); (b) the search `input[value=...]` attribute holds the DEFAULT value (always empty), not the current input — CSS attribute selectors can't match the live value via the `value` attr; (c) Gmail renders `data-query` attributes on the search-results chip bar containing the actual current query — substring-matches against the caller's query for true per-instance proof. Sample 'in:inbox' is the /validate-views default. When a future atom adopts depends_on_view: SearchResults with actionInputs.query='from:someone', the selector becomes `[data-query*='from:someone']` and only matches when Gmail is actually showing that query's results."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
 name: SearchResults
 description: List view shown after executing a search query in the top search
   bar. Same row affordances as Inbox but scoped to the matched conversations.
   Validation enters via a deeplink with a benign placeholder query; production
-  wizards build the URL with the user's real query.
+  wizards build the URL with the user's real query and pass it as the {query}
+  input for per-instance verify.
 entry:
-  url: https://mail.google.com/mail/u/0/#search/in%3Ainbox
+  url: https://mail.google.com/mail/u/{account_index}/#search/in%3Ainbox
+verify:
+  - type: selector_appears
+    selector: "[data-query*='{query}']"
+    timeout_ms: 8000
+placeholders:
+  query:
+    type: text
+    sample: "in:inbox"
 url_patterns:
-  - https://mail.google.com/mail/u/0/#search/.*
+  - https://mail.google.com/mail/u/\d+/#search/.*
 identifying_selectors:
-  - button[aria-label='Clear search']
+  - "[data-query]"
   - div[role='toolbar'][aria-label='search refinement']
 widgets:
   - gmail.search_input

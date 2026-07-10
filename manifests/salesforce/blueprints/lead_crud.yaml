@@ -1,0 +1,18 @@
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: lead-crud
+  version: '1.0.0'
+  title: Salesforce Lead CRUD (minimal)
+  summary: |
+    Migrated from manifests/salesforce/blueprints/lead_crud.yaml (v60).
+    Smoke-test list_records against the Lead object. The full Lead CRUD
+    chain expands when Lead is exercised end-to-end (per the v60 file's
+    changelog).
+
+do:
+  - list_leads:
+      label: Listing the leads
+      call: salesforce.atom.list_records
+      with:
+        object_type: Lead

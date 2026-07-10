@@ -1,0 +1,41 @@
+_meta:
+  name: manifests/asana/schemas/Section.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Asana Section property schema. Sections are the groupings
+    within a project: board columns in board view, list headers
+    in list view.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[gid] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Section
+object_type_id: section
+mcp_object_type: section
+primary_key: [gid]
+
+properties:
+  gid:
+    label: Section ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+  name:
+    label: Name
+    type: string
+    field_type: text
+    sample: "To do"
+  project:
+    label: Project
+    type: object
+    field_type: text
+    read_only: true
+  created_at:
+    label: Created At
+    type: datetime
+    field_type: date
+    read_only: true

@@ -1,0 +1,89 @@
+_meta:
+  name: manifests/slack/schemas/Channel.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Slack Channel property schema. The shape of channel objects from
+    conversations.list / conversations.info. Same shape covers DMs
+    (id starts with D), group DMs (G), and multi-party ims (M).
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[id] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Channel
+object_type_id: channel
+mcp_object_type: channel
+primary_key: [id]
+
+properties:
+  id:
+    label: Channel ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: "Prefix indicates kind: C=public/private channel, D=DM, G=group DM, M=multi-party im."
+    sample: "C0AMQCYHKE1"
+  name:
+    label: Name
+    type: string
+    field_type: text
+    description: "Channel name without #; null for DMs."
+  is_channel:
+    label: Is Channel
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_private:
+    label: Is Private
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_im:
+    label: Is DM
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_mpim:
+    label: Is Multi-Party DM
+    type: bool
+    field_type: booleancheckbox
+    read_only: true
+  is_archived:
+    label: Archived
+    type: bool
+    field_type: booleancheckbox
+  topic:
+    label: Topic
+    type: object
+    field_type: text
+    description: "{ value, creator, last_set }"
+  purpose:
+    label: Purpose
+    type: object
+    field_type: text
+    description: "{ value, creator, last_set }"
+  num_members:
+    label: Member Count
+    type: number
+    field_type: number
+    read_only: true
+  user:
+    label: DM Counterpart
+    type: string
+    field_type: text
+    read_only: true
+    description: "For DMs (is_im=true): the user id on the other side."
+  creator:
+    label: Created By
+    type: string
+    field_type: text
+    read_only: true
+  created:
+    label: Created At
+    type: number
+    field_type: date
+    read_only: true
+    description: Unix timestamp.

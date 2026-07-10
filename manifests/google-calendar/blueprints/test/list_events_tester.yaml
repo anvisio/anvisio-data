@@ -1,0 +1,18 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: list-events-tester
+  version: '1.0.0'
+  title: Google Calendar list_events tester (gapi read)
+  summary: |
+    Calls list_events over a time window. Default posture uses session_api
+    (gapi events.list) — no OAuth. Result carries the events in the window.
+
+    Drive via: /run-blueprint google-calendar list_events_tester
+do:
+  - list:
+      label: List events in a window (gapi)
+      call: google-calendar.atom.list_events
+      with:
+        time_min: '2026-05-24T00:00:00-07:00'
+        time_max: '2026-05-31T00:00:00-07:00'

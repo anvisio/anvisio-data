@@ -1,0 +1,116 @@
+_meta:
+  name: manifests/hubspot/actions/update_record.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    update_record atom — update one CRM record's properties.
+    commits_changes is true so spec 70 §7 prefers browser (the
+    user-clicks-Save launch contract); MCP / REST cover headless
+    flows.
+
+    Browser recipe lands on the record view + opens the Edit
+    overlay. Per-field fills are deferred to heal-time (the
+    per-property widgets need label-scoped selectors that the
+    initial widgets.yaml seed doesn't carry).
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.record: schema_union<Contact, Company, Deal, Ticket> per v70 signature parity rule. All three flavors populate record.hs_object_id (browser + mcp + oauth_api). Drop primitive record_id + dead updated_fields (no flavor populated the latter)."
+    - "0.1.0 (2026-05-23): initial seed. Browser flavor is a stub
+       (nav + open Edit overlay); per-field fills authored at
+       heal-time once the widget library grows."
+
+description: Update one HubSpot CRM record's properties.
+object: "{{inputs.object_type}}"
+object_types: [Contact, Company, Deal, Ticket]
+commits_changes: true
+depends_on_view: RecordView
+mcp_tool: hubspot.manage_crm_objects
+inputs:
+  portal_id:
+    type: text
+    required: true
+    sample: "245597800"
+  object_type_id:
+    type: text
+    required: true
+    sample: "0-3"
+  object_type:
+    type: text
+    required: true
+    description: Slug used by the public REST API.
+    sample: deals
+  record_id:
+    type: text
+    required: true
+    sample: "316988725990"
+  fields:
+    type: object
+    required: true
+    description: Property name -> value map.
+    sample: { dealstage: contractsent }
+result:
+  record:
+    schema_union: [Contact, Company, Deal, Ticket]
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open record + Edit overlay (user clicks Save on commit:true)
+    recipe:
+      - id: nav_record
+        type: navigate
+        args:
+          url: "{instance.origin}/contacts/{{inputs.portal_id}}/record/{{inputs.object_type_id}}/{{inputs.record_id}}"
+      - id: open_edit
+        type: use_widget
+        args:
+          widget: hubspot.edit_record_button
+          op: invoke
+    outcomes:
+      - action: updated
+        signal:
+          type: selector_appears
+          selector: "[role='dialog'], [data-test-id='edit-overlay']"
+          timeout_ms: 10000
+        extract:
+          record:
+            hs_object_id:
+              from_input: record_id
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official HubSpot MCP manage_crm_objects (operation=update)
+    server: hubspot
+    tool: manage_crm_objects
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          record:
+            hs_object_id:
+              from_api_response: true
+              path: results[0].id
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST PATCH /crm/v3/objects/{type}/{id}
+    request:
+      method: PATCH
+      url: "https://api.hubapi.com/crm/v3/objects/{{inputs.object_type}}/{{inputs.record_id}}"
+      body:
+        properties: "{{inputs.fields}}"
+    outcomes:
+      - action: updated
+        signal:
+          type: network_response
+          url_pattern: "api.hubapi.com/crm/v3/objects/*/*"
+          status: 200
+        extract:
+          record:
+            hs_object_id:
+              from_api_response: true
+              path: id

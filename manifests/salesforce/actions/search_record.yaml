@@ -1,32 +1,44 @@
 _meta:
   name: manifests/salesforce/actions/search_record.yaml
-  version: 2.2.0
+  version: 4.0.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    search_record atom — list-backed record search. Spec 70: three
-    flavors. `browser` navigates to /lightning/search/?q= (live-verified,
-    real cross-sObject SOSL, fastest browser path). `session_api`
-    dispatches Aura `ListUiController.postListRecordsByName` from
-    MAIN-world via call_platform_api kind: aura (session cookie + CSRF
-    auto-extracted). This is the ONLY SF read path proven to work
-    statelessly: SF REST (/services/data/...) 401s on the Lightning
-    cookie, and every Aura *search* descriptor (SearchController,
-    RecordGlobalActionListController.globalSearch, ...) returns
-    non-success. postListRecordsByName lists a listview's records;
-    callers filter / summarize client-side. `mcp` calls
-    salesforce.search_all. Reads prefer session_api > mcp > browser per
-    spec 70 §7. The session_api flavor is the search_and_summarize
-    demo's transport.
-  changelog:
-    - "2.2.0 (2026-05-19): session_api reverts to Aura — `ListUiController.postListRecordsByName` (the descriptor proven working since 2026-04-16, used live in platform-extractors.ts salesforceLiveSearch). v2.1.0's `rest_session` parameterizedSearch failed live: heal proved SF REST API 401s INVALID_SESSION_ID on the Lightning session cookie (it needs an OAuth bearer token). postListRecordsByName lists the AllAccounts listview; the query is not server-side (SF list controllers ignore it) — the composition's synthesize step focuses the summary on the picked query. Outcome signal: url_matches on the SF domain (the Aura call runs inside the recipe step, so there is no post-recipe network event for network_response to catch)."
-    - "2.1.0 (2026-05-19): swap session_api flavor to REST `parameterizedSearch` via `kind: rest_session` — REVERTED in 2.2.0 (SF REST rejects the session cookie)."
-    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api (Aura) + mcp flavors. Live-verified browser nav carries over from v1.0.0."
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    search_record atom — SF cross-object / typed SEARCH via the forceSearch
+    backend (`PredictedResultsDataProviderController.getAnswers`), the SAME
+    SOSL-backed Aura controller the Lightning global-search UI calls.
+    Session-reachable from MAIN-world (callingDescriptor:'UNKNOWN' accepted —
+    unlike the searchEntities/globalSearch descriptors, which fail). Returns
+    matches grouped into per-object BUCKETS; from_search_answers flattens them
+    to a flat [{Id, Name, object_type, ...}] list.
 
-description: Search SF records. browser flavor runs real cross-sObject SOSL; session_api lists the AllAccounts listview (callers filter client-side).
+    THE LLM DECIDES THE SCOPE:
+      - object_type GIVEN  → TYPED search: scopeNames/scopeMap scope the SOSL to
+        that one object (e.g. "10937" within Jobber_Jobs__c → only Jobber Jobs).
+      - object_type OMITTED → GLOBAL cross-object search; every match carries its
+        own object_type, so the caller can filter client-side.
+
+    Two live flavors run the SAME getAnswers call (session-cookie Aura,
+    call_platform_api, MAIN-world): `browser` additionally NAVIGATES to the
+    forceSearch screen first (so the user SEES the search — context/trust),
+    `session_api` is the headless read. (mcp is declarative — no MCP transport
+    in the v70/v71 runtime.)
+  changelog:
+    - "4.0.0 (2026-06-19): REWRITE onto the forceSearch getAnswers SOSL backend. Prior session_api (per-object listview + client-side Name-only filter, requiring list_view_api_name) and browser (forceSearch DOM scrape of {Id,Name}) are REPLACED by call_platform_api → aura PredictedResultsDataProviderController.getAnswers — the controller the Lightning search UI itself calls, session-reachable (callingDescriptor:'UNKNOWN', 200, runs SOSL; the searchEntities/globalSearch descriptors ruled out 2026-05-30 fail, this one does NOT). Live-proven 2026-06-19: term '10937' global → buckets {Job__c, Opportunity, Jobber_Jobs__c} each labeled + full record fields; scopeNames:['Jobber_Jobs__c'] → ONLY the Jobber_Jobs__c bucket. WINS over the old flavors: any-field (SOSL, not Name-only), scoped by object API NAME (no list_view, no plural label, no id-prefix mapping), returns RICH records (not just Id+Name) tagged with object_type. object_type is now OPTIONAL (typed when given, global when omitted); list_view_api_name kept as an ignored deprecated input for caller compat. NEW from_search_answers extractor (extract.ts). dropMissing (template) turns an absent object_type into scopeNames:[] / scopeMap:{} = global. FOLLOW-UP: confirm the global (omitted-object_type) empty-scope behavior + whether scopeNames alone scopes (proven shape sets BOTH scopeNames + scopeMap) in the live runtime pass."
+    - "3.4.0 (2026-06-16): ADD a `browser` flavor — GLOBAL cross-object forceSearch DOM scrape (SUPERSEDED by 4.0.0's getAnswers)."
+    - "3.3.0 (2026-06-16): drop `{{object_type}}.Name` from session_api listRecordsQuery fields (SUPERSEDED by 4.0.0)."
+    - "3.2.0 (2026-06-09): CANONICAL ACTION FORM v71. result.outcome:text (auto, 'searched')."
+    - "3.1.0 (2026-05-31): flatten matches via from_aura_records (SUPERSEDED by 4.0.0's from_search_answers)."
+    - "3.0.0 (2026-05-30): MAJOR REWIRE to per-object listview + filter (SUPERSEDED by 4.0.0)."
+
+description: >
+  Search Salesforce for a value via the forceSearch SOSL backend
+  (getAnswers). object_type scopes to one object (typed); omit it for a
+  global cross-object search — each match is tagged with its object_type
+  either way. Returns rich records ({Id, Name, object_type, ...}).
 object: SearchResult
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: false
 depends_on_view: any
 mcp_tool: salesforce.search_all
@@ -34,73 +46,142 @@ inputs:
   query:
     type: text
     required: true
-    sample: Anvisio
+    sample: "10937"
   object_type:
     type: text
     required: false
+    description: >
+      API name of the object to scope the search to (e.g. Jobber_Jobs__c,
+      Account, Opportunity). Omit for a GLOBAL cross-object search. When
+      given, only that object's matches are returned; when omitted, matches
+      span all objects and each carries its own object_type.
+    sample: Jobber_Jobs__c
+  list_view_api_name:
+    type: text
+    required: false
+    description: >
+      DEPRECATED / ignored (the forceSearch SOSL backend needs no listview).
+      Retained only so pre-4.0.0 callers that still pass it don't break.
 result:
-  searched: boolean
-  matches: list<object>
+  # v71: outcome = the winning action ("searched"), auto-populated by the runtime.
+  outcome: text
+  matches:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
+    cardinality: list
+    nullable: true
 flavors:
-  browser:
-    requires_auth: session_cookie
-    label: Navigate to global search results
-    recipe:
-      - id: nav_to_search
-        type: navigate
-        args:
-          url: "{instance.origin}/lightning/search/?q={{inputs.query}}"
-    outcomes:
-      - action: searched
-        signal:
-          type: url_matches
-          pattern: /lightning/search/
-          timeout_ms: 15000
-        extract:
-          searched:
-            literal: true
-          query:
-            from_input: query
   session_api:
     requires_auth: session_cookie
-    label: SF list records via Aura postListRecordsByName (session cookie + CSRF)
+    label: SF search via forceSearch getAnswers (SOSL, session cookie)
     recipe:
-      - id: aura_list
+      # getAnswers = the forceSearch SOSL backend. object_type templated into BOTH
+      # scopeNames + scopeMap (the proven scoped shape); dropMissing on
+      # call_platform_api args turns an absent object_type into scopeNames:[] /
+      # scopeMap:{} = global cross-object.
+      - id: search_answers
         type: call_platform_api
         args:
           api_def:
             kind: aura
-            descriptor: "aura://ListUiController/ACTION$postListRecordsByName"
-            extract_path: "actions[0].returnValue.records"
+            descriptor: "serviceComponent://ui.search.components.forcesearch.predictedresults.PredictedResultsDataProviderController/ACTION$getAnswers"
+            # Container so from_search_answers reads .answers off the step result.
+            extract_path: "actions[0].returnValue"
           args:
-            objectApiName: "Account"
-            listViewApiName: "AllAccounts"
-            listRecordsQuery:
-              fields:
-                - "Account.Id"
-                - "Account.Name"
-                - "Account.Industry"
-                - "Account.Type"
-                - "Account.Phone"
+            term: "{{inputs.query}}"
+            pageSize: 50
+            currentPage: 1
+            topResultsRequestModel:
+              term: "{{inputs.query}}"
               pageSize: 50
-              sortBy:
-                - "Account.Name"
+              withSingleSOSL: true
+              withEntityPrediction: true
+              withSpellCorrection: true
+              batchSize: 3
+              batchingTimeout: 2500
+              enableRowActions: false
+              scopeNames:
+                - "{{inputs.object_type}}"
+              scopeMap:
+                type: "{{inputs.object_type}}"
     outcomes:
       - action: searched
-        # The Aura call runs entirely inside the recipe's call_platform_api
-        # step — there is no post-recipe DOM/URL transition, so a
-        # network_response signal would start watching AFTER the fetch
-        # already completed and time out. url_matches on the SF domain
-        # resolves on the first poll; `extract` then reads the step result.
+        # getAnswers runs entirely inside the call_platform_api step (no DOM/URL
+        # transition), so url_matches on the SF domain resolves on the first poll;
+        # extract then reads the step result. (Same pattern as query_records.)
         signal:
           type: url_matches
           pattern: "lightning\\.force\\.com"
           timeout_ms: 10000
         extract:
           matches:
-            from_step: aura_list
-          searched:
-            literal: true
+            from_search_answers: search_answers
+  browser:
+    requires_auth: session_cookie
+    label: Show the forceSearch screen (for user context) + read matches via getAnswers
+    # SHOW the search (so the user sees what was searched — context + trust) AND
+    # return the structured matches from the SAME getAnswers SOSL backend. The
+    # navigate carries the term so the SHOWN screen matches the data. goto_home
+    # FIRST: a cold one.app#<hash> from a record view leaves forceSearch
+    # unrendered; home→forceSearch renders (salesforce.md §6d). The shown screen
+    # is the GLOBAL view (cross-object) regardless of object_type — the typed
+    # scoping happens in the getAnswers call, whose structured result is what the
+    # caller consumes (the screen is for human context, not the data source).
+    recipe:
+      - id: goto_home
+        type: navigate
+        args:
+          url: "{instance.origin}/lightning/page/home"
+      - id: goto_search
+        type: navigate
+        args:
+          url: "{instance.origin}/one/one.app"
+          hash_b64_json:
+            componentDef: "forceSearch:searchPageDesktop"
+            attributes:
+              term: "{{inputs.query}}"
+              scopeMap:
+                type: TOP_RESULTS
+              groupId: DEFAULT
+            state: {}
+      - id: await_results
+        type: wait_for_element
+        args:
+          selector: "table[role='grid'] a[href*='/lightning/r/']"
+          timeout_ms: 20000
+      - id: search_answers
+        type: call_platform_api
+        args:
+          api_def:
+            kind: aura
+            descriptor: "serviceComponent://ui.search.components.forcesearch.predictedresults.PredictedResultsDataProviderController/ACTION$getAnswers"
+            extract_path: "actions[0].returnValue"
+          args:
+            term: "{{inputs.query}}"
+            pageSize: 50
+            currentPage: 1
+            topResultsRequestModel:
+              term: "{{inputs.query}}"
+              pageSize: 50
+              withSingleSOSL: true
+              withEntityPrediction: true
+              withSpellCorrection: true
+              batchSize: 3
+              batchingTimeout: 2500
+              enableRowActions: false
+              scopeNames:
+                - "{{inputs.object_type}}"
+              scopeMap:
+                type: "{{inputs.object_type}}"
+    outcomes:
+      - action: searched
+        when: [searched]
+        extract:
+          matches:
+            from_search_answers: search_answers
+    signals:
+      searched:
+        type: selector_appears
+        selector: "table[role='grid'] a[href*='/lightning/r/']"
   mcp:
     requires_auth: mcp_server
     label: SOSL search via SF MCP server
@@ -115,5 +196,3 @@ flavors:
         extract:
           matches:
             from_api_response: ".matches"
-          searched:
-            literal: true

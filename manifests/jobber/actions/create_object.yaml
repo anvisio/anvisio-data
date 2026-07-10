@@ -1,0 +1,131 @@
+_meta:
+  name: manifests/jobber/actions/create_object.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    create_object — the OBJECT-GENERIC create atom (atom-methodology Rule Q). ONE
+    atom creates any Jobber object; the per-object GraphQL (operation name, input
+    type, variable shape) + web url_segment live in each schema's `graphql.create`
+    descriptor, dispatched by the `resolve_object` engine step. Writes prefer
+    browser > session_api (spec 70 §7). `fields` is the platform-generic property
+    bag (Check-6 ALLOW), validated + shaped per the object schema.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Replaces create_client/create_property/
+       create_job (per-object → Rule Q violation). session_api = resolve_object →
+       call_platform_api (kind: graphql) templated from the descriptor; browser =
+       resolve_object → navigate {segment}/new → fill + Save (FLAGGED forms)."
+
+description: Create any Jobber object (Client, Property, Job, Quote, Invoice, Request, Visit).
+object: "{{inputs.object}}"
+object_types: [Client, Property, Job, Quote, Invoice, Request, Visit]
+commits_changes: true
+depends_on_view: any
+inputs:
+  object:
+    type: text
+    required: true
+    description: The object type to create (a defined schema name).
+    sample: Client
+  fields:
+    type: object
+    required: true
+    description: The object's field values (shaped per the object schema's graphql.create descriptor).
+    sample:
+      firstName: Ada
+      lastName: Lovelace
+      sampleData: true
+result:
+  outcome: text
+  record_id: text
+  record:
+    schema_union: [Client, Property, Job, Quote, Invoice, Request, Visit]
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the object's New form; fill; Save when commit:true
+    # FLAGGED: the per-object New forms + Save affordance need live drives (session_api
+    # is the proven path). created_nav accepts any object's record URL (numeric id).
+    signals:
+      created_nav:
+        type: url_matches
+        pattern: "/(?:clients|work_orders|quotes|invoices|requests|visits)/(?<record_id>[0-9]+)(?:$|[/?])"
+        extract:
+          record_id:
+            from_url_match: record_id
+      # abandon = the user navigated AWAY from the New form (Cancel, home, search,
+      # any link) without the record redirect firing. url_leaves is the direct
+      # signal (Jobber New forms are distinct /…/new URLs, not modals).
+      abandon:
+        type: url_leaves
+        from_pattern_contains: "/new"
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: create
+      - id: nav
+        type: navigate
+        args:
+          url: "{instance.origin}/{{steps.desc.new_segment}}/new"
+      - id: fill
+        type: fill_fields
+        args:
+          object: "{{inputs.object}}"
+          from: "{{inputs.fields}}"
+      - id: save
+        type: use_widget
+        commit: true
+        args:
+          widget: jobber.save_generic
+          op: invoke
+    outcomes:
+      - action: created
+        when: [created_nav]
+        extract:
+          record_id:
+            from_signal: created_nav.record_id
+          record:
+            id:
+              from_signal: created_nav.record_id
+      - action: cancelled
+        when: [abandon]
+        not: [created_nav]
+
+  session_api:
+    requires_auth: session_cookie
+    label: GraphQL <object>Create via the session cookie (resolve_object dispatch)
+    recipe:
+      - id: desc
+        type: resolve_object
+        args:
+          object: "{{inputs.object}}"
+          verb: create
+      - id: gql
+        type: call_platform_api
+        args:
+          api_def:
+            kind: graphql
+            endpoint: "https://api.getjobber.com/api/graphql"
+            query: "{{steps.desc.query}}"
+            extract_path: "{{steps.desc.extract_path}}"
+            reject_path: "{{steps.desc.reject_path}}"
+            headers:
+              x-jobber-graphql-version: "2026-05-12"
+          args: "{{steps.desc.variables}}"
+    outcomes:
+      - action: created
+        signal:
+          type: url_matches
+          pattern: "getjobber\\.com"
+          timeout_ms: 10000
+        extract:
+          record_id:
+            from_step: gql
+            path: id
+          record:
+            from_step: gql
+            path: ""

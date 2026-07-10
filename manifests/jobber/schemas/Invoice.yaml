@@ -1,0 +1,122 @@
+_meta:
+  name: manifests/jobber/schemas/Invoice.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Invoice schema — a bill to a Client. Single per-object source for the
+    object-generic atoms. Live-introspected 2026-07-08. NOTE: invoiceCreate
+    requires clientId + origin (enum) + dueDetails + tax — supplied via `fields`.
+  changelog:
+    - "0.1.0 (2026-07-08): initial (object-generic era)."
+
+description: A Jobber Invoice — a bill to a Client for completed work.
+primary_key: [id]
+
+url_segment: invoices
+graphql:
+  create:
+    # Required `fields` (live-confirmed): clientId; origin (InvoiceOrigin enum, e.g.
+    # NEW_JOBBER_ONLINE); dueDetails { dueDate?, invoiceNet? }; tax { taxCalculationMethod
+    # (EXCLUSIVE|INCLUSIVE), taxRateId? }; lineItems — a non-empty list of
+    # { name (required), quantity?, unitPrice?, description? } (NOTE: no
+    # saveToProductsAndServices here — invoice line items differ from quote line items).
+    query: >
+      mutation($input: InvoiceCreateInput!) {
+        invoiceCreate(input: $input) {
+          invoice { id invoiceNumber invoiceStatus client { id } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.invoiceCreate.invoice
+    reject_path: data.invoiceCreate.userErrors
+    variables:
+      input: "{{inputs.fields}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        invoice(id: $id) {
+          id invoiceNumber invoiceStatus dueDate issuedDate createdAt jobberWebUri
+          client { id name }
+        }
+      }
+    extract_path: data.invoice
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($invoiceId: EncodedId!, $input: InvoiceEditInput!) {
+        invoiceEdit(invoiceId: $invoiceId, input: $input) {
+          invoice { id invoiceStatus }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.invoiceEdit.invoice
+    reject_path: data.invoiceEdit.userErrors
+    variables:
+      invoiceId: "{{inputs.record_id}}"
+      input: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($invoiceId: EncodedId!) {
+        invoiceDelete(invoiceId: $invoiceId) { userErrors { message path } }
+      }
+    extract_path: data.invoiceDelete
+    reject_path: data.invoiceDelete.userErrors
+    variables:
+      invoiceId: "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        invoices(searchTerm: $searchTerm, first: $first) {
+          nodes { id invoiceNumber invoiceStatus jobberWebUri client { id name } }
+        }
+      }
+    extract_path: data.invoices.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
+fields:
+  id:
+    type: id
+    label: Invoice ID
+    primary: true
+    readonly: true
+    required: true
+  invoiceNumber:
+    type: text
+    label: Invoice number
+    readonly: true
+    required: true
+  invoiceStatus:
+    type: text
+    label: Status
+    readonly: true
+    required: true
+    description: "InvoiceStatusTypeEnum (draft/awaiting_payment/paid/…)."
+  clientId:
+    type: id
+    label: Client ID
+    required: false
+    ref: Client.id
+    description: The Client this invoice bills (invoiceCreate `input.clientId`, required).
+  dueDate:
+    type: datetime
+    label: Due date
+    required: false
+  issuedDate:
+    type: datetime
+    label: Issued date
+    required: false
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+    required: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true
+    required: true

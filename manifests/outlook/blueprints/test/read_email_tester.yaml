@@ -1,0 +1,37 @@
+document:
+  dsl: '1.0.0'
+  namespace: outlook
+  name: read-email-tester
+  version: '1.0.0'
+  title: Outlook read_email browser-flavor tester
+  summary: |
+    Self-discovers a conversation via search_emails, then reads it. The
+    assertion IS the atom completing with scraped subject/from/body in the
+    run result (Rule G: the read result IS the data — no separate read-back,
+    no synthesize). Harden item #2 driver: confirms MessageView's row-click
+    entry opens the right conversation (data-convid match) and read_fields
+    scrapes the ConversationContainer (subject heading scoping + body
+    selector are the live checks). Force flavor: browser on both steps.
+    Drive via: /run-blueprint outlook read_email_tester
+
+do:
+  - find_one:
+      label: Finding a conversation to read
+      call: outlook.atom.search_emails
+      flavor: browser
+      with:
+        query: pilot
+        maxResults: 1
+
+  - read_each:
+      label: Read the picked conversation (proof = scraped fields)
+      for:
+        each: cid
+        in: '${ .find_one.conversation_ids }'
+        item_label: 'read conversation'
+      do:
+        - read_call:
+            call: outlook.atom.read_email
+            flavor: browser
+            with:
+              messageId: '${ $cid }'

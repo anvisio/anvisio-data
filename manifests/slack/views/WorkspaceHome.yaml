@@ -1,0 +1,46 @@
+_meta:
+  name: manifests/slack/views/WorkspaceHome.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Workspace landing (app.slack.com/client/{workspaceId} with no
+    channel segment). Slack typically redirects this to the user's
+    last-viewed channel, so this is less a stable destination than
+    a transient entry point.
+
+    The url_matches pattern is anchored to end-of-path so it doesn't
+    overlap with ChannelView (which adds a /[CDGM]... channel id).
+    The landmark probe targets the search input (always present in
+    the top nav) rather than the message composer (which only
+    appears post-redirect when a channel is selected).
+  changelog:
+    - "0.2.0 (2026-05-23): anchor url_matches pattern to end-of-path
+       so WorkspaceHome and ChannelView are mutually exclusive;
+       narrow landmark_probe + verify to the search input (the
+       message composer was a false positive on the home URL)."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: WorkspaceHome
+
+entry:
+  url: "https://app.slack.com/client/{workspace_id}"
+landmark_probe:
+  selector: "input[aria-label='Search']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/client/[A-Z0-9]+/?$"
+  - type: selector_appears
+    selector: "input[aria-label='Search']"
+    timeout_ms: 12000
+placeholders:
+  workspace_id:
+    type: text
+    sample: "T0AMCC1EXRV"
+widgets:
+  - slack.global_search
+  - slack.quick_switcher
+  - slack.channel_sidebar_item
+  - slack.dm_sidebar_item

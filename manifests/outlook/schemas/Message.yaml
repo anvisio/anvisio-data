@@ -1,14 +1,38 @@
 _meta:
   name: manifests/outlook/schemas/Message.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.4.2
+  version: 1.0.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-17
+  authored_at: 2026-06-01
   description: |
-    Outlook Message schema (mail item). Read-only today; verbs operate on mail-folder list views via DOM. Fields: subject, from, to, body.
+    Outlook Message schema — the COMPOSE / fill object for send_email
+    (and reply later). Each fillable field carries an explicit `widget:`
+    pointer to the matching outlook.compose_* widget, mirroring gmail's
+    Message schema. The READ object (subject/from/body of an opened
+    conversation) is Conversation.yaml — kept separate because a field's
+    read selector (a conversation heading) differs from its fill selector
+    (a compose input), and a field can only carry one widget pointer.
+  changelog:
+    - "1.0.0 (2026-06-01): net-new authoring for the spec-70 era (replaces the 0.2.0 skeleton stub that only had id/subject/from). Adds To/Subject/Body fill fields with outlook.compose_* widget pointers + id for send-result population. Live-grounded against outlook.live.com 2026-06-01."
 
 object: Message
+primary_key: [id]
 fields:
-  id: { type: text, readonly: true }
-  subject: { type: text }
-  from: { type: email, readonly: true }
+  id:
+    type: id
+    readonly: true
+  To:
+    type: list<email>
+    widget: outlook.compose_to
+  Subject:
+    type: text
+    widget: outlook.compose_subject
+  Body:
+    type: rich_text
+    widget: outlook.compose_body
+  From:
+    type: email
+    readonly: true
+natural_keys:
+  - Subject
+  - id

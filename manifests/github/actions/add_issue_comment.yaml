@@ -1,0 +1,96 @@
+_meta:
+  name: manifests/github/actions/add_issue_comment.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    add_issue_comment atom: post a comment on an issue or PR (PRs
+    are issues at the REST layer). commits_changes:true.
+
+description: Post a comment on a GitHub issue or pull request.
+object: "{{inputs.repo}}"
+object_types: [Issue, PullRequest]
+commits_changes: true
+depends_on_view: IssueView
+mcp_tool: github.add_issue_comment
+inputs:
+  owner:        { type: text, required: true }
+  repo:         { type: text, required: true }
+  issue_number: { type: integer, required: true, description: "Issue number OR PR number" }
+  body:         { type: text, required: true, description: "Markdown" }
+result:
+  comment_id:  number
+  comment_url: string
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open issue/PR + fill comment textarea (user clicks Comment on commit:true)
+    recipe:
+      - id: nav_record
+        type: navigate
+        args:
+          url: "https://github.com/{{inputs.owner}}/{{inputs.repo}}/issues/{{inputs.issue_number}}"
+      - id: fill_comment
+        type: use_widget
+        args:
+          widget: github.issue_comment_textarea
+          op: fill
+          value: "{{inputs.body}}"
+      - id: submit_comment
+        type: use_widget
+        args:
+          widget: github.submit_issue_comment_button
+          op: invoke
+        commit: true
+    outcomes:
+      - action: commented
+        signal:
+          type: selector_appears
+          selector: "[data-testid='issue-comment'], .timeline-comment"
+          timeout_ms: 10000
+        extract:
+          comment_id:
+            literal: null
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official github-mcp-server add_issue_comment
+    server: github
+    tool: add_issue_comment
+    outcomes:
+      - action: commented
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          comment_id:
+            from_api_response: true
+            path: id
+          comment_url:
+            from_api_response: true
+            path: html_url
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: REST POST /repos/{owner}/{repo}/issues/{number}/comments
+    request:
+      method: POST
+      url: "https://api.github.com/repos/{{inputs.owner}}/{{inputs.repo}}/issues/{{inputs.issue_number}}/comments"
+      body:
+        body: "{{inputs.body}}"
+    outcomes:
+      - action: commented
+        signal:
+          type: network_response
+          url_pattern: "api.github.com/repos/*/issues/*/comments"
+          status: 201
+        extract:
+          comment_id:
+            from_api_response: true
+            path: id
+          comment_url:
+            from_api_response: true
+            path: html_url

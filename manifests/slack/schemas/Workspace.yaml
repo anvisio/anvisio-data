@@ -1,0 +1,54 @@
+_meta:
+  name: manifests/slack/schemas/Workspace.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Slack Workspace (Team) property schema. Shape from team.info.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[id] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Workspace
+object_type_id: workspace
+mcp_object_type: team
+primary_key: [id]
+
+properties:
+  id:
+    label: Workspace ID
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: "Txxxx (or Exxx for Enterprise org)."
+    sample: "T0AMCC1EXRV"
+  name:
+    label: Name
+    type: string
+    field_type: text
+  domain:
+    label: Subdomain
+    type: string
+    field_type: text
+    description: "The workspace subdomain (e.g. 'anvisio' for anvisio.slack.com)."
+  email_domain:
+    label: Email Domain
+    type: string
+    field_type: text
+    description: "Pre-configured corporate email domain for SSO."
+  icon:
+    label: Icon
+    type: object
+    field_type: text
+    description: "{ image_34, image_44, image_68, image_88, image_102, image_132, image_230, image_default }"
+  enterprise_id:
+    label: Enterprise Grid ID
+    type: string
+    field_type: text
+    description: Set when this workspace is part of an Enterprise Grid org.
+  enterprise_name:
+    label: Enterprise Grid Name
+    type: string
+    field_type: text

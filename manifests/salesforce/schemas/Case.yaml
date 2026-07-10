@@ -1,0 +1,94 @@
+_meta:
+  name: manifests/salesforce/schemas/Case.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-24
+  description: |
+    Case schema: standard SF Case fields trimmed from the live org's
+    RecordUiController.getObjectInfo describe (2026-05-24). Used by
+    create_record / update_record when object_type=Case.
+  changelog:
+    - "0.1.0 (2026-05-24): initial schema authored from live SF describe. Trimmed to user-facing CRUD fields out of 41 standard. Web-to-case Supplied* fields dropped (less useful in our flows)."
+
+description: |
+  A Salesforce Case. Key prefix 500.
+  Required: OwnerId. (CaseNumber is auto-assigned by SF.)
+  Support ticket / customer service record. Live-probed.
+  Note: CaseNumber is the human-readable name field (auto-numbered);
+  Id is the platform primary key.
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    label: Case ID
+    primary: true
+    readonly: true
+    required: true
+  CaseNumber:
+    type: text
+    label: Case Number
+    readonly: true
+    required: true
+    description: Auto-assigned by SF on insert.
+  Subject:
+    type: text
+    label: Subject
+    required: false
+  Status:
+    type: picklist
+    label: Status
+    required: false
+  Priority:
+    type: picklist
+    label: Priority
+    required: false
+  Origin:
+    type: picklist
+    label: Case Origin
+    required: false
+  Reason:
+    type: picklist
+    label: Case Reason
+    required: false
+  Type:
+    type: picklist
+    label: Type
+    required: false
+  AccountId:
+    type: id
+    label: Account ID
+    required: false
+    ref: Account.Id
+  ContactId:
+    type: id
+    label: Contact ID
+    required: false
+    ref: Contact.Id
+  ParentId:
+    type: id
+    label: Parent Case
+    required: false
+    ref: Case.Id
+  AssetId:
+    type: id
+    label: Asset
+    required: false
+    ref: Asset.Id
+  IsEscalated:
+    type: bool
+    label: Escalated
+    required: false
+  Description:
+    type: textarea
+    label: Description
+    required: false
+  Comments:
+    type: textarea
+    label: Internal Comments
+    required: false
+  OwnerId:
+    type: id
+    label: Case Owner
+    required: false
+    ref: User.Id, Group.Id

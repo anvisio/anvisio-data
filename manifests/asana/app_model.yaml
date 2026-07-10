@@ -1,0 +1,146 @@
+_meta:
+  name: manifests/asana/app_model.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Semantic-layer model for Asana. Catalogs the screens of the Asana
+    web SPA, the affordances available on each, currently known-dead
+    paths, and the transitions between screens. Consumed by propose /
+    heal / Claude when authoring or auditing atoms. The runtime ignores
+    this file.
+
+    Coverage is THIN by design. Asana has NOT had a live browser-flavor
+    hardening session in the spec-70 runtime (the last DOM inspection
+    was 2026-03-21 — a one-page list-view probe, see
+    platform-notes/dom-selectors-asana.md). The screens below are
+    derived from the four views/ files + the obvious SPA navigation, and
+    carry `status: undocumented` for affordance-level detail until a
+    live probe fills them in. Selectors are NOT restated here — they live
+    in widgets.yaml (single-source-of-truth, INTEGRATION_FORMAT.md). URLs
+    + endpoints live in views/ + apis.yaml. This file is the WHAT-each-
+    screen-is-for + transitions map only.
+
+    Format-spec: planning/tech_design/integrations/INTEGRATION_FORMAT.md
+    (Surface 1, app_model.yaml section).
+  changelog:
+    - "0.1.0 (2026-06-01): initial seed authored alongside asana.md to
+       satisfy the integration-completeness gate. Screens derived from
+       views/{MyTasks,ProjectList,ProjectBoard,TaskDetail}.yaml + SPA
+       nav; affordance detail is status:undocumented pending a live
+       browser-flavor hardening session. known_dead_paths is empty — none
+       discovered yet (no live probe). Transitions cover the atom-relevant
+       URL-deeplink edges that the browser-flavor recipes already use."
+
+# ─── Screens ──────────────────────────────────────────────────────
+# All four screens map 1:1 to a views/<Name>.yaml landmark. URL patterns
+# + landmark selectors are authored there (single source of truth); the
+# entries below capture PURPOSE + what each screen is FOR. Affordance-
+# level DOM detail (per-button selectors, custom-field pickers, board-
+# card drag handles) is undocumented until a live probe — see the
+# `affordances` block and asana.md "DOM gotchas".
+
+screens:
+  MyTasks:
+    view: MyTasks
+    url_pattern: "https://app.asana.com/0/{user_id}/list"
+    purpose: "The signed-in user's personal task list, grouped Recently Assigned / Today / Upcoming / Later. The day-planning context surface ('what's on my list')."
+    distinctives:
+      - "Same widget surface as ProjectList (spreadsheet-style `[role='grid']` / `[role='table']` rows) — it reuses asana.global_search / asana.quick_add / asana.add_task_button / asana.task_row_link (see views/MyTasks.yaml)."
+      - "The {user_id} path segment is the authenticated user's gid (from get_me / Workspace.User), NOT a project gid. A task opened from here has no project context in the URL — it routes through the `/0/0/{taskId}` form (TaskDetail)."
+    status: undocumented
+    verified_at: null
+
+  ProjectList:
+    view: ProjectList
+    url_pattern: "https://app.asana.com/0/{project_id}/list"
+    purpose: "A single project's tasks as spreadsheet-style rows grouped into sections (the section = the row-group header). The default create + read surface for create_task / list_tasks_in_project browser/read flows."
+    distinctives:
+      - "Inline-editable: clicking a cell edits in place (the 2026-03-21 probe noted Name / Assignee / Due date / Priority / Status columns). The create_task browser flavor uses the inline 'Add task' row (asana.add_task_button → asana.task_name_input), NOT a modal."
+      - "Sections are project-scoped groupings (Section schema); the same project rendered as a board shows these as columns (ProjectBoard)."
+    status: undocumented
+    verified_at: null
+
+  ProjectBoard:
+    view: ProjectBoard
+    url_pattern: "https://app.asana.com/0/{project_id}/board"
+    purpose: "The same project's tasks as a Kanban board — one column per section, cards draggable between columns. The visual sibling of ProjectList for the same {project_id}."
+    distinctives:
+      - "Landmark is `[class*='BoardColumn']` / `[data-testid='board-column']` (see views/ProjectBoard.yaml), distinct from the list/grid landmark — this is how the runtime tells board-vs-list apart for the same project."
+      - "Drag-to-move-between-columns is the board-native equivalent of the MCP move_task_to_section tool. NO browser-flavor atom wires drag yet (no create/update atom targets the board); the board is read/navigation context for now."
+    status: undocumented
+    verified_at: null
+
+  TaskDetail:
+    view: TaskDetail
+    url_pattern: "https://app.asana.com/0/{project_id}/{task_id}   (also /0/0/{task_id} — opens the task with no project context, from My Tasks)"
+    purpose: "A single task expanded as a right-side overlay pane. The anchor for inline writes (rename, description, mark complete) + comments. Every commits_changes browser flavor that touches a single task navigates here first."
+    distinctives:
+      - "Rendered as an overlay pane on top of whatever list/board was underneath — the URL changes to `/0/{projectId}/{taskId}` but the prior list stays mounted behind it. Landmark is `[class*='TaskPane']` (see views/TaskDetail.yaml)."
+      - "The `/0/0/{task_id}` URL form opens a task WITHOUT a project context (the My Tasks / cross-project path). update_task / add_task_comment / open_task default `project_id` to '0' precisely so a caller with only a task_gid can still deeplink here."
+      - "Affordances exercised by atoms: asana.task_pane_name (rename), asana.task_pane_description, asana.complete_task_button (mark complete), asana.task_comment_input + asana.submit_comment_button (comment). Per-field pickers (Assignee, Due date, custom fields Priority/Status) are NOT wired — they need label-scoped selectors that heal-time will author from the project's custom-field metadata (see widgets.yaml description + asana.md Known gaps)."
+    status: undocumented
+    verified_at: null
+
+# ─── Affordances ──────────────────────────────────────────────────
+# UNDOCUMENTED at affordance granularity. Asana has not been probed live
+# in the spec-70 runtime, so the per-screen button/menu inventories that
+# gmail's app_model carries (toolbar matrices, context-menu state tables)
+# do not exist yet. What IS known is which widgets each view declares —
+# that lives in views/*.yaml `widgets:` lists, and the selectors live in
+# widgets.yaml. Do NOT restate selectors here.
+#
+# When the first live hardening session runs (per asana.md "DOM gotchas"),
+# replace this note with per-screen affordance tables in the gmail shape:
+# toolbar-when-no-selection vs toolbar-when-row-selected, the right-click
+# row context menu (if any), inline-edit cell affordances, the board card
+# drag handle, and the custom-field picker popovers.
+
+affordances:
+  MyTasks:
+    status: undocumented
+    widgets_declared: [asana.global_search, asana.quick_add, asana.add_task_button, asana.task_row_link]
+    note: "Selectors in widgets.yaml. Affordance inventory (toolbar, group-by, filter, sort) not probed live."
+
+  ProjectList:
+    status: undocumented
+    widgets_declared: [asana.global_search, asana.quick_add, asana.add_task_button, asana.task_name_input, asana.task_row_link]
+    note: "create_task browser flavor exercises asana.add_task_button (reveal inline row) → asana.task_name_input (fill name) → user hits Enter (commit:true). The full field-fill (assignee / due / custom fields / description) is deferred to per-field widgets heal-time will author."
+
+  ProjectBoard:
+    status: undocumented
+    widgets_declared: [asana.global_search, asana.quick_add, asana.add_task_button, asana.task_row_link]
+    note: "Card drag-between-columns (the section-move affordance) is NOT wired to any atom. Board is read/nav context for now."
+
+  TaskDetail:
+    status: undocumented
+    widgets_declared: [asana.global_search, asana.task_pane_name, asana.task_pane_description, asana.complete_task_button, asana.task_comment_input, asana.submit_comment_button]
+    note: "Wired affordances: rename (task_pane_name), description (task_pane_description), mark complete (complete_task_button), comment (task_comment_input + submit_comment_button). Assignee / due-date / custom-field pickers are UNwired (deferred to heal-time, per widgets.yaml)."
+
+# ─── Known-dead paths ─────────────────────────────────────────────
+# Empty: none discovered yet. Asana has had no live spec-70 browser-flavor
+# hardening session, so no selector / endpoint / URL path has been proven
+# dead in the runtime. (Contrast gmail, whose list is rich precisely
+# because it was hardened repeatedly.) When a live probe disproves a
+# selector or an endpoint pattern, record it here in the gmail shape:
+#   - id, description, dead_selector|dead_pattern|dead_widget, discovered,
+#     discovered_in, alternative, status.
+known_dead_paths: []
+
+# ─── Transitions ──────────────────────────────────────────────────
+# The atom-relevant subset, derived from views/*.yaml URLs + the navigate
+# steps in actions/*.yaml. Asana's primary navigation grammar is URL
+# deeplinks (feedback_url_hierarchy_first): nearly every edge is a single
+# URL change to `app.asana.com/0/{...}/{...}`, which is why the browser-
+# flavor recipes navigate directly rather than clicking through.
+
+transitions:
+  - { from: any, to: ProjectList, via: "navigate https://app.asana.com/0/{project_id}/list (create_task browser flavor nav_project step)" }
+  - { from: ProjectList, to: ProjectBoard, via: "the project's List/Board view tabs (same {project_id}, /list ↔ /board)" }
+  - { from: ProjectList, to: TaskDetail, via: "click a task row (asana.task_row_link → URL /0/{project_id}/{task_id})" }
+  - { from: ProjectBoard, to: TaskDetail, via: "click a board card (→ URL /0/{project_id}/{task_id})" }
+  - { from: MyTasks, to: TaskDetail, via: "click a row (asana.task_row_link; opens via the /0/0/{task_id} no-project form)" }
+  - { from: any, to: TaskDetail, via: "navigate https://app.asana.com/0/{project_id}/{task_gid} (open_task / update_task / add_task_comment nav_task step; project_id defaults to '0')" }
+  - { from: any, to: MyTasks, via: "sidebar 'My Tasks' link OR navigate /0/{user_id}/list" }
+  - { from: any, to: SearchResults, via: "asana.global_search typeahead + Enter (search overlay; SearchResults is NOT a documented screen yet — no views/ landmark)" }

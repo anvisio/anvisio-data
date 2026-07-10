@@ -1,0 +1,20 @@
+_meta:
+  name: manifests/coffee/schemas/Person.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    A coffee Person / contact. Add-form fields live-probed 2026-07-09 (#person-first, #person-email).
+
+primary_key: [id]
+url_segment: people
+add_label: "Add Person"
+fields:
+  id: { type: id, label: ID, primary: true, readonly: true, required: true }
+  first: { type: text, label: First name, required: true }
+  last: { type: text, label: Last name, required: false }
+  email: { type: text, label: Email, required: false }
+  company: { type: text, label: Company, required: false, ref: Company.name }
+  title: { type: text, label: Title, required: false }
+  phone: { type: text, label: Phone, required: false }

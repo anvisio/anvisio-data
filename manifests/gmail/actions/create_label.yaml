@@ -1,0 +1,184 @@
+_meta:
+  name: manifests/gmail/actions/create_label.yaml
+  version: 0.4.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-27
+  description: |
+    create_label atom: create a new user-defined Gmail label. Three
+    flavors per spec 70:
+
+      browser    — open the sidebar Create-new-label modal, fill the
+                   name input, click Create. Widgets:
+                   gmail.create_label_sidebar_button +
+                   gmail.create_label_name_input +
+                   gmail.create_label_create_button. Modal is
+                   div[role='alertdialog'] (live-verified 2026-05-25).
+      mcp        — call gmail.create_label tool with the canonical
+                   {name, messageListVisibility?, labelListVisibility?}.
+      oauth_api  — POST /gmail/v1/users/me/labels.
+
+    The browser flavor surfaces only `name` in the modal (visibility
+    flags require navigating to Settings → Labels which is a deeper
+    UI flow); MCP + oauth_api support all three inputs natively.
+  changelog:
+    - "0.4.0 (2026-06-08): CANONICAL ACTION FORM v71. tab_mode: current (was runs_in_home_tab); result.outcome replaces the `created` boolean; browser via signals: map + when:/not: — `created` = when:[created] (the 'The label <name> was created.' snackbar); `abandoned` = when:[modal_closed] not:[created] (the Create-label alertdialog closed without the snackbar; grace-guarded; HITL-only — Trap 2: the modal disappears on both Create AND Cancel). ready_to_create dropped. mcp/oauth drop the literal created flag. Mirrors apply_label; behaviour-preserving."
+    - "0.3.1 (2026-05-30): `created` outcome signal upgraded from `selector_appears` to `transient_appears` on the snackbar — MutationObserver latch survives auto-dismiss + is pre-armed for spec-72 commit-delta detection. Same upgrade across all gmail snackbar outcomes; see archive_email 0.8.1."
+    - "0.3.0 (2026-05-28): browser flavor `depends_on_view: Inbox → any` — no more force-nav. ROOT CAUSE (live /agent run 2026-05-28): in a `search → create_label → apply_label` chain, create_label's `depends_on_view: Inbox` force-navved the home tab off the search results to #inbox; the follow-up apply_label then acted on #inbox and missed threads not in the inbox (an older Sadie thread), forcing a re-search workaround. The Create-new-label modal opens from the LEFT SIDEBAR, present on every view (live-verified 2026-05-28: the button is visible on #search and lives OUTSIDE div[role='main']), so the force-nav was never needed. Same Inbox-thrash fix as apply_label 0.9.0; create_label now opens the modal in-place on whatever list is current, leaving the caller's view intact."
+    - "0.2.0 (2026-05-27): browser flavor `created` outcome switched from `selector_disappears div[role='alertdialog']` to `selector_appears [role='alert']` with must_contain_text `The label \"<name>\" was created.`. Fixes a false-success: alertdialog disappears whether the create succeeded OR the user/widget clicked Cancel — recipe reported created=true with no real label created. Live-failure 2026-05-27 on chanu's account. Live-probed positive signal: Gmail emits the snackbar within ~215ms of a real successful Create and keeps it visible for 3+ seconds. Now `created` ONLY matches when the real side effect actually fired."
+    - "0.1.0 (2026-05-25): initial atom — closes the create_label gap
+       in the gmail integration's coverage. Sidebar Create-new-label
+       button + modal verified live; oauth_api endpoint shape from
+       Gmail REST users.labels.create docs."
+
+description: >
+  Create a new user-defined Gmail label. Browser flavor opens the modal
+  from the sidebar Create-new-label button + fills the name + clicks
+  Create. MCP flavor calls gmail.create_label. OAuth flavor calls
+  Gmail REST users.labels.create directly. Returns the new label's id
+  + name (browser flavor can only echo the name back — extracting the
+  REST label id from a DOM-driven flow would require re-fetching the
+  labels list).
+object: Label
+commits_changes: true
+# Gmail's Create-new-label is an in-place modal opened from the LEFT
+# SIDEBAR, which is present on EVERY view (search / label / inbox) —
+# live-verified 2026-05-28 the "Create new label" button is visible on
+# #search and lives OUTSIDE div[role='main']. So depends_on_view: any —
+# NO force-nav. The prior `Inbox` force-navved the home tab to #inbox,
+# which knocked a `search → create_label → apply_label` chain off the
+# search results (apply_label then missed threads not in inbox — live
+# 2026-05-28). Runs in the home tab (wantsOwnTab gate honors this).
+tab_mode: current
+depends_on_view: any
+mcp_tool: gmail.create_label
+inputs:
+  name:
+    type: text
+    required: true
+    description: Label name (Gmail allows nested via "Parent/Child" naming).
+  messageListVisibility:
+    type: text
+    required: false
+    description: "'show' or 'hide' (MCP + oauth_api only — browser modal uses defaults)"
+  labelListVisibility:
+    type: text
+    required: false
+    description: "'labelShow', 'labelShowIfUnread', or 'labelHide' (MCP + oauth_api only)"
+result:
+  # v71: outcome = the winning terminal's action ("created" | "abandoned").
+  outcome: text
+  id: text
+  name: text
+  label:
+    schema: Label
+    nullable: true
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open Create-Label modal + fill name + click Create when commit:true
+    # v71 signals model: `created` = the snackbar; `abandoned` = the modal
+    # closed without it (grace-guarded so a real create wins — the alertdialog
+    # disappears on both Create AND Cancel, Trap 2; the snackbar is the proof).
+    signals:
+      created:
+        type: transient_appears
+        selector: "[role='alert']"
+        must_contain_text: 'The label "{{inputs.name}}" was created.'
+        timeout_ms: 6000
+      modal_closed:
+        type: selector_disappears
+        selector: "div[role='alertdialog']"
+    recipe:
+      - id: open_modal
+        type: use_widget
+        args:
+          widget: gmail.create_label_sidebar_button
+          op: invoke
+      - id: fill_name
+        type: use_widget
+        args:
+          widget: gmail.create_label_name_input
+          op: fill
+          inputs:
+            value: "{{inputs.name}}"
+      - id: click_create
+        type: use_widget
+        commit: true
+        args:
+          widget: gmail.create_label_create_button
+          op: invoke
+    outcomes:
+      - action: created
+        when: [created]
+        extract:
+          # Browser can't cheaply extract Gmail's internal Label_<n> id from
+          # the DOM. Echo the user-supplied name; leave id/label null (route
+          # via mcp/oauth for the id).
+          id:
+            literal: null
+          name:
+            from_input: name
+          label:
+            literal: null
+      - action: abandoned
+        # The Create-label modal closed with no `created` snackbar — the user
+        # cancelled. Grace-guarded so a real create's snackbar wins. HITL-only.
+        when: [modal_closed]
+        not: [created]
+  mcp:
+    requires_auth: mcp_server
+    label: Create label via gmail.create_label MCP tool
+    server: gmail
+    tool: create_label
+    inputs_map:
+      name: "{{inputs.name}}"
+      messageListVisibility: "{{inputs.messageListVisibility}}"
+      labelListVisibility: "{{inputs.labelListVisibility}}"
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          id:
+            from_api_response: true
+            path: id
+          name:
+            from_api_response: true
+            path: name
+          label:
+            Id:
+              from_api_response: true
+              path: id
+            Name:
+              from_api_response: true
+              path: name
+  oauth_api:
+    requires_auth: oauth_token
+    label: Create label via Gmail REST users.labels.create
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/labels
+      body:
+        name: "{{inputs.name}}"
+        messageListVisibility: "{{inputs.messageListVisibility}}"
+        labelListVisibility: "{{inputs.labelListVisibility}}"
+    outcomes:
+      - action: created
+        extract:
+          id:
+            from_api_response: true
+            path: id
+          name:
+            from_api_response: true
+            path: name
+          label:
+            Id:
+              from_api_response: true
+              path: id
+            Name:
+              from_api_response: true
+              path: name

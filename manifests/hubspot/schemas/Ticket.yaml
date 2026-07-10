@@ -1,0 +1,86 @@
+_meta:
+  name: manifests/hubspot/schemas/Ticket.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot Ticket (objectTypeId 0-5) curated property schema. Ticket
+    pipelines + stages are per-portal — use apis.yaml/pipelines_get
+    with object_type_id=0-5 to enumerate the live set.
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[hs_object_id] per v70 INTEGRATION_FORMAT signature parity rule. hs_object_id is the canonical HubSpot identifier (the REST top-level `id` maps to it)."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Ticket
+object_type_id: "0-5"
+mcp_object_type: tickets
+primary_key: [hs_object_id]
+
+properties:
+  subject:
+    label: Ticket Name
+    type: string
+    field_type: text
+    required: true
+  content:
+    label: Ticket Description
+    type: string
+    field_type: textarea
+  hs_pipeline:
+    label: Pipeline
+    type: enumeration
+    field_type: select
+    description: Pipeline id (default = '0' on a free portal).
+  hs_pipeline_stage:
+    label: Ticket Status
+    type: enumeration
+    field_type: select
+    description: Stage in the chosen pipeline; query pipelines_get for live values.
+  hs_ticket_priority:
+    label: Priority
+    type: enumeration
+    field_type: select
+    options:
+      - { value: LOW,    label: Low }
+      - { value: MEDIUM, label: Medium }
+      - { value: HIGH,   label: High }
+  hs_ticket_category:
+    label: Category
+    type: enumeration
+    field_type: select
+  source_type:
+    label: Source
+    type: enumeration
+    field_type: select
+    options:
+      - { value: CHAT,           label: Chat }
+      - { value: EMAIL,          label: Email }
+      - { value: FORM,           label: Form }
+      - { value: PHONE,          label: Phone }
+      - { value: CONVERSATIONS,  label: Conversations }
+      - { value: OTHER,          label: Other }
+  hubspot_owner_id:
+    label: Ticket Owner
+    type: string
+    field_type: select
+  hs_object_id:
+    label: Ticket ID
+    type: number
+    field_type: number
+    read_only: true
+  createdate:
+    label: Create Date
+    type: datetime
+    field_type: date
+    read_only: true
+  hs_lastmodifieddate:
+    label: Last Modified Date
+    type: datetime
+    field_type: date
+    read_only: true
+
+associations:
+  - { name: contacts,  object_type_id: "0-1" }
+  - { name: companies, object_type_id: "0-2" }
+  - { name: deals,     object_type_id: "0-3" }

@@ -1,26 +1,42 @@
 _meta:
   name: manifests/gmail/actions/archive_email.yaml
-  version: 0.3.0
+  version: 0.9.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
-  authored_at: 2026-05-19
+  authored_at: 2026-05-27
   description: |
-    archive_email atom — remove a thread from the inbox. Spec 70:
-    `browser` flavor for the toolbar UI + `mcp` flavor backed by
-    gmail.modify_email (removeLabelIds: [INBOX]). Writes prefer
-    browser > mcp per spec 70 §7 — the user sees the row disappear.
+    archive_email atom: remove a thread from the inbox. Spec 70:
+    `browser` flavor via the right-click context menu's "Archive"
+    item, `mcp` flavor backed by gmail.modify_email (removeLabelIds:
+    [INBOX]), `oauth_api` flavor for direct REST. Writes prefer
+    browser > mcp per spec 70 §7.
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.9.0 (2026-06-08): CANONICAL ACTION FORM v71. tab_mode: current (was runs_in_home_tab); result.outcome (auto from the winning action) replaces the `archived` boolean; browser via a named signals: map + when:/not: — `archived` = when:[archived] (snackbar); `abandoned` = when:[menu_closed] not:[archived] (context menu closed without the snackbar; grace-guarded; HITL-only). ready_to_archive dropped. mcp/oauth drop the literal archived flag. Mirrors delete_email; behaviour-preserving."
+    - "0.8.1 (2026-05-30): `archived` outcome signal upgraded from `selector_appears` to `transient_appears` on the snackbar. MutationObserver latch survives the ~3s auto-dismiss (a polling selector_appears at 200ms could race past it) AND is pre-armed for spec-72 commit-delta detection so the snackbar fires before the watcher arms in commit:true and is still caught. Same upgrade applied across all gmail snackbar outcomes — see gmail.md L4 table."
+    - "0.8.0 (2026-05-28): browser flavor moved from the top TOOLBAR Archive button to the right-click CONTEXT MENU 'Archive' menuitem (template = apply_label 0.9.0), and `depends_on_view: Inbox → any`. ROOT CAUSE (C-rest, live-probed 2026-05-28): the toolbar archive/delete/move buttons are ABSENT in the search view (they render only after row-selection on Inbox), so the old recipe broke for any /agent flow operating on search results. The context menu is present in ALL list views. Probe finding: context-menu items are STATE-dependent — Archive is enabled only when the thread is in the Inbox (else display:none); the runtime's visible-filter skips the disabled lookalike, so `must_contain_text:'Archive'` is robust without exact-text matching. row_checkbox pre-select dropped (contextmenu attaches to the right-clicked row directly). See app_model.yaml context_menu + gmail.md gotcha #7."
+    - "0.7.0 (2026-05-27): add `runs_in_home_tab: true`. Archive is an in-place toolbar action on the inbox row, not a separate edit-URL flow. Same opt-in pattern as apply_label 0.7.0 / create_label / delete_email / move_email — avoids spawning a new edit tab that would throw away the user's loaded inbox state."
+    - "0.6.0 (2026-05-27): replace browser flavor `archived` outcome from scoped `selector_disappears tr.zA:has(...)` to POSITIVE snackbar — `selector_appears [role='alert']` with `must_contain_text: 'Conversation archived.'`. The prior scoped selector_disappears was defensible per the L4 negation ladder (it included the specific thread_id, so it wasn't the generic Trap 2 false-positive) but the snackbar is more reliable: fires within ~100-500ms vs. the animated row disappearance, AND proves the BACKEND committed (vs UI optimism). Snackbar text live-probed 2026-05-27 via MCP CDP-trusted click. Same pattern as apply_label 0.8.0 + create_label 0.2.0."
+    - "0.5.0 (2026-05-25): add oauth_api flavor — POST /gmail/v1/users/me/threads/{thread_id}/modify with body {removeLabelIds: ['INBOX']}. Literal body (no template substitution needed). Provides direct-REST option for background blueprints."
+    - "0.4.0 (2026-05-24): add schema-typed result.thread per v70 signature parity rule. browser echoes thread.Id from input; mcp extracts from modify_email response.message_id."
+    - "0.3.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker (Phase 3 four-cleanup refactor)."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
 description: >
   Archive a thread (remove from Inbox, keep on All Mail). Browser flavor
-  selects the row + clicks the toolbar Archive button. MCP flavor calls
-  gmail.modify_email with removeLabelIds: ["INBOX"].
+  right-clicks the row + clicks the "Archive" context-menu item. MCP flavor
+  calls gmail.modify_email with removeLabelIds: ["INBOX"].
 object: Thread
 commits_changes: true
-depends_on_view: Inbox
+# Gmail's Archive is an in-place right-click context-menu action on the
+# row in WHATEVER list is current (search / label / inbox) — no separate
+# edit URL, so run on the home tab. depends_on_view: any → NO force-nav
+# (forcing #inbox would throw away the search results the /agent is acting
+# on — same Inbox-thrash class as apply_label 0.9.0). The contextmenu
+# selector is scoped to div[role='main'] so it can't match Gmail's
+# detached inbox cache (gmail.md #6).
+tab_mode: current
+depends_on_view: any
 mcp_tool: gmail.modify_email
 inputs:
   thread_id:
@@ -28,39 +44,65 @@ inputs:
     required: true
     description: data-legacy-thread-id of the row to archive
 result:
-  archived: boolean
+  # v71: outcome = the winning terminal's action ("archived" | "abandoned").
+  outcome: text
+  thread:
+    schema: Thread
 flavors:
   browser:
     requires_auth: session_cookie
-    label: Select row; click Archive when commit:true
+    label: Right-click row → Archive when commit:true
+    # v71 signals model: `archived` = the snackbar; `abandoned` = the context
+    # menu closed without it (grace-guarded so a real archive's snackbar wins).
+    signals:
+      archived:
+        type: transient_appears
+        selector: "[role='alert']"
+        must_contain_text: 'Conversation archived.'
+        timeout_ms: 6000
+      menu_closed:
+        type: selector_disappears
+        selector: "[role='menu']"
     recipe:
-      - id: select_row
-        type: use_widget
+      # Open Gmail's right-click context menu on the row (same path as
+      # apply_label 0.9.0). The context menu works in ALL list views;
+      # the toolbar Archive button is absent in search + renders only
+      # after row-selection (gmail.md #7 + app_model context_menu).
+      # Scoped to div[role='main'] so it can't right-click Gmail's
+      # detached inbox cache (gmail.md #6).
+      - id: open_contextmenu_on_row
+        type: contextmenu
         args:
-          widget: gmail.row_checkbox
-          op: invoke
-          inputs:
-            thread_id: "{{inputs.thread_id}}"
-      - id: click_archive
-        type: use_widget
+          selector: "div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])"
+        verify:
+          type: selector_appears
+          selector: "[role='menu'] [role='menuitem'][aria-haspopup='true']"
+          timeout_ms: 4000
+      # Click the "Archive" menuitem. The disabled lookalike (when the
+      # thread isn't in the Inbox) is display:none → the runtime's
+      # visible-filter skips it, so must_contain_text lands on the
+      # enabled item. If the thread is NOT in the inbox, Archive is
+      # disabled → no visible match → the step fails honestly
+      # (archiving a non-inbox thread is a no-op).
+      - id: click_archive_item
+        type: click
         commit: true
         args:
-          widget: gmail.toolbar_archive_button
-          op: invoke
-          inputs:
-            thread_id: "{{inputs.thread_id}}"
+          selector: "[role='menu'] [role='menuitem']"
+          must_contain_text: "Archive"
     outcomes:
-      - action: ready_to_archive
-        signal:
-          type: selector_appears
-          selector: div[role='button'][aria-label='Archive'][data-tooltip='Archive']
       - action: archived
-        signal:
-          type: selector_disappears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+        when: [archived]
         extract:
-          archived:
-            literal: true
+          thread:
+            Id:
+              from_input: thread_id
+      - action: abandoned
+        # The context menu closed with no `archived` snackbar — the user
+        # reviewed and cancelled. Grace-guarded so a real archive's snackbar
+        # wins. HITL-only.
+        when: [menu_closed]
+        not: [archived]
   mcp:
     requires_auth: mcp_server
     label: Archive via gmail.modify_email MCP tool
@@ -76,5 +118,21 @@ flavors:
           url_pattern: "*/mcp/*"
           status: 200
         extract:
-          archived:
-            literal: true
+          thread:
+            Id:
+              from_api_response: ".message_id"
+  oauth_api:
+    requires_auth: oauth_token
+    label: Archive thread via Gmail REST users.threads.modify (remove INBOX label)
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/threads/{{inputs.thread_id}}/modify
+      body:
+        removeLabelIds: ["INBOX"]
+    outcomes:
+      - action: archived
+        extract:
+          thread:
+            Id:
+              from_input: thread_id

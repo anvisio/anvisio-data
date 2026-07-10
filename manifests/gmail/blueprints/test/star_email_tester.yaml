@@ -1,0 +1,52 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: star-email-tester
+  version: '1.0.0'
+  title: Gmail star_email browser-flavor tester
+  summary: |
+    Live-verifies the star_email browser flavor end-to-end through the
+    runtime. Self-discovers a recent inbox thread via search_emails,
+    then stars it.
+
+    The assertion IS the atom's honest L4 outcome (star_email 0.6.0):
+    starring is SILENT in Gmail (no snackbar — live-probed 2026-05-28),
+    so the outcome matches the row star's `aria-label='Starred'`
+    (entity-scoped state probe per /debug-atom Rule B). That selector
+    only appears once Gmail flips the star to filled, so a non-error
+    result from the atom IS proof the star committed. No redundant
+    read-back step (Rule G: don't double-prove an honest L4).
+
+    Side effect: leaves the picked thread STARRED (the atom is
+    idempotent-toward-starred). Unstar it manually after the run if you
+    don't want it starred — same run-once side-effect contract as
+    apply_label_tester leaving a label applied.
+
+    Force flavor: browser on the search step — BYOK accounts default to
+    oauth_api which returns thread.id ids that fail Gmail's cold-load
+    `#all/<id>` URL routing (same gotcha as apply_label_tester 1.1.0 +
+    reply_email_tester 1.2.0).
+
+    Drive via: /run-blueprint gmail star_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to star
+      call: gmail.atom.search_emails
+      flavor: browser  # see summary re: cold-load id rejection
+      with:
+        query: 'newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - star_throwaway:
+      label: Star the picked thread (proof = aria-label='Starred' in atom outcome)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'star thread'
+      do:
+        - star_call:
+            call: gmail.atom.star_email
+            flavor: browser
+            with:
+              thread_id: '${ $tid }'

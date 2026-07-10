@@ -1,24 +1,27 @@
 _meta:
   name: manifests/salesforce/schemas/Account.yaml
-  version: 1.0.0
+  version: 1.1.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
-    Account schema — standard SF Account object fields (Name, Industry, Phone, Website, Type, Description). Used by create_record / update_record when object_type=Account.
+    Account schema: standard SF Account object fields (Name, Industry, Phone, Website, Type, Description). Used by create_record / update_record when object_type=Account.
   changelog:
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    - "1.1.0 (2026-05-24): add primary_key:[Id] per v70 INTEGRATION_FORMAT signature parity rule."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/. Live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: |
   A Salesforce Account. Key prefix 001.
   Required: Name.
   Company/organization. Parent for Contact, Opportunity. Live-probed.
+primary_key: [Id]
 fields:
   Id:
     type: id
     label: Account ID
     primary: true
     readonly: true
+    required: true
   Name:
     type: text
     label: Account Name
@@ -26,53 +29,53 @@ fields:
   Type:
     type: picklist
     label: Account Type
-    optional: true
+    required: false
   Industry:
     type: picklist
     label: Industry
-    optional: true
+    required: false
   Phone:
     type: text
     label: Account Phone
-    optional: true
+    required: false
   Website:
     type: text
     label: Website
-    optional: true
+    required: false
   BillingStreet:
     type: textarea
     label: Billing Street
-    optional: true
+    required: false
   BillingCity:
     type: text
     label: Billing City
-    optional: true
+    required: false
   BillingState:
     type: text
     label: Billing State/Province
-    optional: true
+    required: false
   BillingPostalCode:
     type: text
     label: Billing Zip/Postal Code
-    optional: true
+    required: false
   BillingCountry:
     type: text
     label: Billing Country
-    optional: true
+    required: false
   AnnualRevenue:
     type: number
     label: Annual Revenue
-    optional: true
+    required: false
   NumberOfEmployees:
     type: number
     label: Employees
-    optional: true
+    required: false
   Description:
     type: textarea
     label: Account Description
-    optional: true
+    required: false
   OwnerId:
     type: id
     label: Owner ID
-    optional: true
+    required: false
     ref: User.Id

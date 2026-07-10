@@ -1,0 +1,141 @@
+document:
+  dsl: '1.0.0'
+  namespace: salesforce
+  name: sales-call-notes
+  version: '1.1.0'
+  title: After a sales call — Opportunity + Contact + Email + Meeting
+  summary: |
+    The canonical "after a sales call" demo, re-implemented on the v70
+    blueprints engine + the spec-72 HITL write atoms. Predecessor: the
+    hardcoded /demo-wizard (removed Phase D 2026-05-18) — same narrative,
+    now data not code.
+
+    The demo walks through five HITL writes against a SINGLE story: a
+    customer confirmed a flat-rate deal; loop in their CTO for technical
+    sign-off; schedule the technical review; send the follow-up summary.
+
+    The contact / recipient / account / amount come from per-integration
+    fixtures ($fixtures.salesforce.* + $fixtures.gmail.*). The committed
+    fixtures.example.yaml ships example.com placeholders; drop a gitignored
+    fixtures.local.yaml next to each (manifests/<int>/) to run with your real
+    test data without committing PII.
+
+    Steps:
+      1. SETUP — create a throwaway "<account> Pilot" Opportunity so the demo
+         is portable across orgs (no pre-existing record needed). Click SAVE.
+      2. UPDATE the Opportunity — Amount / Stage / NextStep / Description
+         reflecting the call result. Click SAVE in the SF edit modal.
+      3. ADD CONTACT — create the CTO as a Contact for follow-up. Click SAVE.
+      4. SEND EMAIL — compose the follow-up summary via Gmail. Click SEND.
+      5. SCHEDULE MEETING — 45-min technical review next Tuesday with both
+         the recipient and the CTO as attendees. Click SAVE in the calendar
+         event editor.
+
+    Every step is `commit: false` (spec 71 HITL): the recipe FILLS each
+    form, you review the SaaS UI and click the destructive button. Each
+    write atom's L4 outcome is a spec-72 toaster ladder, so a HITL
+    discard (Cancel / Escape) resolves as `cancelled`, not a Trap-2 fake
+    success.
+
+    Pre-reqs (open these tabs first):
+      - A signed-in Salesforce Lightning dev/test org
+      - A signed-in Gmail tab (https://mail.google.com)
+      - A signed-in Google Calendar tab (https://calendar.google.com)
+
+    Drive: /run-blueprint salesforce sales_call_notes
+    Cleanup: the demo intentionally does NOT delete its fixtures.
+      The fixture Opportunity + Contact remain in your org so you can
+      see the result after the demo. Delete them manually when done
+      (or run /run-blueprint salesforce opportunity_crud which CRUDs
+      its own throwaway data including a final delete).
+
+do:
+  - fixture_opp:
+      label: 'Setup: create the "${ $fixtures.salesforce.account.name } Pilot" Opportunity (click SAVE in SF)'
+      call: salesforce.atom.create_record
+      commit: false
+      with:
+        object_type: Opportunity
+        fields:
+          Name: '${ $fixtures.salesforce.account.name } Pilot'
+          StageName: Prospecting
+          CloseDate: 12/31/2026
+          Amount: 50000
+
+  - open_fixture_opp:
+      label: 'Opening the Opportunity (navigation only)'
+      call: salesforce.atom.open_record
+      with:
+        object_type: Opportunity
+        record_id: '${ .fixture_opp.record_id }'
+
+  - update_opp_post_call:
+      label: 'Update the Opportunity — flat rate, Negotiation/Review, follow-up notes (click SAVE in SF)'
+      call: salesforce.atom.update_record
+      commit: false
+      with:
+        object_type: Opportunity
+        record_id: '${ .fixture_opp.record_id }'
+        fields:
+          Amount: '${ $fixtures.salesforce.deal.amount }'
+          StageName: Negotiation/Review
+          NextStep: 'Technical review with CTO ${ $fixtures.salesforce.contact.first_name } ${ $fixtures.salesforce.contact.last_name }'
+          Description: |
+            ${ $fixtures.gmail.recipient.name } confirmed the flat rate. Pilot
+            starts in 2 weeks. CTO ${ $fixtures.salesforce.contact.first_name }
+            ${ $fixtures.salesforce.contact.last_name } needs to sign off —
+            scheduling the technical review for next Tuesday.
+
+  - add_contact:
+      label: 'Add the follow-up Contact — the CTO (click SAVE in SF)'
+      call: salesforce.atom.create_record
+      commit: false
+      with:
+        object_type: Contact
+        fields:
+          FirstName: '${ $fixtures.salesforce.contact.first_name }'
+          LastName: '${ $fixtures.salesforce.contact.last_name }'
+          Email: '${ $fixtures.salesforce.contact.email }'
+          Title: '${ $fixtures.salesforce.contact.title }'
+
+  - send_summary_email:
+      label: 'Compose the follow-up email to ${ $fixtures.gmail.recipient.name } (click SEND in Gmail)'
+      call: gmail.atom.send_email
+      commit: false
+      with:
+        fields:
+          To: ['${ $fixtures.gmail.recipient.email }']
+          Subject: 'Follow-up: Pricing & Pilot Timeline — ${ $fixtures.salesforce.account.name }'
+          Body: |
+            Hi ${ $fixtures.gmail.recipient.name },
+
+            Thanks for the call today. To confirm what we agreed: the flat
+            rate, with the pilot starting in 2 weeks.
+
+            I'm looping in our CTO ${ $fixtures.salesforce.contact.first_name }
+            ${ $fixtures.salesforce.contact.last_name } for the technical
+            sign-off and have scheduled a 45-minute technical review for next
+            Tuesday at 2pm Pacific — calendar invite to follow.
+
+            Best,
+
+  - schedule_review_meeting:
+      label: 'Schedule the 45-min technical review (Tue 2pm PT, both attendees) (click SAVE in Google Calendar)'
+      call: google-calendar.atom.create_event
+      commit: false
+      with:
+        fields:
+          Title: 'Technical Review — ${ $fixtures.salesforce.account.name } Pilot'
+          StartTime: '2026-06-09T14:00:00-07:00'
+          EndTime:   '2026-06-09T14:45:00-07:00'
+          Attendees:
+            - '${ $fixtures.gmail.recipient.email }'
+            - '${ $fixtures.salesforce.contact.email }'
+          Description: |
+            Technical review with ${ $fixtures.gmail.recipient.name }
+            (${ $fixtures.salesforce.account.name }) and
+            ${ $fixtures.salesforce.contact.first_name }
+            ${ $fixtures.salesforce.contact.last_name } (CTO) for the pilot.
+
+            Confirmed on the discovery call: flat rate; pilot start in 2
+            weeks pending the CTO's technical sign-off.

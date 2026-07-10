@@ -1,0 +1,71 @@
+_meta:
+  name: manifests/github/actions/open_record.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    open_record atom: navigate to an issue, pull request, or
+    repository page. Browser-only; read-only navigation primitive.
+
+    The URL is built from owner + repo + record_path. The caller
+    pre-computes record_path so this atom doesn't need to branch on
+    object_type (the template engine doesn't support ternaries or
+    string concatenation). Recipe-emitters resolve record_path as:
+      issue:        "issues/{number}"
+      pull_request: "pull/{number}"
+      repository:   ""  (repo home)
+  changelog:
+    - "0.2.0 (2026-05-23): drop multi-branch ternary URL template
+       (template engine doesn't support it); replace record_id with
+       record_path so the caller picks the path segment. object_type
+       stays as an informational input + drives object_types
+       routing."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Open a GitHub issue, pull request, or repository page.
+object: "{{inputs.object_type}}"
+object_types: [Issue, PullRequest, Repository]
+commits_changes: false
+depends_on_view: any
+inputs:
+  object_type:
+    type: text
+    required: true
+    description: "issue | pull_request | repository (informational; URL is built from record_path)."
+    sample: issue
+  owner:
+    type: text
+    required: true
+    sample: anvisio-dev
+  repo:
+    type: text
+    required: true
+    sample: sample-project
+  record_path:
+    type: text
+    required: true
+    description: "Path segment after /{owner}/{repo}/. 'issues/{number}' | 'pull/{number}' | '' (repo home)."
+    sample: "issues/1"
+    default: ""
+result:
+  opened: boolean
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Navigate to the GitHub page
+    recipe:
+      - id: nav_record
+        type: navigate
+        args:
+          url: "https://github.com/{{inputs.owner}}/{{inputs.repo}}/{{inputs.record_path}}"
+    outcomes:
+      - action: opened
+        signal:
+          type: url_matches
+          pattern: "^https://github\\.com/[^/]+/[^/]+"
+          timeout_ms: 10000
+        extract:
+          opened:
+            literal: true

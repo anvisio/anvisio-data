@@ -1,0 +1,55 @@
+_meta:
+  name: manifests/salesforce/schemas/Note.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-24
+  description: |
+    Note schema: legacy SF Note (key prefix 002), all 12 standard
+    fields from the live org's RecordUiController.getObjectInfo
+    describe (2026-05-24). Note: the modern Lightning Note experience
+    uses ContentNote (prefix 069) instead; this schema is for the
+    legacy Note object that the existing atoms reference via
+    object_types: [Note].
+  changelog:
+    - "0.1.0 (2026-05-24): initial schema authored from live SF describe. Legacy Note (002), not ContentNote (069). All 12 fields kept since the field set is already minimal."
+
+description: |
+  A Salesforce legacy Note. Key prefix 002.
+  Required: Title, OwnerId, ParentId.
+  Free-text note attached to any parent record. ParentId is
+  polymorphic across many object types (Account, Contact, Opportunity,
+  Lead, Case, etc.). Live-probed.
+
+  For Lightning's "Note" experience, see ContentNote (key prefix 069) -
+  not authored here yet.
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    label: Note ID
+    primary: true
+    readonly: true
+    required: true
+  Title:
+    type: text
+    label: Title
+    required: true
+  Body:
+    type: textarea
+    label: Body
+    required: false
+  ParentId:
+    type: id
+    label: Parent Record
+    required: true
+    description: Polymorphic reference (Account, Contact, Opportunity, Lead, Case, and many more).
+  IsPrivate:
+    type: bool
+    label: Private
+    required: false
+  OwnerId:
+    type: id
+    label: Owner ID
+    required: false
+    ref: User.Id

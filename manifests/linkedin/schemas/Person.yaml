@@ -1,0 +1,53 @@
+_meta:
+  name: manifests/linkedin/schemas/Person.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    LinkedIn member (Person): the entity for prospect / lead research.
+    Field-to-widget mappings drive read_fields in view_profile (reads the
+    profile hero card + About). LinkedIn exposes no usable public API for
+    arbitrary members, so this is a browser-extract-only schema; fields
+    mirror what the profile page surfaces, not an API resource.
+  changelog:
+    - "0.1.0 (2026-06-01): initial. Browser-first; hero-card + About fields. xpath read selectors (LinkedIn DOM has hashed classes, no h1 / id anchors)."
+
+description: >
+  A LinkedIn member profile, the unit of prospect / lead research. The
+  primary key is the vanity slug from the profile URL
+  (linkedin.com/in/<profile_slug>). Read-only; populated by view_profile
+  from the profile page's hero card and About section.
+primary_key: [profile_slug]
+natural_keys:
+  - profile_slug
+  - name
+fields:
+  profile_slug:
+    type: id
+    primary: true
+    # The /in/<slug> identifier: the view_profile input, echoed into the result.
+  name:
+    type: text
+    widget: linkedin.profile_name
+  headline:
+    type: text
+    widget: linkedin.profile_headline
+  location:
+    type: text
+    widget: linkedin.profile_location
+  current_company:
+    type: text
+    widget: linkedin.profile_company
+  current_company_url:
+    type: text
+    widget: linkedin.profile_company_url
+  connections:
+    type: text
+    widget: linkedin.profile_connections
+  followers:
+    type: text
+    widget: linkedin.profile_followers
+  about:
+    type: textarea
+    widget: linkedin.profile_about

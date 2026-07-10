@@ -1,0 +1,187 @@
+_meta:
+  name: manifests/google-calendar/actions/create_event.yaml
+  version: 0.8.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    create_event atom: create a calendar event. The browser flavor fills
+    the event editor and, on commit, clicks Save; the oauth_api + mcp
+    flavors create the event directly. commits_changes:true, so transport
+    priority is browser > oauth_api > mcp per spec 70 §7: the user sees
+    the event appear in their own calendar.
+  changelog:
+    - "0.8.0 (2026-06-09): FLAT TYPED INPUTS (v71 completion) — the fields:{type:object} bag is replaced by flat inputs that MIRROR the MCP google-calendar.create-event input_schema (Title/StartTime/EndTime required; Description/Location/Attendees/ColorId/calendar_id optional; string->text, array<email>->list<text>). Recurrence stays as a BROWSER-ONLY input (not in the MCP schema). The browser recipe's fill_fields drops `from:` (fills from the flat inputs via the writable-field filter); oauth/mcp map the scalars (inputs.fields.X -> inputs.X). An object bag is hard to reason about + diverged from the MCP contract — flat is the canonical v71 form (matches gmail send_email 0.15.0). Callers (schedule_meeting, the testers, test_catalog) updated in lockstep."
+    - "0.7.0 (2026-06-08): CANONICAL ACTION FORM v71 (live-hardened with cd2k). (1) result.outcome:text (auto from the winning action) replaces the `created` boolean; literal extracts dropped (browser produces no id; the schema still declares event_id/html_link/event for the api flavors). (2) the `ready_to_create` PSEUDO-OUTCOME is dropped — the filled-&-ready state is the recipe + the HITL pause, not an LLM terminal (per gmail send_email 0.15.0). (3) SPEC 70 SIGNALS MODEL: the flavor-level abandon_signal is replaced by a named signals: map (saved / editor_closed); created = when:[saved] (the 'Event saved' toast); discarded = when:[editor_closed] not:[saved] (editor closed with no toast — the HITL discard, runner grace-arbitrated so a real Save's toast still wins). No live-behavior change vs 0.6.0 (the 'Event saved' [aria-live='polite'] toast re-confirmed via the editor 2026-06-08). No tab_mode (the editor opens in the same tab, not a new one)."
+    - "0.6.0 (2026-05-29): spec 72 R1 — add browser `abandon_signal` (selector_disappears Title): in commit:false HITL, the editor closing without an 'Event saved' toast is a DISCARD; the runner races it against the commit outcome with a grace window so a discard resolves as cancelled promptly instead of hanging until Skip/timeout."
+    - "0.5.0 (2026-05-28): spec 72 — browser `created` L4 is now the consequence ladder, replacing the bare `selector_disappears input[aria-label='Title']` (a Trap 2 fake-success that reported created on a DISCARD). LIVE-PROBED the toast: it is 'Event saved' (NOT 'Event created') in a goog-lr-* [aria-live='polite'] announcer (NOT [role='alert']). New signal: all:[transient_appears [aria-live='polite'] must_contain 'Event saved', selector_disappears title]. Discard now correctly reports not-committed."
+    - "0.4.0 (2026-05-28): document Recurrence + the RRULE format in the fields-object description so the /agent tool-use LLM (which sees the object-level description, schema-generator.ts) knows to pass an RRULE — it was surfaced but undocumented (bare string)."
+    - "0.3.0 (2026-05-28): browser outcome signals switched to the FULL editor's title (input[aria-label='Title'], was 'Add title') now that the EventEditor entry clicks 'More options'. Recurring events are created by passing fields.Recurrence (an RRULE) — fill_fields drives the event_recurrence widget's Custom dialog. Recurring create via oauth_api/mcp is NOT yet wired (the oauth body needs conditional recurrence+timeZone; MCP create-event has no recurrence param) — see google-calendar.md."
+    - "0.2.0 (2026-05-24): add schema-typed result.event (nullable) per v70 signature parity rule. oauth_api + mcp populate event.{Id, HtmlLink, Title}; browser stubs literal:null (Save-disappears DOM signal doesn't surface the event id)."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.create-event."
+
+description: >
+  Create a calendar event with a title, start, and end (optionally a
+  description, location, and guest list). The browser flavor fills the
+  event editor and, on commit, clicks Save; preview mode fills the editor
+  and stops so the user can review and click Save themselves. The oauth_api
+  and mcp flavors create the event in one call.
+object: Event
+commits_changes: true
+depends_on_view: EventEditor
+mcp_tool: google-calendar.create-event
+inputs:
+  # v71 flat typed inputs (was fields:{type:object}) — MIRROR the MCP
+  # google-calendar.create-event input_schema: required [title, startTime,
+  # endTime]; optional calendarId/description/location/attendees/colorId. Wire
+  # types map the MCP JSON-schema (string -> text, array<email> -> list<text>).
+  # Names follow the Event schema (PascalCase) so the browser fill_fields matches;
+  # mcp/oauth map to the camelCase MCP names. fill_fields assembles the Event
+  # from these (no `from:` — the writable-field filter drops non-Event keys like
+  # calendar_id).
+  Title:
+    type: text
+    required: true
+  StartTime:
+    type: text
+    required: true
+    description: ISO 8601 (e.g. 2026-06-20T15:00:00-07:00).
+  EndTime:
+    type: text
+    required: true
+    description: ISO 8601.
+  Description:
+    type: text
+  Location:
+    type: text
+  Attendees:
+    type: list<text>
+    description: Attendee email addresses.
+  ColorId:
+    type: text
+    description: Google Calendar colorId (palette id string).
+  Recurrence:
+    type: text
+    description: |
+      RFC 5545 RRULE string — e.g. "RRULE:FREQ=WEEKLY;BYDAY=TU,TH;COUNT=6" or
+      "RRULE:FREQ=DAILY;INTERVAL=2;UNTIL=20260815". Omit for a single event.
+      BROWSER-ONLY extension: NOT in the MCP create-event input_schema, so the
+      mcp/oauth flavors do not pass it (recurring create is browser-only today).
+  calendar_id:
+    type: text
+    description: Target calendar id. Defaults to the primary calendar (the runtime substitutes an empty calendarId with 'primary').
+result:
+  # v71: outcome = the winning action ("created" | "discarded"), auto-populated.
+  outcome: text
+  event_id: text
+  html_link: text
+  event:
+    schema: Event
+    nullable: true
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Fill the event editor; click Save when commit:true
+    # v71 signals model (replaces the 0.6.0 flavor-level abandon_signal):
+    #  - saved: the backend success toast — live-probed 2026-05-28 as the text
+    #    "Event saved" (NOT "Event created") in a goog-lr-* [aria-live='polite']
+    #    announcer (NOT [role='alert']).
+    #  - editor_closed: the editor's Title input disappears (Save / Cancel /
+    #    Escape navigates /r/eventedit -> grid).
+    # `created` = when:[saved] (the toast is specific + sufficient). `discarded`
+    # = when:[editor_closed] not:[saved] — the HITL-only discard (editor left
+    # without a save toast). The runner holds a grace window on the not:, so a
+    # real Save (whose toast lands a beat after the editor closes) still wins.
+    # NO per-signal timeout_ms — inherit the caller budget (30s commit / 10min
+    # HITL); an explicit timeout_ms caps the HITL wait (caught live 2026-05-29).
+    signals:
+      saved:
+        type: transient_appears
+        selector: "[aria-live='polite']"
+        must_contain_text: "Event saved"
+      editor_closed:
+        type: selector_disappears
+        selector: input[aria-label='Title']
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          # v71: no `from:` — fill the Event from the action's flat inputs (the
+          # writable-field filter drops non-Event keys like calendar_id).
+          object: Event
+      - id: save
+        type: use_widget
+        commit: true
+        args:
+          widget: google-calendar.event_save
+          op: invoke
+    outcomes:
+      - action: created
+        when: [saved]
+      - action: discarded
+        when: [editor_closed]
+        not: [saved]
+  oauth_api:
+    requires_auth: oauth_token
+    label: Create the event via the Calendar API (events.insert)
+    request:
+      provider: google
+      method: POST
+      url: https://www.googleapis.com/calendar/v3/calendars/{{inputs.calendar_id}}/events
+      body:
+        summary: "{{inputs.Title}}"
+        start:
+          dateTime: "{{inputs.StartTime}}"
+        end:
+          dateTime: "{{inputs.EndTime}}"
+        description: "{{inputs.Description}}"
+        location: "{{inputs.Location}}"
+    outcomes:
+      - action: created
+        extract:
+          event_id:
+            from_api_response: true
+            path: id
+          html_link:
+            from_api_response: true
+            path: htmlLink
+          event:
+            Id:
+              from_api_response: true
+              path: id
+            Title:
+              from_input: Title
+            HtmlLink:
+              from_api_response: true
+              path: htmlLink
+  mcp:
+    requires_auth: mcp_server
+    label: Create the event via the google-calendar create-event MCP tool
+    server: google-calendar
+    tool: create-event
+    inputs_map:
+      title: "{{inputs.Title}}"
+      startTime: "{{inputs.StartTime}}"
+      endTime: "{{inputs.EndTime}}"
+      description: "{{inputs.Description}}"
+      location: "{{inputs.Location}}"
+      attendees: "{{inputs.Attendees}}"
+      calendarId: "{{inputs.calendar_id}}"
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          event_id:
+            from_api_response: ".eventId"
+          html_link:
+            from_api_response: ".htmlLink"
+          event:
+            Id:
+              from_api_response: ".eventId"
+            Title:
+              from_input: Title
+            HtmlLink:
+              from_api_response: ".htmlLink"

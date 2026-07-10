@@ -1,22 +1,25 @@
 _meta:
   name: manifests/salesforce/actions/update_record.yaml
-  version: 2.0.0
+  version: 2.3.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    update_record atom — PATCH semantics on a single SF record. Spec 70:
+    update_record atom: PATCH semantics on a single SF record. Spec 70:
     `browser` flavor opens the edit modal + fills + clicks Save (commit
     step); `session_api` PATCHes the REST endpoint directly; `mcp`
-    calls dml_records with operation: update. Writes prefer
-    browser > session_api > mcp per spec 70 §7.
+    calls dml_records with operation: update. Writes prefer browser >
+    session_api > mcp per spec 70 §7.
   changelog:
-    - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified selectors carry over from v1.0.0."
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    - "2.3.0 (2026-06-09): CANONICAL ACTION FORM v71. (1) result.outcome:text (auto from the winning action: updated | cancelled) replaces the `updated` boolean; literal/`.success` extracts dropped across all 3 flavors (extract carries payload only — record_id/record). (2) the `ready_to_save` PSEUDO-OUTCOME is dropped (the commit:true HITL pause is the ready state, not an LLM terminal). (3) SPEC 70 SIGNALS MODEL: the flavor-level abandon_signal + the 2.2.0 all:[toast,SaveEdit-gone] composite are replaced by a named signals: map — saved_toast (the `<Obj> \"<Name>\" was saved.` toaster in .toastMessage, live-probed 2026-05-29; specific + sufficient) + editor_closed (SaveEdit disappears). updated = when:[saved_toast]; cancelled = when:[editor_closed] not:[saved_toast] (modal closed with no save toast — the HITL discard; grace-arbitrated so a real Save's toast still wins). The positive now keys off the toast ALONE (gcal create_event model) — the toast only fires on success, so dropping the corroborating SaveEdit-gone rung from the positive is equivalent (it becomes the cancelled guard instead). KEEPS inputs.fields:{type:object} (Check-6 allowlisted). object_types kept. Behaviour-preserving."
+    - "2.2.0 (2026-05-29): spec 72 — browser `updated` L4 is now the consequence ladder, replacing the bare `selector_disappears SaveEdit` (Trap 2 fake-success: SaveEdit also disappears on Cancel/discard). Live-probed the toast as `<Obj> \"<Name>\" was saved.` in `.toastMessage` (.slds-theme--success, role=null — NOT [role='alert']). New signal: all:[transient_appears .toastMessage 'was saved', selector_disappears SaveEdit]. Dropped the timeout_ms:10000 (it capped the HITL budget). Added `abandon_signal` so a discard resolves as cancelled via the grace-arbitrated race. The previous bare-disappear was a DELIBERATE choice for welcome-redirect robustness (see widgets.yaml save_button) — the toaster fires regardless of where Save lands, so it is both redirect-robust AND not a fake-success."
+    - "2.1.0 (2026-05-24): add Case + Event to object_types (matching the 8 SF schemas). Add schema-typed result.record per v70 signature parity rule; all flavors echo record.Id from input."
+    - "2.0.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. Live-verified selectors carry over from v1.0.0."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/. Live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Edit an existing record via /lightning/r/{object_type}/{record_id}/edit modal.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: true
 depends_on_view: RecordEditModal
 mcp_tool: salesforce.dml_records
@@ -34,12 +37,36 @@ inputs:
     sample:
       NextStep: Follow up after pilot
 result:
+  # v71: outcome = the winning action ("updated" | "cancelled"), auto-populated.
+  outcome: text
   record_id: text
-  updated: boolean
+  record:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
 flavors:
   browser:
     requires_auth: session_cookie
     label: Fill the edit modal; click Save when commit:true
+    # v71 signals model (replaces the spec-72 flavor-level abandon_signal + the
+    # 2.2.0 all:[toast, SaveEdit-gone] composite):
+    #  - saved_toast: the success toaster, live-probed 2026-05-29 as
+    #    `<Obj> "<Name>" was saved.` in `.toastMessage` (.slds-theme--success,
+    #    role=null — NOT [role='alert']). Specific + sufficient = the positive.
+    #  - editor_closed: the SaveEdit button disappears (Save / Cancel / discard).
+    # updated = when:[saved_toast]; cancelled = when:[editor_closed]
+    # not:[saved_toast] (modal closed with no save toast — the HITL discard;
+    # grace-arbitrated so a real Save's toast still wins). The positive keys off
+    # the toast ALONE (the SaveEdit-gone rung is now the cancelled guard); the
+    # toast only fires on success so this is equivalent to the 2.2.0 composite.
+    # No per-signal timeout_ms — inherit the caller budget (30s commit / 10min
+    # HITL); an explicit timeout_ms caps the HITL wait (caught live on calendar).
+    signals:
+      saved_toast:
+        type: transient_appears
+        selector: ".toastMessage"
+        must_contain_text: "was saved"
+      editor_closed:
+        type: selector_disappears
+        selector: button[name='SaveEdit']
     recipe:
       - id: fill_fields
         type: fill_fields
@@ -53,21 +80,17 @@ flavors:
           widget: salesforce.save_button
           op: invoke
     outcomes:
-      - action: ready_to_save
-        signal:
-          type: selector_appears
-          selector: button[name='SaveEdit']
-          timeout_ms: 8000
       - action: updated
-        signal:
-          type: selector_disappears
-          selector: button[name='SaveEdit']
-          timeout_ms: 10000
+        when: [saved_toast]
         extract:
           record_id:
             from_input: record_id
-          updated:
-            literal: true
+          record:
+            Id:
+              from_input: record_id
+      - action: cancelled
+        when: [editor_closed]
+        not: [saved_toast]
   session_api:
     requires_auth: session_cookie
     label: PATCH /services/data/v62.0/sobjects/{object_type}/{record_id}
@@ -81,8 +104,9 @@ flavors:
         extract:
           record_id:
             from_input: record_id
-          updated:
-            literal: true
+          record:
+            Id:
+              from_input: record_id
   mcp:
     requires_auth: mcp_server
     label: Update via SF MCP server (dml_records update)
@@ -102,5 +126,6 @@ flavors:
         extract:
           record_id:
             from_input: record_id
-          updated:
-            from_api_response: ".results[0].success"
+          record:
+            Id:
+              from_input: record_id

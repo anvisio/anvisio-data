@@ -1,7 +1,7 @@
 _meta:
   name: manifests/gmail/views/LabelView.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
@@ -9,22 +9,34 @@ _meta:
     (Sent, Drafts, Starred, Trash, Spam, custom labels). Behaves like
     Inbox for selection-based actions. Validation deeplinks to #sent.
   changelog:
+    - "0.2.0 (2026-05-25): u/0 → u/{account_index} in entry.url + url_patterns. Upgrade verify to input-aware via {label} placeholder + data-tooltip match — live-verified against the user's account 2026-05-25 (on #sent, `div.aim.ain div[data-tooltip='Sent']` count: 1; on #inbox, count: 0). The prior shape-only `div.aim.ain` matched ANY active folder, so /validate-views couldn't tell Inbox apart from LabelView; the input-aware form proves we landed on the requested label. Sample 'Sent' is the /validate-views default. When an atom adopts depends_on_view: LabelView, it passes actionInputs.label which substitutes into the selector for per-instance proof."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
 name: LabelView
-description: List view scoped to a specific label or system folder (Sent,
+description: >
+  List view scoped to a specific label or system folder (Sent,
   Drafts, Starred, Trash, Spam, custom labels). Behaves like Inbox for
-  selection-based actions. Validation deeplinks to
+  selection-based actions. Validation deeplinks to #sent on the user's
+  signed-in mailbox via {account_index}; per-instance verify proves the
+  requested {label}'s left-nav item is highlighted.
 entry:
-  url: https://mail.google.com/mail/u/0/#sent
+  url: https://mail.google.com/mail/u/{account_index}/#sent
+verify:
+  - type: selector_appears
+    selector: div.aim.ain div[data-tooltip='{label}']
+    timeout_ms: 8000
+placeholders:
+  label:
+    type: text
+    sample: Sent
 url_patterns:
-  - https://mail.google.com/mail/u/0/#sent.*
-  - https://mail.google.com/mail/u/0/#drafts.*
-  - https://mail.google.com/mail/u/0/#starred.*
-  - https://mail.google.com/mail/u/0/#trash.*
-  - https://mail.google.com/mail/u/0/#spam.*
-  - https://mail.google.com/mail/u/0/#label/.*
-  - https://mail.google.com/mail/u/0/#category/.*
+  - https://mail.google.com/mail/u/\d+/#sent.*
+  - https://mail.google.com/mail/u/\d+/#drafts.*
+  - https://mail.google.com/mail/u/\d+/#starred.*
+  - https://mail.google.com/mail/u/\d+/#trash.*
+  - https://mail.google.com/mail/u/\d+/#spam.*
+  - https://mail.google.com/mail/u/\d+/#label/.*
+  - https://mail.google.com/mail/u/\d+/#category/.*
 identifying_selectors:
   - div.aim.ain
   - table.F.cf.zt

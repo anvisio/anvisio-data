@@ -1,0 +1,34 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: search-results-dump
+  version: '1.0.0'
+  title: Debug — dump search_emails results to a synthesize prompt
+  summary: |
+    Browser-flavor hardening debug blueprint. Runs search_emails with
+    triage_inbox's default query + maxResults:10, then synthesizes a
+    one-line JSON of the returned thread_ids. The synthesize prompt's
+    user message contains the thread_ids verbatim in the Context block
+    — so even if you never respond to the sonnet call, reading the
+    prompt JSON in /tmp/anvisio-llm/.../<id>-prompt.json shows exactly
+    what the search step produced. Use this when triage_inbox is misbehaving
+    and you need to confirm the search step itself is returning distinct
+    ids before debugging the per-thread read path.
+
+do:
+  - recent:
+      label: Searching for recent messages
+      call: gmail.atom.search_emails
+      with:
+        query: 'newer_than:1d -category:promotions -category:social'
+        maxResults: 10
+
+  - dump_search_results:
+      label: Dumping search results (prompt context contains thread_ids)
+      synthesize: |
+        Return a one-line JSON object with the count of thread_ids and
+        the first 3 ids. No prose. Format:
+        {"count": <int>, "first_3": [...]}
+      with:
+        thread_ids: '${ .recent.thread_ids }'
+        searched: '${ .recent.searched }'

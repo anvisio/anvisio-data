@@ -1,0 +1,32 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: get-event-tester
+  version: '1.0.0'
+  title: Google Calendar get_event tester (self-discover, gapi read)
+  summary: |
+    Self-discovers a recent event via list_events, then reads each by id
+    through get_event. In the default posture get_event uses session_api
+    (gapi events.get) which works by the API id alone — no grid chip needed
+    (unlike the browser flavor, which requires the event visible on the
+    current grid range, gotcha #2). Read-only + safe.
+
+    Drive via: /run-blueprint google-calendar get_event_tester
+do:
+  - find:
+      label: Find recent events to read
+      call: google-calendar.atom.list_events
+      with:
+        time_min: '2026-05-24T00:00:00-07:00'
+        time_max: '2026-06-07T00:00:00-07:00'
+  - get_each:
+      for:
+        each: ev
+        in: '${ .find.events }'
+        item_label: '${ $ev.summary }'
+      do:
+        - get:
+            label: Read one event by id (gapi events.get)
+            call: google-calendar.atom.get_event
+            with:
+              event_id: '${ $ev.id }'

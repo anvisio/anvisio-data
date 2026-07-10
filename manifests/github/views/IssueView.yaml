@@ -1,0 +1,40 @@
+_meta:
+  name: manifests/github/views/IssueView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Issue detail view (github.com/{owner}/{repo}/issues/{number}).
+    Anchor for close / reopen / comment / edit-title / edit-labels.
+
+name: IssueView
+
+entry:
+  url: "https://github.com/{owner}/{repo}/issues/{issue_number}"
+landmark_probe:
+  selector: "h1, [data-testid='issue-header']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/issues/[0-9]+"
+  - type: selector_appears
+    selector: "h1"
+    timeout_ms: 12000
+placeholders:
+  owner:
+    type: text
+    sample: anvisio-dev
+  repo:
+    type: text
+    sample: sample-project
+  issue_number:
+    type: id
+    sample: "1"
+widgets:
+  - github.global_search_input
+  - github.issue_comment_textarea
+  - github.submit_issue_comment_button
+  - github.close_issue_button
+  - github.reopen_issue_button
+  - github.edit_issue_title_button

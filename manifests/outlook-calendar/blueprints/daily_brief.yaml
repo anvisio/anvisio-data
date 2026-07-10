@@ -1,0 +1,25 @@
+document:
+  dsl: '1.0.0'
+  namespace: outlook-calendar
+  name: daily-brief
+  version: '1.0.0'
+  title: Calendar daily brief
+  summary: |
+    Read the day's events and synthesize a short brief. The calendar-app
+    canonical pattern (list events -> format). The browser flavor reads the
+    currently-displayed grid; the oauth_api flavor (Graph calendarView) takes
+    an explicit date range. Drive via: /run-blueprint outlook-calendar daily_brief
+
+do:
+  - events:
+      label: Reading the calendar
+      call: outlook-calendar.atom.list_events
+
+  - brief:
+      label: Summarizing the day
+      synthesize: |
+        Produce a short brief from the day's events: the count, the next few
+        by start time, and any notable gaps or back-to-back stretches. Group by
+        morning / afternoon / evening. If there are no events, say the day is clear.
+      with:
+        events: '${ .events.events }'

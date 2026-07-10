@@ -1,0 +1,59 @@
+document:
+  dsl: '1.0.0'
+  namespace: outlook
+  name: triage-inbox
+  version: '1.0.0'
+  title: Triage inbox conversations
+  summary: |
+    Search the mailbox, read each matching conversation, judge whether it
+    needs a reply, and synthesize a short overview the user can act on.
+    The "what's important in my inbox?" pattern. First cut uses a keyword
+    query ('pilot') because OWA's search box doesn't accept gmail's
+    `newer_than:` syntax — wiring OWA's recent-date query (received>=…) is
+    a follow-up. Drive via: /run-blueprint outlook triage_inbox
+
+do:
+  - found:
+      label: Searching the mailbox
+      call: outlook.atom.search_emails
+      with:
+        query: pilot
+        maxResults: 10
+
+  - perConversation:
+      label: Reading conversations
+      for:
+        each: cid
+        in: '${ .found.conversation_ids }'
+        item_label: '${ .details.subject }'
+        item_link:
+          view: MessageView
+          with:
+            messageId: '${ $cid }'
+      do:
+        - details:
+            call: outlook.atom.read_email
+            with:
+              messageId: '${ $cid }'
+
+        - importance:
+            judge: |
+              Given the email's subject, sender, and first paragraph,
+              classify importance as "needs_reply" (direct question or
+              action item for the user), "fyi" (informational only), or
+              "skip" (noise, marketing, list-server traffic).
+            options: [needs_reply, fyi, skip]
+            with:
+              subject: '${ .details.subject }'
+              from:    '${ .details.from }'
+              body:    '${ .details.body }'
+
+  - summary:
+      label: Summarizing key findings
+      synthesize: |
+        Produce a 3-bullet overview of the inbox triage:
+        (1) the count of needs_reply / fyi / skip,
+        (2) the top 3 needs_reply subjects + senders,
+        (3) anything urgent (deadlines, escalations) to handle first.
+      with:
+        triaged: '${ .perConversation }'

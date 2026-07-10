@@ -1,0 +1,16 @@
+_meta:
+  name: manifests/google-calendar/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Google Calendar API surface. Empty by design — the oauth_api flavors
+    declare their Calendar API v3 calls inline as `request:` blocks
+    (provider/method/url/query/body), issued by the runtime oauth_api
+    transport. apis.yaml is reserved for session_api / byok_api flavors
+    that reference a named endpoint; google-calendar uses neither.
+  changelog:
+    - "0.1.0 (2026-05-22): initial. Empty apis map — oauth_api flavors use inline request: blocks."
+
+apis: {}

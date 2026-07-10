@@ -1,12 +1,13 @@
 _meta:
   name: manifests/salesforce/views/RecordView.yaml
-  version: 1.0.0
+  version: 1.1.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
   authored_at: 2026-05-16
   description: |
     RecordView view — record detail / view page (/lightning/r/{object_type}/{record_id}/view). Reached via open_record; anchor for update + delete affordances.
   changelog:
+    - "1.1.0 (2026-06-16): landmark/verify now accept `records-highlights2, .slds-page-header` (the runtime splits the comma into an any-of list). Live finding: Activity records (Task/Event) render the LEGACY Aura header (force-record-layout2-header / .slds-page-header), NOT the LWC `records-highlights2` (probed: Task/Event records-highlights2=0, .slds-page-header=1; Contact records-highlights2=1). So delete_record's RecordView pre-nav verify (records-highlights2 only) timed out at 15s on every Task/Event delete before the recipe ran. `.slds-page-header` is present on EVERY object's record page (Contact .slds-page-header=7), so it is a universal record-loaded landmark; keeping records-highlights2 first preserves the exact prior behaviour for the 6 LWC-header objects."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 name: RecordView
@@ -14,13 +15,16 @@ name: RecordView
 entry:
   url: "{instance.origin}/lightning/r/{object_type}/{record_id}/view"
 landmark_probe:
-  selector: records-highlights2
+  # records-highlights2 = the LWC header on CRM objects + Case; .slds-page-header
+  # = the legacy Aura header on Activities (Task/Event). The runtime splits this
+  # comma into an any-of list, so either satisfies "record loaded".
+  selector: records-highlights2, .slds-page-header
   timeout_ms: 15000
 verify:
   - type: url_matches
     pattern: /lightning/r/.+/view
   - type: selector_appears
-    selector: records-highlights2
+    selector: records-highlights2, .slds-page-header
     timeout_ms: 12000
 placeholders:
   object_type:

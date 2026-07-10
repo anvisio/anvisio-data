@@ -1,0 +1,213 @@
+_meta:
+  name: manifests/hubspot/app_model.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    Semantic-layer model for HubSpot's CRM SPA. Catalogs the screens of
+    the UI, the affordances available on each, current known-dead paths,
+    and the transitions between screens. Consumed by propose / heal /
+    Claude when authoring or auditing atoms. The runtime ignores this
+    file.
+
+    SCOPE NOTE — this is a seed authored from the existing manifest
+    (views/, widgets.yaml, actions/, schemas/) and the live page-load
+    captures recorded there (portal 245597800, 2026-05-23). HubSpot has
+    NOT had a live browser-flavor hardening session, so the affordance
+    detail is shallow: it lists which widget each screen carries and what
+    the screen is for, but per-property field widgets, edit-overlay field
+    selectors, and the success-confirmation surfaces (toast text) are NOT
+    yet characterized. Treat every `status: undocumented` screen and the
+    sparse affordance entries as placeholders to fill on first hardening.
+
+    Single-source-of-truth rule (INTEGRATION_FORMAT.md): selectors live
+    in widgets.yaml, URLs/endpoints in apis.yaml + views/, fields in
+    schemas/. This file references them by name; it does NOT restate them.
+
+    Format-spec: planning/tech_design/integrations/INTEGRATION_FORMAT.md
+    (Surface 1, app_model.yaml section).
+  changelog:
+    - "0.1.0 (2026-06-01): initial seed. Screens (RecordView / ListView /
+       BoardView / Dashboard) + their widget affordances derived from
+       views/*.yaml + widgets.yaml; the generic create/edit overlays
+       carry status:undocumented because the browser write recipes are
+       stubs (per-field fills deferred to heal-time per the actions/
+       changelogs). known_dead_paths records the ONE structural gap read
+       from the manifest (no field widgets) + the unverified
+       graphql_crm_objects_get shape; no live DOM drift recorded yet.
+       Transitions cover the atom-relevant nav subset (URL deeplinks +
+       list/board ↔ record + create/edit overlays)."
+
+# ─── Screens ──────────────────────────────────────────────────────
+# HubSpot is one SPA on app{,-na2,-eu1,…}.hubspot.com. All CRM screens
+# are object-type-parameterized by the numeric objectTypeId in the URL
+# (Contact 0-1, Company 0-2, Deal 0-3, Ticket 0-5 — see schemas/). The
+# URL patterns + entry templates are authoritative in views/*.yaml; the
+# url_pattern below is a human summary, not the verify source.
+
+screens:
+  ListView:
+    view: ListView
+    url_pattern: "{instance.origin}/contacts/{portal_id}/objects/{object_type_id}/views/{view_id}/list"
+    purpose: "Object index table — the default landing for Contacts / Companies / Tickets (Deals usually land on BoardView but the list is available at the same URL with /list). Rows are CRM records; each links to its RecordView."
+    distinctives:
+      - "Object-type-agnostic: the SAME view serves every objectTypeId; the type is the `/objects/{object_type_id}/` URL segment, not a distinct screen."
+      - "view_id selects a saved list view; 'all' = the default 'All <object>' view (sample in ListView.yaml)."
+      - "Landmark is the index table (`[data-test-id='crm-index-table']` per ListView.yaml landmark_probe + verify) — used as the read-fallback's render gate in search_records' browser flavor."
+      - "Carries the global Create-new affordance + the in-list search + record-card links (see affordances)."
+    verified_at: 2026-05-23   # views/ListView.yaml live-verify, not an atom hardening pass
+
+  BoardView:
+    view: BoardView
+    url_pattern: "{instance.origin}/contacts/{portal_id}/objects/{object_type_id}/views/{view_id}/board"
+    purpose: "Kanban pipeline board. Deals by default, but valid for any object type that has a pipeline (e.g. Tickets). Each column is a pipeline stage; cards are records."
+    distinctives:
+      - "Columns correspond to pipeline stages — enumerate the live set via apis.yaml/pipelines_get (object_type_id + portal_id), NOT from a hardcoded list. The Deal default pipeline on portal 245597800 had 7 stages (BoardView.yaml changelog: Appointment Scheduled → Qualified To Buy → Presentation Scheduled → Decision Maker Bought-In → Contract Sent → Closed Won → Closed Lost), which also seed schemas/Deal.yaml dealstage options."
+      - "Landmark is `[data-test-id='board-column']` (BoardView.yaml). Cards link to RecordView via hubspot.record_card_link."
+      - "Has the board-specific Add-deals affordance (hubspot.board_add_deal_button) in place of ListView's generic Create-new."
+    verified_at: 2026-05-23   # views/BoardView.yaml live-verify
+
+  RecordView:
+    view: RecordView
+    url_pattern: "{instance.origin}/contacts/{portal_id}/record/{object_type_id}/{record_id}"
+    purpose: "Single-record detail page. The anchor for inline edits, the Edit overlay, and (later) the activity timeline. Reached via open_record; field reads use the GraphQL crmObject query (apis.yaml/graphql_crm_objects_get), not a DOM scrape."
+    distinctives:
+      - "URL carries BOTH the objectTypeId and the recordId — the canonical id is the record's hs_object_id (the numeric tail). create_record / open_record extract record_id from this URL via the `/record/[0-9]+-[0-9]+/(?<record_id>[0-9]+)` capture."
+      - "Landmark is the record page / highlight card (`[data-test-id='record-page']`, `[data-test-id='record-highlight-card']`, or `h2` per RecordView.yaml). The `h2` is the heading the get_record browser flavor waits on."
+      - "Carries the Edit affordance (hubspot.edit_record_button) which opens an edit OVERLAY (see EditOverlay below) + the global search."
+    verified_at: 2026-05-23   # views/RecordView.yaml live-verify (deal 316988725990)
+
+  Dashboard:
+    view: Dashboard
+    url_pattern: "{instance.origin}/user-guide/{portal_id}"
+    purpose: "Catch-all landing dashboard. Not required by any atom today; referenced as a default landmark in onboarding flows as a host for the global search affordance."
+    distinctives:
+      - "Landmark is just the presence of the global Find input (`input[aria-label*='Find']` per Dashboard.yaml). Thin by design."
+    verified_at: 2026-05-23
+    status: partially_documented   # views/Dashboard.yaml exists but the screen carries no atom-bearing affordances yet
+
+  CreateOverlay:
+    view: null   # not a routed view — an overlay opened over List/Board/Dashboard by hubspot.create_new_button
+    url_pattern: "(no URL change; overlay over the current view)"
+    purpose: "The Create-new record form. Opened via the global 'Create new' menu (hubspot.create_new_button) → pick object type. The launch-contract surface where the USER clicks Save."
+    distinctives:
+      - "Per-field fills + the Save click are NOT authored yet — create_record's browser recipe is a STUB that opens the menu and picks the object type (actions/create_record.yaml 0.1.0 changelog). The per-property field widgets it needs are deferred to heal-time."
+      - "Commit confirmation: create_record's browser outcome is a positive `url_matches /record/<id>` (navigation to the new RecordView), NOT a toast — so the L4 signal is real even though the fill steps are unwritten."
+    status: undocumented   # overlay structure + field widgets uncharacterized; awaits first hardening
+
+  EditOverlay:
+    view: null   # an edit overlay opened over RecordView by hubspot.edit_record_button
+    url_pattern: "(no URL change; overlay over RecordView)"
+    purpose: "Inline edit overlay for a single record's properties. Opened via hubspot.edit_record_button on RecordView. The launch-contract surface where the USER clicks Save."
+    distinctives:
+      - "Per-field fills + the Save click are NOT authored yet — update_record's browser recipe is a STUB that navigates to the record + opens the overlay (actions/update_record.yaml 0.1.0 changelog). Per-property field widgets deferred to heal-time."
+      - "The overlay landmark widgets.yaml/hubspot.edit_record_button verifies is `[role='dialog'], [data-test-id='edit-overlay']`. NOTE: update_record's current browser L4 outcome (`selector_appears [role='dialog']`) confirms the overlay OPENED, not that a SAVE committed — it is an overlay-open signal, not a commit-confirmation signal. Replace with a real positive commit rung (success toast / field-value readback) when the fill+Save steps are authored. Do NOT treat the current signal as proof of a committed write."
+    status: undocumented   # overlay structure + field widgets + true commit signal uncharacterized; awaits first hardening
+
+# ─── Affordances ──────────────────────────────────────────────────
+# What each screen exposes, keyed to the widget that drives it. Selectors
+# live in widgets.yaml — referenced here by widget id only. This is the
+# SEMANTIC layer (what the affordance is for), not a selector table.
+
+affordances:
+  global_chrome:
+    note: "Always-present top-nav affordances available on List / Board / Record / Dashboard (whichever screens declare them in views/*.yaml widgets:)."
+    buttons:
+      - { label: "Find / global search", widget: hubspot.global_search_input, behavior: "typeahead global search; opens a listbox/dialog of results. Archetype typeahead_search. Present on ListView (no — see note), RecordView, Dashboard." }
+      - { label: "Create new", widget: hubspot.create_new_button, behavior: "opens the Create-new menu (role=menu); pick an object type to open the CreateOverlay. Entry point for create_record's browser flavor. Present on ListView + Dashboard." }
+
+  ListView:
+    affordances:
+      - { label: "In-list search", widget: hubspot.list_search_input, behavior: "scopes search to the current object's index (archetype typeahead_search; verify_target the search-results container)." }
+      - { label: "Create new", widget: hubspot.create_new_button, behavior: "opens CreateOverlay (see global_chrome)", entry_point_for: ["create_record browser flavor (stub)"] }
+      - { label: "Record card link", widget: hubspot.record_card_link, behavior: "navigates to RecordView (archetype click_navigates; verify_target_url_contains '/record/')", opens: RecordView }
+    missing:
+      - "No per-row inline-edit / bulk-action affordances catalogued yet — not probed."
+
+  BoardView:
+    affordances:
+      - { label: "In-list search", widget: hubspot.list_search_input, behavior: "same widget as ListView; scopes the board's cards." }
+      - { label: "Add deals", widget: hubspot.board_add_deal_button, behavior: "board-specific create entry (role=menu / dialog). The board's analogue of Create-new." }
+      - { label: "Record card link", widget: hubspot.record_card_link, behavior: "card → RecordView", opens: RecordView }
+    missing:
+      - "Drag-to-restage (moving a card between stage columns) is the obvious board write affordance but is NOT authored — update_record uses the Edit overlay, not a drag. Probe + author if a restage atom is ever needed."
+
+  RecordView:
+    affordances:
+      - { label: "Edit", widget: hubspot.edit_record_button, behavior: "opens the EditOverlay (role=dialog / data-test-id=edit-overlay)", entry_point_for: ["update_record browser flavor (stub)"], opens: EditOverlay }
+      - { label: "Find / global search", widget: hubspot.global_search_input, behavior: "see global_chrome" }
+    missing:
+      - "Per-property inline edit pencils, the Actions menu (delete / merge / change-owner), and the activity-timeline composer are NOT catalogued — none probed. The Edit OVERLAY's per-field widgets are the immediate gap blocking real update_record fills."
+
+  Dashboard:
+    affordances:
+      - { label: "Find / global search", widget: hubspot.global_search_input }
+      - { label: "Create new", widget: hubspot.create_new_button }
+
+  CreateOverlay:
+    status: undocumented
+    missing:
+      - "Per-property field widgets (text / select / radio / date per schemas/) + the Save button widget. Deferred to heal-time per create_record 0.1.0. Author these on first hardening (label-scoped selectors authored from the property-definitions response, per widgets.yaml's deferral note)."
+
+  EditOverlay:
+    status: undocumented
+    missing:
+      - "Per-property field widgets + the Save button widget, same as CreateOverlay. Deferred to heal-time per update_record 0.1.0."
+
+# ─── Known-dead paths ─────────────────────────────────────────────
+# ONLY currently-dead / unverified / structurally-absent paths. No live
+# DOM drift has been recorded yet (no hardening session). The entries
+# below are read straight from the manifest's own notes — not invented.
+
+known_dead_paths:
+  - id: no_per_property_field_widgets
+    description: "widgets.yaml ships ONLY 6 global affordances (search / create-new menu / list+board search / edit button / add-deal / record-card link). There are NO per-property field widgets (Lifecycle Stage, Lead Status, Deal Stage, Amount, …). Any write recipe that tries to fill an individual record field has no widget to use — which is why create_record + update_record browser recipes are STUBS that stop at 'overlay opened'. This is a structural authoring gap, not a selector drift."
+    dead_widget: null
+    discovered: 2026-05-23
+    discovered_in: hubspot/widgets.yaml 0.1.0 description (per-property widgets deferred)
+    alternative: "Author the field widgets at heal-time from the property-definitions response (apis.yaml/properties_groups → label/type/fieldType/options) using label-scoped selectors. Until then the API flavors (session_api / oauth_api / mcp) carry every write headlessly; the browser write flavors are preview-only."
+
+  - id: graphql_crm_objects_get_unverified
+    description: "The session_api get_record path uses the GraphQL `crmObject(id, type)` field, whose shape was INFERRED from the verified crmObjectsSearch query, not captured from a live record-view page load. The field name may be wrong."
+    dead_selector: null   # this is an API shape, not a DOM selector
+    discovered: 2026-05-23
+    discovered_in: "hubspot/apis.yaml graphql_crm_objects_get (confidence: medium, verified_at: null) + get_record.yaml 0.1.0"
+    alternative: "Capture a real record-view page load to confirm `crmObject(id, type)`; if wrong, fall back to the public REST GET (apis.yaml/rest_get_object) on api.hubapi.com. The oauth_api get_record flavor already encodes that fallback."
+
+# ─── Transitions ──────────────────────────────────────────────────
+# The atom-relevant navigation subset. Most edges are URL deeplinks
+# (HubSpot routes are stable + parameterized by portal/object/record).
+# The overlay edges have no URL change.
+
+transitions:
+  - { from: any, to: ListView, via: "deeplink {instance.origin}/contacts/{portal_id}/objects/{object_type_id}/views/{view_id}/list (list_records / search_records browser fallback)" }
+  - { from: any, to: BoardView, via: "deeplink .../views/{view_id}/board (list_records view_kind=board; deals + pipeline objects only)" }
+  - { from: any, to: RecordView, via: "deeplink {instance.origin}/contacts/{portal_id}/record/{object_type_id}/{record_id} (open_record / get_record / update_record nav step)" }
+  - { from: ListView, to: RecordView, via: "click a record-card link (hubspot.record_card_link)" }
+  - { from: BoardView, to: RecordView, via: "click a card (hubspot.record_card_link)" }
+  - { from: ListView, to: CreateOverlay, via: "Create-new menu (hubspot.create_new_button) → pick object type" }
+  - { from: Dashboard, to: CreateOverlay, via: "Create-new menu (hubspot.create_new_button) → pick object type" }
+  - { from: BoardView, to: CreateOverlay, via: "Add-deals button (hubspot.board_add_deal_button) — deal create entry" }
+  - { from: RecordView, to: EditOverlay, via: "Edit button (hubspot.edit_record_button)" }
+  - { from: CreateOverlay, to: RecordView, via: "user clicks Save → HubSpot navigates to the new record (create_record's url_matches /record/<id> commit signal)" }
+  - { from: any, to: Dashboard, via: "deeplink {instance.origin}/user-guide/{portal_id} (onboarding default landmark)" }
+
+# ─── Atoms cross-reference ────────────────────────────────────────
+# Which atoms exercise which screen / affordance. Derived from
+# actions/*.yaml; keep in sync by hand. The 6 verbs are GENERIC —
+# parameterized by object_type / object_type_id (Contact 0-1 / Company
+# 0-2 / Deal 0-3 / Ticket 0-5), one atom per verb covers all four types.
+atoms_using:
+  ListView: [list_records (view_kind=list), search_records (browser fallback only)]
+  BoardView: [list_records (view_kind=board)]
+  RecordView: [open_record, get_record (browser flavor), update_record (browser nav step)]
+  Dashboard: []   # no atom; onboarding landmark only
+  CreateOverlay: [create_record (browser flavor — stub)]
+  EditOverlay: [update_record (browser flavor — stub)]
+  hubspot.global_search_input: []   # no atom drives global search yet (search_records uses GraphQL/REST, not the search box)
+  hubspot.create_new_button: [create_record]
+  hubspot.list_search_input: []     # carried by List/Board views; no atom uses it yet
+  hubspot.board_add_deal_button: [] # carried by BoardView; no atom uses it yet
+  hubspot.edit_record_button: [update_record]
+  hubspot.record_card_link: []      # carried by List/Board views; nav is done via URL deeplink, not the link click

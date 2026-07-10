@@ -1,0 +1,15 @@
+_meta:
+  name: manifests/coffee/schemas/Task.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    A coffee Task. FLAGGED: fields not observed; harden live.
+
+primary_key: [id]
+url_segment: tasks
+add_label: "Add Task"
+fields:
+  id: { type: id, label: ID, primary: true, readonly: true, required: true }
+  name: { type: text, label: Name, required: true }

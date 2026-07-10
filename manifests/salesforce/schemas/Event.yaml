@@ -1,0 +1,85 @@
+_meta:
+  name: manifests/salesforce/schemas/Event.yaml
+  version: 0.1.0
+  cdn_schema_version: 60.4.2
+  authored_by: cd2k + claude
+  authored_at: 2026-05-24
+  description: |
+    Event schema: standard SF Event fields trimmed from the live org's
+    RecordUiController.getObjectInfo describe (2026-05-24). Used by
+    create_record / update_record when object_type=Event.
+  changelog:
+    - "0.1.0 (2026-05-24): initial schema authored from live SF describe. Trimmed to user-facing CRUD fields out of 55 standard fields. Recurrence* fields dropped, JunctionIdList invitee fields dropped (managed via separate EventRelation API)."
+
+description: |
+  A Salesforce Event. Key prefix 00U.
+  Required: Subject, OwnerId.
+  Calendar event. WhoId is polymorphic (Contact|Lead);
+  WhatId is polymorphic across ~70 object types. Live-probed.
+primary_key: [Id]
+fields:
+  Id:
+    type: id
+    label: Event ID
+    primary: true
+    readonly: true
+    required: true
+  Subject:
+    type: text
+    label: Subject
+    required: true
+  StartDateTime:
+    type: datetime
+    label: Start
+    required: false
+  EndDateTime:
+    type: datetime
+    label: End
+    required: false
+  DurationInMinutes:
+    type: number
+    label: Duration (Minutes)
+    required: false
+  IsAllDayEvent:
+    type: bool
+    label: All-Day Event
+    required: false
+  Location:
+    type: text
+    label: Location
+    required: false
+  WhoId:
+    type: id
+    label: Name (Contact / Lead)
+    required: false
+    description: Polymorphic reference (Contact or Lead).
+  WhatId:
+    type: id
+    label: Related To
+    required: false
+    description: Polymorphic reference (Account, Opportunity, Case, ~70 object types).
+  EventSubtype:
+    type: picklist
+    label: Subtype
+    required: false
+  ShowAs:
+    type: picklist
+    label: Show Time As
+    required: false
+  Description:
+    type: textarea
+    label: Description
+    required: false
+  ReminderDateTime:
+    type: datetime
+    label: Reminder
+    required: false
+  IsReminderSet:
+    type: bool
+    label: Reminder Set
+    required: false
+  OwnerId:
+    type: id
+    label: Assigned To
+    required: false
+    ref: User.Id, Calendar.Id

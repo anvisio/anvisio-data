@@ -1,0 +1,37 @@
+_meta:
+  name: manifests/slack/views/ThreadView.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Thread view in the right panel. Opens via slack.open_thread_button
+    from a ChannelView. URL adds `/thread/{channel_id}-{ts}` to the
+    base channel URL when expanded.
+
+name: ThreadView
+
+entry:
+  url: "https://app.slack.com/client/{workspace_id}/{channel_id}/thread/{channel_id}-{thread_ts}"
+landmark_probe:
+  selector: "[data-qa='threads_view'], [aria-label='Thread']"
+  timeout_ms: 10000
+verify:
+  - type: url_matches
+    pattern: "/thread/"
+  - type: selector_appears
+    selector: "[data-qa='threads_view'], [aria-label='Thread']"
+    timeout_ms: 10000
+placeholders:
+  workspace_id:
+    type: text
+    sample: "T0AMCC1EXRV"
+  channel_id:
+    type: text
+    sample: "C0AMQCYHKE1"
+  thread_ts:
+    type: text
+    sample: "1700000000.000100"
+widgets:
+  - slack.thread_composer
+  - slack.send_message_button

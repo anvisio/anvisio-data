@@ -1,0 +1,122 @@
+_meta:
+  name: manifests/asana/actions/create_task.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    create_task atom: create a new task. commits_changes:true so
+    spec 70 §7 prefers browser (user-clicks-Enter launch contract);
+    mcp / oauth_api cover headless.
+
+    Browser flavor only fills the inline "Add task" row; complete
+    field-fill (assignee, due date, custom fields, description) is
+    deferred to per-field widgets that heal-time will author. All
+    three flavors extract the created Task via flat from_api_response
+    on .data; the POST response is Task-shaped.
+  changelog:
+    - "0.3.0 (2026-05-24): adopt schema-typed result.task per v70 signature parity rule. Browser flavor now uses from_api_response: true / path: data on the network_response signal (was empty extract). mcp / oauth_api collapse the previous task_gid + permalink_url keys into the schema-typed task entry."
+    - "0.2.0 (2026-05-23): switch browser-flavor outcome to a
+       network_response signal on POST /tasks so we observe the real
+       create instead of a brittle :has-text() selector; drop the
+       literal:null task_gid (now unsurfaced rather than misleadingly
+       null)."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Create a new Asana task.
+object: "{{inputs.project_id}}"
+object_types: [Task]
+commits_changes: true
+depends_on_view: any
+mcp_tool: asana.create_task
+inputs:
+  project_id: { type: text, required: false, description: "Project gid (for browser flavor URL)." }
+  workspace:  { type: text, required: false, description: "Workspace gid (required by mcp / oauth when projects is empty)." }
+  name:       { type: text, required: true, sample: "Design system architecture" }
+  notes:      { type: text, required: false, description: "Plain-text description." }
+  html_notes: { type: text, required: false, description: "HTML description (mutually exclusive with notes)." }
+  assignee:   { type: text, required: false, description: "User gid or 'me'." }
+  due_on:     { type: text, required: false, description: "YYYY-MM-DD" }
+  due_at:     { type: text, required: false, description: "ISO8601 datetime" }
+  projects:   { type: list<text>, required: false, description: "Additional project gids for multi-homing." }
+  parent:     { type: text, required: false, description: "Parent task gid for subtask." }
+result:
+  task:
+    schema: Task
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open project + inline-Add task + type name (user hits Enter on commit:true)
+    recipe:
+      - id: nav_project
+        type: navigate
+        args:
+          url: "https://app.asana.com/0/{{inputs.project_id}}/list"
+      - id: open_add
+        type: use_widget
+        args:
+          widget: asana.add_task_button
+          op: invoke
+      - id: type_name
+        type: use_widget
+        args:
+          widget: asana.task_name_input
+          op: fill
+          value: "{{inputs.name}}"
+        commit: true
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "app.asana.com/api/1.0/tasks"
+          status: 201
+          timeout_ms: 10000
+        extract:
+          task:
+            from_api_response: true
+            path: data
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Asana MCP create_task
+    server: asana
+    tool: create_task
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          task:
+            from_api_response: true
+            path: data
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST POST /tasks
+    request:
+      method: POST
+      url: "https://app.asana.com/api/1.0/tasks"
+      body:
+        data:
+          name:       "{{inputs.name}}"
+          notes:      "{{inputs.notes}}"
+          html_notes: "{{inputs.html_notes}}"
+          assignee:   "{{inputs.assignee}}"
+          due_on:     "{{inputs.due_on}}"
+          due_at:     "{{inputs.due_at}}"
+          projects:   "{{inputs.projects}}"
+          workspace:  "{{inputs.workspace}}"
+          parent:     "{{inputs.parent}}"
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "asana.com/api/1.0/tasks"
+          status: 201
+        extract:
+          task:
+            from_api_response: true
+            path: data

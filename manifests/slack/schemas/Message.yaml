@@ -1,0 +1,97 @@
+_meta:
+  name: manifests/slack/schemas/Message.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Slack Message property schema. Shape from conversations.history /
+    conversations.replies. Messages don't have a stable UUID; the
+    (channel, ts) pair is the primary key.
+  changelog:
+    - "0.3.0 (2026-05-24): add primary_key:[channel, ts] per v70 INTEGRATION_FORMAT signature parity rule. Composite key — ts alone isn't unique across channels."
+    - "0.2.0 (2026-05-23): align reactions field_type with the rest of
+       the manifest (textarea for structured arrays); attachments /
+       files / edited already use textarea so they don't need changes."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: Message
+object_type_id: message
+mcp_object_type: message
+primary_key: [channel, ts]
+
+properties:
+  type:
+    label: Type
+    type: string
+    field_type: text
+    description: Usually 'message'.
+  ts:
+    label: Timestamp (id)
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    description: 'Slack ts (string with microsecond precision, e.g. "1700000000.000100"). The message identifier within a channel.'
+  channel:
+    label: Channel
+    type: string
+    field_type: text
+    description: Channel / DM id (not included on conversations.history responses; the API client adds it).
+  user:
+    label: Author User ID
+    type: string
+    field_type: text
+  bot_id:
+    label: Author Bot ID
+    type: string
+    field_type: text
+    description: Set when the author is a bot rather than a user.
+  text:
+    label: Text
+    type: string
+    field_type: textarea
+    description: 'Markdown-like (Slack mrkdwn). Mentions appear as <@Uxxxx>.'
+  blocks:
+    label: Block Kit Blocks
+    type: array
+    field_type: textarea
+    description: Structured layout blocks (when the message was posted with Block Kit).
+  thread_ts:
+    label: Thread Parent Timestamp
+    type: string
+    field_type: text
+    description: Set when this is a thread reply OR when this is a parent that has replies.
+  reply_count:
+    label: Reply Count
+    type: number
+    field_type: number
+    read_only: true
+  reply_users_count:
+    label: Distinct Repliers
+    type: number
+    field_type: number
+    read_only: true
+  reactions:
+    label: Reactions
+    type: array
+    field_type: textarea
+    description: "Array of { name, users[], count }"
+  attachments:
+    label: Attachments (Legacy)
+    type: array
+    field_type: textarea
+  files:
+    label: Files
+    type: array
+    field_type: textarea
+  edited:
+    label: Edited
+    type: object
+    field_type: text
+    description: "{ user, ts }"
+    read_only: true
+
+associations:
+  - { name: parent_message, object_type_id: message, description: "When thread_ts is set, the parent message identified by (channel, thread_ts)." }
+  - { name: replies,        object_type_id: message, description: "Replies in a thread (when this is the parent)." }

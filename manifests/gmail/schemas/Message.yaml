@@ -1,18 +1,21 @@
 _meta:
   name: manifests/gmail/schemas/Message.yaml
-  version: 0.1.0
-  cdn_schema_version: 60.3.0
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-10
   description: |
-    Gmail Message schema — canonical entity for compose/read/reply flows.
+    Gmail Message schema: canonical entity for compose/read/reply flows.
     Field-to-widget mappings drive fill_fields resolution in actions like
     send_email, forward_email, etc.
   changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[Id] per v70 INTEGRATION_FORMAT signature parity rule."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest"
 
-description: A single Gmail message (or the most recent message in a thread) —
-  the canonical entity for compose/read/reply flows.
+description: |
+  A single Gmail message (or the most recent message in a thread).
+  The canonical entity for compose/read/reply flows.
+primary_key: [Id]
 fields:
   Id:
     type: id

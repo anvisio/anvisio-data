@@ -1,0 +1,83 @@
+_meta:
+  name: manifests/github/actions/search_issues.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    search_issues atom: full GitHub-search-syntax search for
+    issues / PRs across one or more repos. Read; mcp > oauth_api.
+
+    Results are heterogeneous (issues + PRs share the issue number
+    sequence) so result.items uses schema_union: [Issue, PullRequest].
+    GitHub discriminates by the `pull_request:` field on the item:
+    present -> PR, absent -> Issue.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.items: schema_union<Issue, PullRequest> per v70 signature parity rule. Flat extracts on .items already populate the list whole."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Search GitHub issues + PRs via GitHub search syntax.
+object: "{{inputs.repo}}"
+object_types: [Issue, PullRequest]
+commits_changes: false
+depends_on_view: any
+mcp_tool: github.search_issues
+inputs:
+  query:
+    type: text
+    required: true
+    description: GitHub search syntax (e.g. `repo:owner/repo is:open label:bug`)
+    sample: "repo:anvisio-dev/sample-project is:issue is:open"
+  owner:   { type: text, required: false }
+  repo:    { type: text, required: false }
+  per_page: { type: integer, required: false, default: 30, maximum: 100 }
+  page:    { type: integer, required: false, default: 1 }
+result:
+  items:
+    schema_union: [Issue, PullRequest]
+    cardinality: list
+  total: integer
+
+flavors:
+  mcp:
+    requires_auth: mcp_server
+    label: Official github-mcp-server search_issues
+    server: github
+    tool: search_issues
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          items:
+            from_api_response: true
+            path: items
+          total:
+            from_api_response: true
+            path: total_count
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: REST GET /search/issues
+    request:
+      method: GET
+      url: "https://api.github.com/search/issues"
+      query:
+        q:        "{{inputs.query}}"
+        per_page: "{{inputs.per_page}}"
+        page:     "{{inputs.page}}"
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "api.github.com/search/issues*"
+          status: 200
+        extract:
+          items:
+            from_api_response: true
+            path: items
+          total:
+            from_api_response: true
+            path: total_count

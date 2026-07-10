@@ -1,0 +1,93 @@
+_meta:
+  name: manifests/jobber/widgets.yaml
+  version: 0.3.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber widget primitives, archetype-driven, GENERIC (object-agnostic) to match
+    the object-generic atom set. Jobber's Atlantis forms use React-GENERATED input
+    ids (`_r_1i_`) with NO stable placeholder/name/testid — but each input has a
+    `<label for="{id}">First name</label>`, so fields are addressed label-first via
+    an XPath linking the label text to its input by for/id. The New Client form was
+    live-probed 2026-07-08; the New Quote/Job/Property/edit forms are FLAGGED
+    (best-guess) pending live drives — session_api is the proven write path.
+  changelog:
+    - "0.3.0 (2026-07-08): object-generic rewrite. text_input (label-XPath) + a
+       generic save_generic (any 'Save…' button) + a generic delete flow
+       (object_actions_menu / delete_menu_item / delete_confirm). Replaces the
+       per-object save_client/save_property/save_job/client_actions_menu widgets."
+    - "0.2.0 / 0.1.0 (2026-07-08): per-object widgets (retired with the per-object atoms)."
+
+  archetypes_used: [text_input, click_dismisses, click_reveals]
+
+# Any writable field with no explicit `widget:` resolves here by type.
+defaults_by_type:
+  text: jobber.text_input
+
+widgets:
+  # Label-first text input. `{{field_label}}` is the schema field's label (matches
+  # the form's <label> text). The XPath links label→input by for/id because the
+  # input's own id is React-generated (unstable). xpath= is resolved by the runtime
+  # via document.evaluate. Live-verified on /clients/new; other forms FLAGGED.
+  jobber.text_input:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - "xpath=//input[@id = //label[normalize-space()=\"{{field_label}}\"]/@for]"
+        - "xpath=//textarea[@id = //label[normalize-space()=\"{{field_label}}\"]/@for]"
+
+  # Generic commit button — every Jobber New/Edit form has a "Save …" button
+  # ("Save client" / "Save Job" / …). Matches any button whose text starts with
+  # "Save". The REAL commit proof is the atom's created_nav/saved_nav signal, not
+  # this disappearance. FLAGGED per non-client form.
+  jobber.save_generic:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - "xpath=//button[starts-with(normalize-space(),\"Save\")]"
+      verify_target: "xpath=//button[starts-with(normalize-space(),\"Save\")]"
+    overrides:
+      # Failure-race: a rejected Save (a missing/invalid required field) leaves the
+      # Save button in place and surfaces a [role='alert'] with the validation text
+      # (live-confirmed on the New Client form: "At least one of 'First Name',
+      # 'Last Name', or 'Company Name' must be provided."). Racing it against the
+      # button's disappearance turns a rejection into a fast NAMED invalid_input
+      # (the live alert text is appended) instead of a timeout.
+      failure_selector: "[role='alert']"
+      failure_message: "a required field is missing or invalid"
+
+  # Discard button — Cancel returns to the list/record.
+  jobber.cancel_button:
+    archetype: click_dismisses
+    selectors:
+      trigger:
+        - "xpath=//button[normalize-space()=\"Cancel\"]"
+      verify_target: "xpath=//button[normalize-space()=\"Cancel\"]"
+
+  # ── delete_object browser flow (FLAGGED — best-guess, confirm on a live delete) ──
+  # A record page's "More Actions" menu → Delete/Archive → a confirm dialog. All
+  # three selectors are best-guess and object-agnostic; the live pass confirms the
+  # menu trigger, whether the item is "Delete" vs "Archive", and the confirm button.
+  jobber.object_actions_menu:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "xpath=//button[contains(normalize-space(),\"More Actions\") or contains(normalize-space(),\"Actions\")]"
+      verify_target: "[role=menu], .menu, [data-testid='menu']"
+
+  jobber.delete_menu_item:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "xpath=//*[self::button or self::a or @role=\"menuitem\"][starts-with(normalize-space(),\"Delete\")]"
+      verify_target: "[role=dialog], .modal"
+
+  jobber.delete_confirm:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - "xpath=//*[self::button or @role=\"button\"][normalize-space()=\"Delete\" or normalize-space()=\"Confirm\" or normalize-space()=\"Yes, delete\"]"
+      verify_target: "[role=dialog], .modal"

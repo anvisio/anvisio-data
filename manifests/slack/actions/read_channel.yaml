@@ -1,0 +1,124 @@
+_meta:
+  name: manifests/slack/actions/read_channel.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    read_channel atom: fetch recent messages from a channel or DM
+    (conversations.history). Optional time window via oldest/latest
+    Unix ts.
+
+    Note: conversations.history items don't carry the `channel` field
+    (which is part of Message's composite PK); flat extracts populate
+    the list whole — callers know the channel from input. A flatten
+    pass to inject channel into each item belongs at the runtime
+    extract layer, not here.
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.messages: list<Message> per v70 signature parity rule. Backfill has_more + next_cursor on mcp + oauth_api for parity (Slack returns both on conversations.history)."
+    - "0.1.0 (2026-05-23): initial seed."
+
+description: Fetch recent messages from a Slack channel or DM.
+object: "{{inputs.channel}}"
+object_types: [Message]
+commits_changes: false
+depends_on_view: any
+mcp_tool: slack.read_channel
+inputs:
+  workspace: { type: text, required: true, sample: anvisio }
+  channel:   { type: text, required: true, description: Channel / DM id }
+  oldest:    { type: text,    required: false, description: Unix ts cutoff (start) }
+  latest:    { type: text,    required: false, description: Unix ts cutoff (end) }
+  limit:     { type: integer, required: false, default: 100, maximum: 999 }
+  cursor:    { type: text,    required: false, default: "" }
+result:
+  messages:
+    schema: Message
+    cardinality: list
+  has_more:
+    type: boolean
+    nullable: true
+  next_cursor:
+    type: text
+    nullable: true
+
+flavors:
+  session_api:
+    requires_auth: session_cookie
+    label: Workspace /api/conversations.history (xoxc cookie)
+    recipe:
+      - id: api_call
+        type: call_platform_api
+        args:
+          api_def:
+            kind: slack_session_api
+            endpoint: "https://{{inputs.workspace}}.slack.com/api/conversations.history?channel={{inputs.channel}}&limit={{inputs.limit}}&cursor={{inputs.cursor}}"
+            method: GET
+            extract_path: ""
+    outcomes:
+      - action: read
+        signal:
+          type: url_matches
+          pattern: "slack\\.com"
+          timeout_ms: 10000
+        extract:
+          messages:
+            from_step: api_call
+            path: messages
+          has_more:
+            from_step: api_call
+            path: has_more
+          next_cursor:
+            from_step: api_call
+            path: response_metadata.next_cursor
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official Slack MCP read_channel
+    server: slack
+    tool: read_channel
+    outcomes:
+      - action: read
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          messages:
+            from_api_response: true
+            path: messages
+          has_more:
+            from_api_response: true
+            path: has_more
+          next_cursor:
+            from_api_response: true
+            path: response_metadata.next_cursor
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public Web API /conversations.history
+    request:
+      method: GET
+      url: "https://slack.com/api/conversations.history"
+      query:
+        channel: "{{inputs.channel}}"
+        oldest:  "{{inputs.oldest}}"
+        latest:  "{{inputs.latest}}"
+        limit:   "{{inputs.limit}}"
+        cursor:  "{{inputs.cursor}}"
+    outcomes:
+      - action: read
+        signal:
+          type: network_response
+          url_pattern: "slack.com/api/conversations.history"
+          status: 200
+        extract:
+          messages:
+            from_api_response: true
+            path: messages
+          has_more:
+            from_api_response: true
+            path: has_more
+          next_cursor:
+            from_api_response: true
+            path: response_metadata.next_cursor

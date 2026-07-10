@@ -1,0 +1,59 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: schedule-meeting
+  version: '1.0.0'
+  title: Schedule a meeting
+  summary: |
+    Check attendee free/busy over a window, propose the best open slot,
+    ask the user to confirm, then fill the new-event editor for them.
+    The user clicks Save — the composition stops at a filled editor.
+
+do:
+  - avail:
+      label: Checking availability
+      call: google-calendar.atom.get_freebusy
+      with:
+        # The orchestrator rewrites calendars + window at run time; the
+        # literals here are a concrete example for validation.
+        calendars: ['primary']
+        time_min: '2026-06-01T00:00:00-07:00'
+        time_max: '2026-06-05T23:59:59-07:00'
+
+  - slot:
+      label: Proposing a time
+      synthesize: |
+        Given the busy intervals, propose the best 30-minute slot for a
+        meeting inside the window — prefer mid-morning, avoid lunch, and
+        avoid scheduling back-to-back with an existing block. Return the
+        slot as JSON: { "start": <ISO 8601>, "end": <ISO 8601> }.
+      with:
+        busy: '${ .avail.busy }'
+
+  - confirm:
+      label: Confirming the slot
+      ask:
+        prompt: |
+          Proposed meeting slot:
+          ${ .slot.start } to ${ .slot.end }
+          Book it?
+        options:
+          - Book it
+          - Pick another time
+          - Cancel
+
+  - book:
+      label: Filling the event
+      switch:
+        - when: '${ .confirm.choice == "Book it" }'
+          then:
+            - draft:
+                # commit:false — the recipe fills the event editor and
+                # stops; the user reviews and clicks Save (spec 71 HITL).
+                call: google-calendar.atom.create_event
+                commit: false
+                with:
+                  Title: Meeting
+                  StartTime: '${ .slot.start }'
+                  EndTime: '${ .slot.end }'
+                  calendar_id: primary

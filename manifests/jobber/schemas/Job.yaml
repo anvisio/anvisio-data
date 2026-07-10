@@ -1,0 +1,179 @@
+_meta:
+  name: manifests/jobber/schemas/Job.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Job schema — a unit of work at a Property for a Client. The end of the
+    Client → Property → Job reference chain. A Job read exposes BOTH `client` and
+    `property` (both non-null), so the CRUDS run-chain link assertion is clean:
+    job.client.id == created client id AND job.property.id == created property id.
+    Fields grounded in live GraphQL introspection of the Job type +
+    JobCreateAttributes / JobInvoicingAttributes (2026-07-08).
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Core read fields + the propertyId (required
+       create ref) + clientId (up-ref via property). Live-probed."
+
+description: |
+  A Jobber Job — scheduled work at a Property for a Client. jobCreate requires a
+  `propertyId` (the Property → Client linkage supplies the client). Global id `id`
+  is an opaque EncodedId.
+primary_key: [id]
+
+# ── Object-generic dispatch (resolve_object). Job → Property (propertyId, req) +
+# invoicing (two enums, req). Web URL is /work_orders/{id} (live-confirmed).
+# jobDelete takes a LIST (jobIds). ──
+# Record path is /work_orders/{id} (get/update/delete); the New form is /jobs/new
+# (create) — live-confirmed, so new_segment differs from url_segment.
+url_segment: work_orders
+new_segment: jobs
+graphql:
+  create:
+    query: >
+      mutation($input: JobCreateAttributes!) {
+        jobCreate(input: $input) {
+          job { id jobNumber title jobStatus jobType client { id } property { id } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.jobCreate.job
+    reject_path: data.jobCreate.userErrors
+    variables:
+      input:
+        propertyId: "{{inputs.fields.propertyId}}"
+        title: "{{inputs.fields.title}}"
+        instructions: "{{inputs.fields.instructions}}"
+        jobType: "{{inputs.fields.jobType}}"
+        invoicing:
+          invoicingType: "{{inputs.fields.invoicingType}}"
+          invoicingSchedule: "{{inputs.fields.invoicingSchedule}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        job(id: $id) {
+          id jobNumber title jobStatus jobType instructions
+          startAt endAt total createdAt jobberWebUri
+          client { id name }
+          property { id name address { street1 city province } }
+        }
+      }
+    extract_path: data.job
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($jobId: EncodedId!, $input: JobEditInput!) {
+        jobEdit(jobId: $jobId, input: $input) {
+          job { id title jobStatus }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.jobEdit.job
+    reject_path: data.jobEdit.userErrors
+    variables:
+      jobId: "{{inputs.record_id}}"
+      input: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($jobIds: [EncodedId!]!) {
+        jobDelete(jobIds: $jobIds) {
+          deletedJobs { id }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.jobDelete.deletedJobs[0]
+    reject_path: data.jobDelete.userErrors
+    variables:
+      jobIds:
+        - "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        jobs(searchTerm: $searchTerm, first: $first) {
+          nodes { id jobNumber title jobStatus jobberWebUri client { id name } property { id } }
+        }
+      }
+    extract_path: data.jobs.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
+fields:
+  id:
+    type: id
+    label: Job ID
+    primary: true
+    readonly: true
+    required: true
+  jobNumber:
+    type: number
+    label: Job number
+    readonly: true
+    required: true
+  title:
+    type: text
+    label: Title
+    required: false
+  instructions:
+    type: text
+    label: Instructions
+    required: false
+  jobStatus:
+    type: text
+    label: Status
+    readonly: true
+    required: true
+    description: "JobStatusTypeEnum (active, upcoming, on_hold, unscheduled, archived, …)."
+  jobType:
+    type: text
+    label: Job type
+    readonly: true
+    required: true
+    description: "JobTypeTypeEnum (ONE_OFF | RECURRING). Set on create via the create_job job_type input."
+  propertyId:
+    type: id
+    label: Property ID
+    readonly: true
+    required: true
+    ref: Property.id
+    description: >
+      The Property this job is at (the required create reference). Not a plain-fill
+      field — selected via the New Job property picker (browser) or the jobCreate
+      `propertyId` argument (session_api). Surfaced on read as nested `property { id }`.
+  clientId:
+    type: id
+    label: Client ID
+    readonly: true
+    required: true
+    ref: Client.id
+    description: >
+      The Client this job is for (the up-reference, derived from the Property).
+      Surfaced on read as nested `client { id }`; not set directly (the Property
+      supplies it).
+  startAt:
+    type: datetime
+    label: Start at
+    readonly: true
+    required: true
+  endAt:
+    type: datetime
+    label: End at
+    readonly: true
+    required: true
+  total:
+    type: number
+    label: Total
+    readonly: true
+    required: true
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+    required: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true
+    required: true
+    description: Absolute URL of the job's page in the web app.

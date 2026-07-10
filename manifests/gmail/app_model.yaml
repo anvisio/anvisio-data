@@ -1,0 +1,421 @@
+_meta:
+  name: manifests/gmail/app_model.yaml
+  version: 0.4.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-26
+  description: |
+    Semantic-layer model for Gmail. Catalogs the screens of the Gmail
+    UI, the affordances available on each, current known-dead paths,
+    and the transitions between screens. Consumed by propose / heal /
+    Claude when authoring or auditing atoms. The runtime ignores this
+    file.
+
+    Coverage is uneven by design — screens that have been probed live
+    (Inbox, ThreadView, ComposePanel, sidebar) are detailed; Drafts /
+    Sent / Trash / LabelView / SearchResults / ReplyComposer are
+    placeholders carrying status:undocumented.
+
+    Format-spec: planning/tech_design/integrations/INTEGRATION_FORMAT.md
+    (Surface 1, app_model.yaml section).
+  changelog:
+    - "0.4.0 (2026-06-07): per_message_more_menu gains a per_message_caveat — a multi-message thread has one ⋮ More-options button PER MESSAGE (oldest→newest in DOM order); reply_all must open the LAST (most recent), done via the new runtime pick_last click arg (gmail.widgets 3.16.0). No CSS selector targets it (messages aren't same-type siblings, no distinguishing class, .ams links outside the wrappers). Probed live on cd2k's 3-message asdfghjklqwerty thread; reply-all had been opening the FIRST message's menu = wrong message."
+    - "0.3.0 (2026-05-30): remove the `audit_finding_3_was_wrong` known_dead_paths entry — it was a meta-entry documenting that an earlier audit got reverted; the path isn't actually dead. Forward-facing rule: known_dead_paths only holds currently-dead/suspected/research-only paths; reversed audit findings live in git history."
+    - "0.2.0 (2026-05-28): context_menu section enriched from the live
+       SEARCH-view probe driving the C-rest atom rewrites (archive /
+       delete / move / mark_read_unread → context menu). KEY new fact:
+       context-menu items are STATE-dependent, not just view-dependent —
+       a disabled item renders `class='J-N J-N-JE'` + `aria-disabled='true'`
+       + `aria-hidden='true'` + inline `display:none` (so it has height 0
+       and the runtime's visible-filter naturally skips it). In a
+       search/non-inbox view: Archive is DISABLED (the thread isn't in the
+       Inbox), 'Move to inbox' is enabled, Delete is enabled, 'Delete
+       forever' is disabled, and only the state-relevant one of 'Mark as
+       read'/'Mark as unread' is enabled. 'Delete' vs 'Delete forever' are
+       mutually exclusive by state, so `must_contain_text:'Delete'` + the
+       visible-filter reliably picks the soft-delete item. The 'Move to►'
+       submenu input is `input.bqf[aria-label='Move-to menu open']`
+       (confirms `placeholder='Move to:'` is dead — see new
+       known_dead_paths.move_menu_search_placeholder_drift). Unlike the
+       toolbar (which is both view- AND selection-dependent), the context
+       menu is available in ALL list views (inbox / search / label) — the
+       reason the C-rest atoms moved to it."
+    - "0.1.0 (2026-05-26): initial seed. Covers Inbox + ThreadView +
+       ComposePanel + sidebar affordances in detail; other screens
+       are placeholders. Known-dead-paths section captures the Labels
+       toolbar removal + the label_menu_search selector drift + the
+       compose region aria-label mutation. Transitions cover the
+       atom-relevant subset (Inbox → ThreadView → ReplyComposer +
+       sidebar → Compose-label modal)."
+
+# ─── Screens ──────────────────────────────────────────────────────
+
+screens:
+  Inbox:
+    view: Inbox
+    url_pattern: "*/mail/u/*/#inbox"
+    purpose: "The default list of incoming messages not yet archived, deleted, or filtered out."
+    distinctives:
+      - "Rows are `tr.zA`. Row-state class: `zE`=unread (bold subject), `yO`=read, `x7`=selected. A row can carry multiple state classes simultaneously (`zA zE x7 s00Hgd` is unread+selected)."
+      - "Each row's stable identifier is `span[data-legacy-thread-id]` (Gmail's internal short id; the long canonical `#thread-f:<n>` appears in URL fragments after deeplink, see reference_gmail_url_rewrites_thread_id.md)."
+      - "Categorized inbox tabs (Primary/Social/Updates) require opting in via Settings; default Gmail accounts don't show them. Don't write selectors that assume their presence."
+      - "Toolbar selection collapses immediately after a destructive action (archive/delete) — the next iteration must re-select its row by thread_id."
+    verified_at: 2026-05-26
+
+  ThreadView:
+    view: ThreadView
+    url_pattern: "*/mail/u/*/#inbox/<thread_id> OR */mail/u/*/#label/<name>/<thread_id> OR similar"
+    purpose: "A single conversation expanded, with all messages visible (collapsed except the latest)."
+    distinctives:
+      - "Two Reply entry points exist simultaneously: (a) icon button at the top of the open message (`button[aria-label='Reply']` with class `pYTkkf-JX-I ... DILLkc`), and (b) inline text-link at the bottom (`span[role='link'].ams.bkH` with text 'Reply', NO aria-label). Both open the same inline reply composer."
+      - "Forward only via the bottom inline text-link (`span[role='link'].ams.bkG`, text 'Forward', no aria-label). No icon-button equivalent at the top."
+      - "Reply-all has NO toolbar / inline trigger. Must open the per-message More-options menu (`button[aria-label='More message options']`) and click the Reply-all menuitem inside (`data-action-type='24'`)."
+      - "Subject heading is `h2.hP` (or `div[role='main'] h2[data-thread-perm-id]`)."
+      - "Sender hovercard email is `span.gD[email]` (the `email` attribute carries the address)."
+      - "Gmail rewrites the URL hash post-deeplink — what you navigate to is not what stays in `location.hash`. Per-thread URL verifies do NOT work; use `data-legacy-thread-id` selector match instead."
+    verified_at: 2026-05-26
+
+  ComposePanel:
+    view: ComposePanel
+    url_pattern: "*/mail/u/*/#inbox (same URL as Inbox; compose is overlay)"
+    purpose: "New-message compose overlay. Opened via the 'Compose' sidebar button."
+    distinctives:
+      - "The compose container is `div[role='region']` with a stable `data-compose-id` (assigned at compose-open, persists through send/discard)."
+      - "The container's `aria-label` MUTATES post-fill. Initially `aria-label='New Message'`; once the user types a Subject, Gmail rewrites it to the subject text. ANY widget selector scoped on `aria-label='New Message'` literal is dead post-fill. Use `data-compose-id` for stable container scoping. See [[reference-gmail-compose-aria-label-mutation]]."
+      - "Multiple compose panels can coexist (Gmail allows several drafts open simultaneously). Per-compose isolation requires the `data-compose-id` value."
+      - "Send button has primary-action class `eV8l8d` (consistent across Gmail dialogs); fallback `[aria-label^='Send '][aria-label*='Ctrl-Enter']` is generic enough to match anywhere."
+    verified_at: 2026-05-25
+
+  ReplyComposer:
+    view: ReplyComposer
+    url_pattern: "*/mail/u/*/#inbox/<thread_id> (inline within ThreadView)"
+    purpose: "Inline reply composer that opens within a ThreadView, anchored to a specific message."
+    distinctives:
+      - "Inherits most of ComposePanel's structure (`data-compose-id`, post-fill aria-label mutation)."
+      - "Trigger varies: opened via the icon Reply, the inline `.ams.bkH` Reply, the `.ams.bkG` Forward, OR the per-message More-options menu's Reply-all menuitem. The composer that opens DIFFERS by trigger (Reply composer has only To prefilled; Forward composer is empty + has a quoted-message body; Reply-all has To + Cc prefilled)."
+      - "The ReplyComposer.yaml entry recipe currently hardcodes the Reply trigger (`.ams.bkH`), which silently breaks reply_all_email and forward_email atoms — see known_dead_paths."
+    verified_at: 2026-05-26
+    status: partially_documented   # see audit Finding 2 follow-up
+
+  Sidebar:
+    view: null   # the sidebar isn't a "view" per se — it's always-visible chrome
+    url_pattern: "any Gmail URL"
+    purpose: "Always-visible navigation rail. Sections: Mail folders (Inbox/Starred/Sent/Drafts/All Mail/Spam/Trash), user-defined labels, Compose button."
+    distinctives:
+      - "Each user-defined label row's link has `aria-label='<name> has menu'` (the 'has menu' suffix indicates a hover-revealed More-options menu)."
+      - "The 'Create new label' button is `div[role='button'][aria-label='Create new label']` (also matches `data-tooltip='Create new label'`)."
+      - "The Compose button is the entry to ComposePanel."
+    verified_at: 2026-05-25
+
+  LabelView:
+    view: LabelView
+    url_pattern: "*/mail/u/*/#label/<encoded_name>"
+    purpose: "List of messages with a specific label applied."
+    distinctives:
+      - "Same row structure as Inbox (`tr.zA` etc.)."
+      - "URL-hash encoded label name uses `%23` for nested labels (e.g. `[Mailbox]/To Read` → `%5BMailbox%5D%2FTo%20Read`)."
+    verified_at: 2026-05-25
+    status: partially_documented
+
+  SearchResults:
+    view: SearchResults
+    url_pattern: "*/mail/u/*/#search/<encoded_query>"
+    purpose: "Search results from the global Gmail search bar."
+    distinctives:
+      - "Header has a persistent 'Clear search' button — using it as a landmark signal is a false-positive (always matches). Use `[data-query]` substring match on the typeahead element instead."
+      - "Row structure same as Inbox."
+    verified_at: 2026-05-25
+    status: partially_documented
+
+  Drafts:
+    url_pattern: "*/mail/u/*/#drafts"
+    status: undocumented
+  Sent:
+    url_pattern: "*/mail/u/*/#sent"
+    status: undocumented
+  Trash:
+    url_pattern: "*/mail/u/*/#trash"
+    purpose: "Soft-deleted threads (recoverable for 30 days). Distinct from permanent delete which bypasses Trash."
+    distinctives:
+      - "Has 'Empty Trash now' / 'Delete forever' affordances that the Inbox screen does not."
+    status: undocumented
+  AllMail:
+    url_pattern: "*/mail/u/*/#all"
+    status: undocumented
+  Spam:
+    url_pattern: "*/mail/u/*/#spam"
+    status: undocumented
+  Starred:
+    url_pattern: "*/mail/u/*/#starred"
+    status: undocumented
+
+# ─── Affordances ──────────────────────────────────────────────────
+
+affordances:
+  Inbox:
+    toolbar_when_no_selection:
+      buttons:
+        - { label: "Select", widget: null }
+        - { label: "Refresh", widget: null }
+        - { label: "More email options", widget: null }
+      missing:
+        - "Archive / Delete / Mark-read etc. — these only appear once ≥1 row is selected."
+
+    toolbar_when_row_selected:
+      buttons:
+        - { label: "Select-all", widget: null }
+        - { label: "Archive", widget: gmail.toolbar_archive_button, behavior: "removes from Inbox, keeps in All Mail (reversible)" }
+        - { label: "Report spam", widget: null }
+        - { label: "Delete", widget: gmail.toolbar_delete_button, behavior: "SOFT — moves to Trash (recoverable for 30 days). NOT permanent delete." }
+        - { label: "Mark as read", widget: gmail.toolbar_mark_read_button, state_condition: "two copies render in DOM but only the one matching the selected row's current state is visible (the other is 0x0). First DOM match is the visible one — querySelector finds the right element naturally." }
+        - { label: "Mark as unread", widget: gmail.toolbar_mark_unread_button, state_condition: "same as Mark as read — only one of read/unread is visible at a time depending on row state." }
+        - { label: "Move to", widget: gmail.toolbar_move_button, behavior: "opens the same typeahead menu the context-menu 'Move to►' submenu opens (input has aria-label suggesting modern Gmail; old `placeholder='Move to:'` likely dead — not verified this session)" }
+        - { label: "Refresh", widget: null }
+        - { label: "More email options", widget: null }
+      missing:
+        - "Labels button: REMOVED from toolbar circa 2025. The old `gmail.toolbar_labels_button` widget (`[aria-label='Labels'][data-tooltip='Labels']`) returns 0 matches. ALTERNATIVE: context_menu.submenus 'Label as►' (see below). The runtime achieves apply_label via right-click contextmenu → 'Label as' submenu → typeahead label name → click menuitemcheckbox."
+        - "Delete forever button: ONLY in context_menu, not in toolbar. The toolbar 'Delete' moves to Trash."
+
+    context_menu:
+      trigger: "right-click on a row (any row, doesn't require pre-selection)"
+      probe_cmd: "el.dispatchEvent(new MouseEvent('contextmenu', { button:2, clientX, clientY, bubbles:true }))"
+      # Item availability is STATE-dependent (live-probed search view 2026-05-28).
+      # A DISABLED item renders class='J-N J-N-JE' + aria-disabled='true' +
+      # aria-hidden='true' + inline display:none → height 0, so the runtime's
+      # click/contextmenu visible-filter (height>0) AUTOMATICALLY skips it and
+      # lands on the enabled twin. An ENABLED item is class='J-N',
+      # aria-disabled='false', no display:none. This is why
+      # `must_contain_text:'<verb>'` on `[role='menuitem']` is robust without
+      # exact-text matching — the disabled lookalikes aren't visible.
+      state_dependence:
+        - "Archive: ENABLED only when the thread is in the Inbox. In search / label / non-inbox views the thread is usually NOT in the inbox → Archive is disabled (display:none) and 'Move to inbox' is enabled instead."
+        - "Delete (→Trash) vs 'Delete forever' (permanent) are MUTUALLY EXCLUSIVE: 'Delete' enabled outside Trash/Spam, 'Delete forever' enabled only inside Trash/Spam. Never both visible at once → must_contain_text:'Delete' picks the enabled one."
+        - "Mark as read / Mark as unread: only the one matching the row's OPPOSITE current state is enabled (a read row shows 'Mark as unread' enabled, 'Mark as read' disabled)."
+        - "The right-click context menu is present in ALL list views (inbox / search / label); the top TOOLBAR archive/delete/move buttons are absent in search and render only after ≥1 row is selected. This is why the C-rest atoms use the context menu (2026-05-28)."
+      direct_items:
+        - { text: "Reply", behavior: "opens inline Reply composer" }
+        - { text: "Reply all", behavior: "opens inline Reply-all composer" }
+        - { text: "Forward", behavior: "opens inline Forward composer" }
+        - { text: "Forward as attachment", behavior: "forwards entire thread as .eml attachment" }
+        - { text: "Archive", behavior: "reversible move to All Mail; ENABLED only when thread is in Inbox (else display:none)", entry_point_for: ["archive_email browser flavor (2026-05-28)"] }
+        - { text: "Report spam", widget: null }
+        - { text: "Move to inbox", state_condition: "ENABLED only when current view is non-Inbox (the archive inverse)", widget: null }
+        - { text: "Not spam", state_condition: "visible only when in Spam", widget: null }
+        - { text: "Delete", behavior: "SOFT — moves to Trash. Enabled outside Trash/Spam.", entry_point_for: ["delete_email browser flavor (2026-05-28)"] }
+        - { text: "Delete forever", behavior: "PERMANENT — bypasses Trash. Enabled only inside Trash/Spam (mutually exclusive with 'Delete'). The semantics MCP/oauth_api delete_email claim; browser flavor does Trash. See known_dead_paths.delete_flavor_semantic_mismatch." }
+        - { text: "Discard drafts", state_condition: "visible only when selected row is in Drafts" }
+        - { text: "Mark as read", behavior: "enabled only when row is currently unread", entry_point_for: ["mark_read_unread (mode=read) (2026-05-28)"] }
+        - { text: "Mark as unread", behavior: "enabled only when row is currently read", entry_point_for: ["mark_read_unread (mode=unread) (2026-05-28)"] }
+        - { text: "Snooze", widget: null }
+        - { text: "Add to Tasks", widget: null }
+        - { text: "Mute", widget: null }
+        - { text: "Unmute", widget: null }
+        - { text: "Find emails from <sender>", widget: null }
+        - { text: "Find emails with this subject", widget: null }
+        - { text: "Open in new window", widget: null }
+      submenus:
+        - text: "Move to"
+          widget: gmail.move_menu_search
+          contents: "typeahead input `input.bqf[aria-label='Move-to menu open']` (NOT placeholder='Move to:' — that's dead, see known_dead_paths.move_menu_search_placeholder_drift) + `role='menuitem'` list of foldering destinations (system folders + user labels). Picking a destination commits immediately + closes (NO Escape needed, unlike Label-as which needs Escape to commit)."
+          entry_point_for: ["move_email browser flavor (2026-05-28)"]
+        - text: "Label as"
+          widget: gmail.label_menu_search
+          contents: "typeahead input (`aria-label='Label-as menu open'`) + menuitemcheckbox list of all user labels (`role='menuitemcheckbox'` with aria-checked='true'|'false', NO aria-label — disambiguate by text content)"
+          entry_point_for: ["apply_label browser flavor"]
+      menuitem_attrs:
+        role: "menuitem"
+        submenu_indicator: "aria-haspopup='true' AND class includes 'J-Ph'"
+        disabled_item: "class='J-N J-N-JE' + aria-disabled='true' + aria-hidden='true' + inline display:none (height 0). The runtime's visible-filter skips these, so must_contain_text lands on the enabled twin without exact-text matching. Enabled item: class='J-N', aria-disabled='false'."
+        disambiguator: "text content — ids like ':94a' are ephemeral; the only non-text attribute that distinguishes 'Label as' from 'Move to' is the class-set, which Gmail may also rotate. Use must_contain_text='<label>' when clicking."
+      verified_at: 2026-05-28
+
+    row_hover_reveals:
+      - "Star toggle (`span[role='button'].T-KT` per row, always visible technically but visually-prominent on hover)"
+      - "Snooze (clock icon, per row, requires hover)"
+      - "Per-row More-options icon (requires hover)"
+
+    keyboard_shortcuts:
+      enabled_by: "Settings → Keyboard shortcuts ON (NOT default for new accounts)"
+      relevant:
+        - { key: "e", action: "archive selected" }
+        - { key: "#", action: "soft delete (to Trash)" }
+        - { key: "l", action: "open Label-as menu" }
+        - { key: "v", action: "open Move-to menu" }
+        - { key: "r", action: "Reply (when ThreadView open)" }
+        - { key: "a", action: "Reply all (when ThreadView open)" }
+        - { key: "f", action: "Forward (when ThreadView open)" }
+      note: "Anvisio recipes don't rely on keyboard shortcuts because they require the user to have enabled them. Documented here for context only."
+
+  ThreadView:
+    inline_actions_at_message_bottom:
+      - { text: "Reply", widget: gmail.thread_reply_button, opens: ReplyComposer }
+      - { text: "Forward", widget: gmail.thread_forward_button, opens: ReplyComposer }
+    inline_actions_missing:
+      - "Reply-all is NOT inline at message bottom. Only accessible via the per-message More-options menu (see below) OR the Inbox context menu BEFORE opening the thread."
+
+    icon_actions_at_message_top:
+      - { label: "Reply", widget: gmail.thread_reply_button, opens: ReplyComposer, note: "uses the icon-button variant (`button[aria-label='Reply'].DILLkc`); widget defines both icon + text-link selectors as of 3.5.0" }
+      - { label: "More message options", widget: null, opens: "per-message menu" }
+
+    per_message_more_menu:
+      trigger: "click the More-options icon at the top-right of a specific message"
+      menu_aria_label: "'More message options menu'"
+      per_message_caveat: "There is ONE 'More message options' (⋮) button PER MESSAGE in a multi-message thread, in DOM order oldest→newest. reply_all must open the LAST one (the most recent message) — gmail.thread_reply_all_button uses the runtime `pick_last: true` click arg (gmail.widgets 3.16.0). No CSS selector can target it: the messages are NOT same-type siblings, carry no distinguishing class (all `div.adn.ads`), and the `.ams` reply/forward links live OUTSIDE the message wrappers — so :last-of-type / :has() all fail (probed 2026-06-07). Symmetric to from_selector_last for the message_id extract."
+      relevant_items:
+        - { text: "Reply", data_action_type: "94", opens: "Reply composer (same as bottom .ams.bkH text-link)" }
+        - { text: "Reply all", data_action_type: "24", widget: gmail.thread_reply_all_button, opens: "Reply-all composer", state_condition: "ONLY shown when thread has >1 recipient. Single-recipient threads omit this item (since reply-all would equal reply). Verified 2026-05-26 on a Quora Digest thread with 1 recipient — Reply-all absent; 13 menuitems total, no data-action-type=24." }
+        - { text: "Forward", data_action_type: "25", opens: "Forward composer (same as bottom .ams.bkG text-link)" }
+        - { text: "Delete", data_action_type: "11", behavior: "deletes ONLY this message in the thread, not the entire thread" }
+        - { text: "Mark as unread", data_action_type: "206" }
+        - { text: "Block <sender>", data_action_type: "265" }
+        - { text: "Report spam", data_action_type: "9" }
+        - { text: "Report phishing", data_action_type: "30" }
+        - { text: "Filter messages like this", data_action_type: "27" }
+        - { text: "Translate", data_action_type: "75" }
+        - { text: "Print", data_action_type: "28" }
+        - { text: "Download message", data_action_type: "324" }
+        - { text: "Show original", data_action_type: "32" }
+
+    keyboard_shortcuts:
+      relevant:
+        - { key: "r", action: "Reply" }
+        - { key: "a", action: "Reply all" }
+        - { key: "f", action: "Forward" }
+      note: "Same enable-required caveat as Inbox shortcuts."
+
+  ComposePanel:
+    layout:
+      - "Recipient row (To input; chip-based) — `input[name='to']` or typeahead chip widget"
+      - "Cc / Bcc reveal buttons (clicking shows additional recipient rows)"
+      - "Subject input (`input[name='subjectbox']` or generic in dialog)"
+      - "Body editor (contenteditable `div[role='textbox'][aria-label*='Message Body']`)"
+      - "Bottom toolbar: Send button (primary `eV8l8d`), formatting buttons, attach, etc."
+    affordances:
+      - { label: "Send", widget: gmail.compose_send_button, behavior: "submits the message; verify via selector_disappears on `div[role='region'][data-compose-id]`" }
+      - { label: "Discard", widget: null, behavior: "discards draft; closes panel" }
+      - { label: "Save as draft", widget: null, behavior: "implicit — Gmail auto-saves; explicit Save Draft button location varies" }
+    network_signals:
+      sent_outcome: "POST /sync/u/<N>/i/s (modern Gmail). Old pattern `POST .*/mail/u/0/.*sendmail` is DEAD per 2026-05-25 hardening — see known_dead_paths."
+    verified_at: 2026-05-25
+
+  Sidebar:
+    create_label_flow:
+      trigger: gmail.create_label_sidebar_button
+      opens_modal: "`div[role='alertdialog']` with heading `h2.uW2Fw-bHp` 'New label'"
+      modal_fields:
+        - { name: "Label name", widget: gmail.create_label_name_input, note: "`input[type='text']` inside the alertdialog; no name/placeholder/aria-label attrs — positional inside the dialog" }
+      modal_buttons:
+        - { label: "Cancel", class: "Rb6pkf", note: "first button" }
+        - { label: "Create", widget: gmail.create_label_create_button, class: "eV8l8d", note: "primary-action class on dialog buttons across Gmail" }
+      verify_modal_dismissed: "selector_disappears on `div[role='alertdialog']`"
+    label_row_affordances:
+      - "Hover-reveal More-options button per label (test-probe in this session showed pointerover/mouseenter alone insufficient; needs full sequence to reveal the menu trigger)"
+      - "Each label has stable aria-label='<name> has menu' on the link"
+
+# ─── Known-dead paths ─────────────────────────────────────────────
+
+known_dead_paths:
+  - id: toolbar_labels_button_removed
+    description: "Gmail removed the toolbar Labels button from the Inbox toolbar circa 2025."
+    dead_widget: gmail.toolbar_labels_button
+    dead_selector: "div[role='button'][aria-label='Labels'][data-tooltip='Labels']"
+    discovered: 2026-05-25
+    discovered_in: project-gmail-browser-flavor-audit-2026-05-25
+    alternative: "Right-click context menu → Label as► submenu. Same typeahead opens; same widget (label_menu_search) does the typing + picking. The runtime needed a `contextmenu` step type (added 2026-05-26)."
+
+  - id: label_menu_search_placeholder_drift
+    description: "Modern Gmail dropped the `placeholder='Label as:'` attribute on the Label-as typeahead input. The current visible attr is `aria-label='Label-as menu open'`."
+    dead_selector: "div[role='menu'] input[placeholder='Label as:']"
+    discovered: 2026-05-26
+    discovered_in: gmail.widgets.yaml 3.6.0 changelog
+    alternative: "div[role='menu'] input[aria-label='Label-as menu open'] OR input.bqf (class fallback)"
+
+  - id: move_menu_search_placeholder_drift
+    description: "The Move-to typeahead has the SAME placeholder drift the Label-as input had (the 3.6.0 widget changelog predicted it; CONFIRMED live 2026-05-28 via the context-menu 'Move to►' submenu probe). The live input is `input.bqf[aria-label='Move-to menu open']` — there is no `placeholder='Move to:'`."
+    dead_selector: "div[role='menu'] input[placeholder='Move to:']"
+    discovered: 2026-05-28
+    discovered_in: context_menu 'Move to►' submenu probe (move_email C-rest rewrite)
+    alternative: "div[role='menu'] input[aria-label='Move-to menu open'] OR input.bqf (class fallback). Fixed in gmail.move_menu_search."
+
+  - id: label_menuitemcheckbox_aria_label
+    description: "The menuitemcheckbox elements inside the Label-as submenu have NO aria-label. Old selector `[role='menuitemcheckbox'][aria-label*='{{value}}']` returned 0 matches."
+    dead_selector: "div[role='menu'] div[role='menuitemcheckbox'][aria-label*='<label>']"
+    discovered: 2026-05-26
+    alternative: "Walk all `[role='menuitemcheckbox']` and disambiguate by `el.textContent.includes('<label>')`. Runtime supports this via the new `must_contain_text:` arg on the click step."
+
+  - id: compose_region_aria_label_mutation
+    description: "Compose container's aria-label changes from 'New Message' to the Subject text once the user types a Subject. Any widget selector scoped on `[aria-label='New Message']` is dead post-fill."
+    dead_selector: "[role='region'][aria-label='New Message']"
+    discovered: 2026-05-25
+    discovered_in: reference-gmail-compose-aria-label-mutation
+    alternative: "Use `[role='region'][data-compose-id]` for stable scoping; the data-compose-id is assigned at compose-open and persists."
+
+  - id: sendmail_network_signal_pattern
+    description: "Old send-completion network signal `POST .*/mail/u/0/.*sendmail` matched zero traffic on modern Gmail."
+    dead_pattern: "POST .*/mail/u/0/.*sendmail"
+    discovered: 2026-05-25
+    alternative: "POST /sync/u/<N>/i/s — verified via chrome-devtools XHR capture during send_email hardening."
+
+  - id: reply_composer_entry_hardcodes_reply_trigger
+    description: "views/ReplyComposer.yaml's entry recipe clicks the plain Reply trigger (`.ams.bkH`) regardless of which atom invoked the view. When reply_all_email or forward_email atoms depend on ReplyComposer, the entry recipe opens a Reply composer (not reply-all / forward), and the atom silently fills the wrong shape."
+    discovered: 2026-05-25
+    discovered_in: project-gmail-browser-flavor-audit-2026-05-25 (Finding 2)
+    resolved: 2026-05-26
+    resolution: "Option B chosen: each atom owns its trigger click. reply_email 0.8.0 / reply_all_email 0.8.0 / forward_email 0.8.0 switched depends_on_view to ThreadView and added open_composer step (use_widget gmail.thread_reply_button / thread_forward_button / thread_reply_all_button). ReplyComposer.yaml's entry recipe is now /validate-views-only (its description block clarifies the scope)."
+    status: resolved
+
+  - id: delete_flavor_semantic_mismatch
+    description: "delete_email atom claims 'permanent delete' but the browser flavor's toolbar Delete moves to Trash (soft delete, recoverable). The mcp/oauth_api flavors actually permanently delete. Cross-flavor semantic split."
+    discovered: 2026-05-26
+    alternative: "Decide between (a) split into delete_email (soft) + permanent_delete_email (bypass-Trash, contextmenu→Delete forever for browser + REST DELETE for oauth), (b) document the browser flavor as soft-only and rename oauth as the canonical permanent path, (c) browser flavor uses contextmenu→Delete forever to match REST semantics. Pending."
+    status: open
+
+# ─── Transitions ──────────────────────────────────────────────────
+
+transitions:
+  - { from: Inbox, to: ThreadView, via: "click on row's subject or sender" }
+  - { from: Inbox, to: LabelView, via: "sidebar label link click" }
+  - { from: Inbox, to: SearchResults, via: "gmail.search_input typeahead + Enter" }
+  - { from: Inbox, to: Trash, via: "menu → Trash sidebar link OR after Delete on any view" }
+  - { from: Inbox, to: ComposePanel, via: "Compose button (sidebar)" }
+  - { from: ThreadView, to: ReplyComposer, via: "click `.ams.bkH` text-link OR icon `button[aria-label='Reply']`" }
+  - { from: ThreadView, to: ReplyComposer, via: "click `.ams.bkG` Forward text-link (opens Forward variant)" }
+  - { from: ThreadView, to: ReplyComposer, via: "per-message More-options menu → Reply-all menuitem (`data-action-type='24'`)" }
+  - { from: ThreadView, to: Inbox, via: "browser back, OR Esc, OR click Inbox label" }
+  - { from: any, to: ComposePanel, via: "Compose sidebar button" }
+  - { from: any, to: Sidebar.create_label_modal, via: "sidebar 'Create new label' button (`div[role='button'][aria-label='Create new label']`)" }
+
+# ─── Atoms cross-reference ────────────────────────────────────────
+# Which atoms exercise which screen / affordance. Helps propose see
+# precedent + helps the user audit "if I change widget X, what breaks?".
+# Derived from the actions/*.yaml files; keep in sync by hand for now.
+
+# NOTE (2026-05-28 C-rest rewrite): archive/delete/move/mark_read_unread
+# moved from the top toolbar to the right-click context menu (works in all
+# list views; the toolbar is absent in search). The toolbar_* widgets +
+# row_checkbox are now used by NO atom — but they are still referenced by
+# the view affordance lists (Inbox.yaml / SearchResults.yaml / LabelView.yaml),
+# so a cleanup pass must touch those views too (not a pure widget delete).
+atoms_using:
+  Inbox.toolbar_archive_button: []   # orphaned by C-rest; still in view affordances
+  Inbox.toolbar_delete_button: []    # orphaned by C-rest; still in view affordances
+  Inbox.toolbar_mark_read_button: [] # orphaned by C-rest; still in view affordances
+  Inbox.toolbar_mark_unread_button: [] # orphaned by C-rest; still in view affordances
+  Inbox.toolbar_move_button: []      # orphaned by C-rest; still in view affordances
+  Inbox.row_checkbox: []             # orphaned (apply_label dropped it 0.9.0; C-rest dropped it 2026-05-28)
+  Inbox.row_star_toggle: [star_email]
+  Inbox.context_menu.Label_as: [apply_label (post-2026-05-26 rewrite)]
+  Inbox.context_menu.Move_to: [move_email (post-2026-05-28 rewrite)]
+  Inbox.context_menu.Archive: [archive_email (post-2026-05-28 rewrite)]
+  Inbox.context_menu.Delete: [delete_email (post-2026-05-28 rewrite)]
+  Inbox.context_menu.Mark_as_read: [mark_read_unread (mode=read branch)]
+  Inbox.context_menu.Mark_as_unread: [mark_read_unread (mode=unread branch)]
+  ThreadView.thread_reply_button: [reply_email]
+  ThreadView.thread_forward_button: [forward_email (when fixed)]
+  ThreadView.thread_reply_all_button: [reply_all_email (when fixed)]
+  ComposePanel.compose_send_button: [send_email, reply_email, reply_all_email, forward_email]
+  ComposePanel.compose_to_input: [send_email, forward_email]
+  ComposePanel.compose_subject_input: [send_email, forward_email, reply_email, reply_all_email]
+  ComposePanel.compose_body_input: [send_email, forward_email, reply_email, reply_all_email, draft_email]
+  Sidebar.create_label_sidebar_button: [create_label]
+  Sidebar.create_label_create_button: [create_label]

@@ -1,0 +1,169 @@
+_meta:
+  name: manifests/jobber/schemas/Property.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-07-08
+  description: |
+    Jobber Property schema — a service location that belongs to a Client. The
+    middle hop of the Client → Property → Job reference chain. Fields grounded
+    in live GraphQL introspection of the Property type + PropertyAttributes /
+    AddressAttributes (2026-07-08). `clientId` is the up-reference to Client
+    (the API read returns it nested as `client { id }`; propertyCreate takes a
+    top-level `clientId` arg). The address is a nested PropertyAddress on read /
+    AddressAttributes on write; modeled here as flat components (street1..country)
+    that the create_property atom composes into the nested `address`.
+  changelog:
+    - "0.1.0 (2026-07-08): initial. Core read fields + flat address components +
+       the clientId up-ref. Live-probed."
+
+description: |
+  A Jobber Property — a service location (address) owned by a Client. A Property
+  hosts Jobs (jobCreate needs a propertyId). Global id `id` is an opaque EncodedId.
+primary_key: [id]
+
+# ── Object-generic dispatch (resolve_object). Property → Client via clientId. ──
+# url_segment is the NESTED path (properties live under a client); the browser
+# fallback is FLAGGED (the flat /properties/{id} may not resolve) — session_api is
+# the path. create maps the flat fields into propertyCreate's {properties:[{…}]}.
+url_segment: properties
+graphql:
+  create:
+    query: >
+      mutation($clientId: EncodedId!, $input: PropertyCreateInput!) {
+        propertyCreate(clientId: $clientId, input: $input) {
+          properties { id name address { street1 street2 city province postalCode country } }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.propertyCreate.properties[0]
+    reject_path: data.propertyCreate.userErrors
+    variables:
+      clientId: "{{inputs.fields.clientId}}"
+      input:
+        properties:
+          - name: "{{inputs.fields.name}}"
+            address:
+              street1: "{{inputs.fields.street1}}"
+              street2: "{{inputs.fields.street2}}"
+              city: "{{inputs.fields.city}}"
+              province: "{{inputs.fields.province}}"
+              postalCode: "{{inputs.fields.postalCode}}"
+              country: "{{inputs.fields.country}}"
+  get:
+    query: >
+      query($id: EncodedId!) {
+        property(id: $id) {
+          id name routingOrder isBillingAddress createdAt jobberWebUri
+          address { street1 street2 city province postalCode country }
+          client { id name }
+        }
+      }
+    extract_path: data.property
+    variables:
+      id: "{{inputs.record_id}}"
+  update:
+    query: >
+      mutation($propertyId: EncodedId!, $input: PropertyEditInput!) {
+        propertyEdit(propertyId: $propertyId, input: $input) {
+          property { id name }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.propertyEdit.property
+    reject_path: data.propertyEdit.userErrors
+    variables:
+      propertyId: "{{inputs.record_id}}"
+      input: "{{inputs.fields}}"
+  delete:
+    query: >
+      mutation($propertyId: EncodedId!) {
+        propertyDelete(propertyId: $propertyId) {
+          property { id }
+          userErrors { message path }
+        }
+      }
+    extract_path: data.propertyDelete.property
+    reject_path: data.propertyDelete.userErrors
+    variables:
+      propertyId: "{{inputs.record_id}}"
+  search:
+    query: >
+      query($searchTerm: String, $first: Int) {
+        properties(searchTerm: $searchTerm, first: $first) {
+          nodes { id name jobberWebUri address { street1 city province } client { id name } }
+        }
+      }
+    extract_path: data.properties.nodes
+    variables:
+      searchTerm: "{{inputs.query}}"
+      first: "{{inputs.limit}}"
+
+fields:
+  id:
+    type: id
+    label: Property ID
+    primary: true
+    readonly: true
+    required: true
+  name:
+    type: text
+    label: Name
+    required: false
+    description: Optional label for the property (nullable; often blank).
+  clientId:
+    type: id
+    label: Client ID
+    readonly: true
+    required: true
+    ref: Client.id
+    description: >
+      The owning Client (the up-reference). Not a form-fillable field — a Property
+      is created in a Client's URL context and propertyCreate takes `clientId` as a
+      top-level argument; surfaced on read as nested `client { id }`. Set once at
+      creation via the create_property `client_id` input.
+  street1:
+    type: text
+    label: Street address
+    required: false
+  street2:
+    type: text
+    label: Street address line 2
+    required: false
+  city:
+    type: text
+    label: City
+    required: false
+  province:
+    type: text
+    label: Province/State
+    required: false
+  postalCode:
+    type: text
+    label: Postal/ZIP code
+    required: false
+  country:
+    type: text
+    label: Country
+    required: false
+  routingOrder:
+    type: number
+    label: Routing order
+    readonly: true
+    required: true
+  isBillingAddress:
+    type: boolean
+    label: Is billing address
+    readonly: true
+    required: true
+  createdAt:
+    type: datetime
+    label: Created at
+    readonly: true
+    required: true
+  jobberWebUri:
+    type: text
+    label: Jobber web URL
+    readonly: true
+    required: true
+    description: Absolute URL of the property's page (nested under its client).

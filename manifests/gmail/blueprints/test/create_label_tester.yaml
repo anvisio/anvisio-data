@@ -1,0 +1,40 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: create-label-tester
+  version: '1.1.0'
+  title: Gmail create_label browser-flavor tester
+  summary: |
+    Live-verifies the create_label browser flavor end-to-end. Opens
+    Gmail's sidebar "Create new label" modal, types the name, clicks
+    Create. Specifically exercises:
+      - gmail.create_label_sidebar_button widget (opens modal)
+      - gmail.create_label_name_input widget (modal text input)
+      - gmail.create_label_create_button widget (Create primary button)
+      - The depends_on_view: Inbox pre-nav (entry URL #inbox)
+
+    v1.1.0 (2026-05-27): rely on the create_label 0.2.0 outcome
+    signal upgrade (positive snackbar `The label "<name>" was
+    created.` instead of `selector_disappears`). Recipe now reliably
+    reports created=true ONLY when the real side effect fired. Note:
+    no atom-level post-condition step here because create_label's
+    own outcome signal IS the post-condition (positive snackbar).
+    apply_label_tester adds an extra read-atom check because its
+    atom-level signal is harder to make positive — see that file's
+    1.2.0 notes.
+
+    Re-run behavior: Gmail rejects duplicate label names with a modal
+    error. After a first successful run, subsequent runs will fail at
+    the create_label outcome's signal (no "was created" snackbar fires
+    on duplicate name). Delete the label via Manage labels UI then
+    re-run, OR change the `name:` below to a fresh string.
+
+    Drive via: /run-blueprint gmail create_label_tester
+
+do:
+  - create:
+      label: Creating a Gmail label via the sidebar modal
+      call: gmail.atom.create_label
+      flavor: browser
+      with:
+        name: 'anvisio-hardening-2026-05-25'

@@ -1,0 +1,26 @@
+document:
+  dsl: '1.0.0'
+  namespace: outlook-calendar
+  name: create-event-tester
+  version: '2.0.0'
+  title: Outlook Calendar create_event tester (auto-create)
+  summary: |
+    Fills the full event editor (title + start/end via datetime_split) and
+    clicks Save. **WILL ACTUALLY CREATE** a throwaway event each run.
+
+    Hardened shape (2026-06-01): create_event's commit signal is the editor
+    closing (Save); the discard path is covered by the spec-72 abandon_signal
+    (the "discard this event" dialog). HARDEN ITEMS still open (Phase 4 live
+    pass): the datetime-reveal summary-button selector + the event_save
+    aria-label. Drive via: /run-blueprint outlook-calendar create_event_tester
+
+do:
+  - fill_and_save:
+      label: Creating a calendar event
+      call: outlook-calendar.atom.create_event
+      commit: true
+      with:
+        fields:
+          Title: 'Anvisio onboarding smoke'
+          StartTime: '2026-06-09T14:00:00'
+          EndTime: '2026-06-09T14:30:00'

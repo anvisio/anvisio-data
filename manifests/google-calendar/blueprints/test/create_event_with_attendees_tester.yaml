@@ -1,0 +1,74 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: create-event-with-attendees-tester
+  version: '1.0.0'
+  title: Google Calendar create_event tester — Attendees (preview)
+  summary: |
+    Sibling of create_event_tester, but ALSO exercises the Attendees
+    field (typeahead_chip widget google-calendar.event_guests). Use this
+    to regression-test the Attendees fill path WITHOUT polluting any
+    other SaaS or sending real emails.
+
+    What this exercises end-to-end:
+      - fill_fields' per-item iteration for `list<...>` schema fields:
+        Attendees is `list<email>` so the runtime should iterate the
+        widget once per email (NOT String()-join the array into one
+        invalid comma-separated query).
+      - typeahead_chip archetype's recipe: focus → type → Enter → verify
+        chip appeared (commit key is Enter as of archetype-templates 1.6.0;
+        Tab can't commit a chip via synthetic dispatch).
+      - event_guests widget's `verify_target`
+        `[role='treeitem'][data-email='{{value}}']` (the canonical chip
+        shape, live-probed 2026-05-30; replaced the broken
+        `[role='listitem'][data-email], div[data-hovercard-id]` pair in
+        widget lib 0.6.0).
+
+    Throwaway data — no real recipients, no other SaaS touched:
+      - Title: 'Anvisio attendees smoke'
+      - Two attendees on @example.com (a reserved example domain per
+        RFC 2606, so even if Save were accidentally clicked + invites
+        sent they bounce harmlessly).
+
+    Drive: /run-blueprint google-calendar create_event_with_attendees_tester
+    (DETACH chrome-devtools MCP first — it holds the CDP socket the
+    runtime's trusted clicks need.)
+
+    Pre-req on a fresh build:
+      - RELOAD the extension — the chip-commit fix (synthetic Enter now
+        carries keyCode=13 so Calendar/Gmail PeopleKit actually commits)
+        and the orphaned-listbox reaper both live in chrome-step-driver
+        (build-time). A reload is mandatory.
+      - /install google-calendar --from-bundle to refresh the cached
+        widget lib (event_guests verify_target `[role='treeitem']
+        [data-email='{{value}}']`) + the archetype-templates mirror
+        (submit_key default Enter). Without it the cache-first fetcher can
+        still serve an older Tab/verify and the Attendees commit verify
+        times out.
+
+    EXPECTED FLOW (preview / commit:false):
+      1. Spawns a fresh edit tab, navigates calendar Create → Event →
+         More options → /r/eventedit.
+      2. Fills Title.
+      3. Fills StartTime + EndTime (datetime_split).
+      4. Description (contenteditable_input).
+      5. Attendees: iterates the array, types attendee#1 + Enter,
+         verifies the role='treeitem' chip with data-email=attendee#1
+         appears, then attendee#2. blur_focus then reaps any orphaned
+         suggestion listbox (Escape on the owning combobox).
+      6. STOPS at Save — you click Save (or discard) yourself.
+do:
+  - create_with_attendees:
+      label: Fill a single event WITH attendees (you click Save)
+      call: google-calendar.atom.create_event
+      commit: false
+      with:
+        Title: 'Anvisio attendees smoke'
+        StartTime: '2026-06-09T14:00:00-07:00'
+        EndTime:   '2026-06-09T14:45:00-07:00'
+        Attendees:
+          - attendee-one@example.com
+          - attendee-two@example.com
+        Description: |
+          Throwaway tester for the calendar Attendees field.
+          No real recipients; @example.com is a reserved example domain.

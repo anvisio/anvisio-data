@@ -1,0 +1,64 @@
+_meta:
+  name: manifests/google-calendar/views/EventDetail.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Event detail popup — the bubble that opens when an event chip on the
+    grid is clicked. Operating surface for get_event (read via the edit
+    pencil → editor), delete_event (trash button), and respond_to_event
+    (RSVP Yes/No/Maybe). Entry clicks the event_chip for the supplied
+    event_id; exit dismisses via Escape.
+  changelog:
+    - "0.3.0 (2026-06-08): drop google-calendar.rsvp_button from the widgets list — the widget was removed (widget-lib 0.9.0) after the live invitation test showed it was fully wrong; respond_to_event's browser flavor now uses the resolve_rsvp recipe step (enum→label map in its args), not a widget."
+    - "0.2.0 (2026-05-28): entry navigates the grid to occurrence_date (a day deep-link, /r/day/YYYY/M/D) BEFORE clicking the chip, gated on the occurrence_date input — so update/delete/get reach an event that's off the currently-rendered grid range (gotcha #2). Uses the navigate step's new {date.*} formatting. Live-confirmed the day-nav renders an off-week chip."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70)."
+
+name: EventDetail
+description: >
+  The event detail popup that opens on clicking an event chip in the grid.
+  Operating surface for get_event, delete_event, and respond_to_event. The
+  entry recipe clicks the chip for the supplied event_id; the actions then
+  drive the edit pencil, the trash button, or the RSVP control.
+entry:
+  depends_on_view: CalendarGrid
+  recipe:
+    # When the caller supplies occurrence_date, navigate the grid to that day
+    # FIRST so the event's chip renders even if it's off the currently-shown
+    # range (gotcha #2 — the grid only renders chips for the visible range).
+    # Skipped (when:) for callers whose event is already on the visible grid.
+    # For a RECURRING event pass the INSTANCE's date (the chip you want to act
+    # on). Live-confirmed 2026-05-28: /r/day/YYYY/M/D renders an off-week
+    # event's chip (its jslog carries the API id event_chip matches on).
+    - id: nav_to_day
+      type: navigate
+      when: "{{inputs.occurrence_date}}"
+      args:
+        url: "{instance.origin}/calendar/u/0/r/day/{date.year}/{date.month}/{date.day}"
+        date: "{{inputs.occurrence_date}}"
+        timeout_ms: 8000
+    - id: open_event
+      type: use_widget
+      args:
+        widget: google-calendar.event_chip
+        op: invoke
+        inputs:
+          event_id: "{{inputs.event_id}}"
+    - id: wait_popup
+      type: wait_for_element
+      args:
+        selector: "[role='dialog']"
+        timeout_ms: 6000
+exit:
+  - id: dismiss_popup
+    type: press_key
+    args:
+      key: Escape
+identifying_selectors:
+  - "[role='dialog']"
+  - "[role='dialog'] button[aria-label*='Delete']"
+widgets:
+  - google-calendar.event_chip
+  - google-calendar.event_edit_button
+  - google-calendar.event_delete_button

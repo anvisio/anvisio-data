@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/actions/list_records.yaml
-  version: 2.0.0
+  version: 2.1.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
@@ -11,12 +11,13 @@ _meta:
     has no canonical MCP equivalent (use query_records when you want
     a structured result set without driving the UI).
   changelog:
+    - "2.1.0 (2026-06-09): CANONICAL ACTION FORM v71. result.outcome:text (auto from the winning action, 'listed') replaces the `listed` boolean; the browser flavor resolves via a named signals: map + when:[listed] (was the inline signal:). The `listed: literal:true` extract is dropped (the runtime injects outcome via withOutcomeField; this atom has no other payload). object_types kept (templated object: — gmail send_email keeps object_types in v71 too; the validator recommends it). Behaviour-preserving."
     - "2.0.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when. Live-verified recipe + sample carry over from v1.0.0."
     - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
 description: Open an object's list view.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: false
 depends_on_view: any
 inputs:
@@ -25,11 +26,18 @@ inputs:
     required: true
     sample: Opportunity
 result:
-  listed: boolean
+  # v71: outcome = the winning action ("listed"), auto-populated by the runtime.
+  outcome: text
 flavors:
   browser:
     requires_auth: session_cookie
     label: Navigate to the object list view
+    # v71 signals model: `listed` = the list-view manager rendered.
+    signals:
+      listed:
+        type: selector_appears
+        selector: lst-list-view-manager
+        timeout_ms: 10000
     recipe:
       - id: nav_list
         type: navigate
@@ -37,10 +45,4 @@ flavors:
           url: "{instance.origin}/lightning/o/{{inputs.object_type}}/list"
     outcomes:
       - action: listed
-        signal:
-          type: selector_appears
-          selector: lst-list-view-manager
-          timeout_ms: 10000
-        extract:
-          listed:
-            literal: true
+        when: [listed]

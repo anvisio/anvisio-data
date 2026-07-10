@@ -1,24 +1,27 @@
 _meta:
   name: manifests/salesforce/actions/create_record.yaml
-  version: 2.0.0
+  version: 2.4.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    create_record atom — parameterized over object_type. Single
-    canonical action for creating Opportunity / Lead / Contact /
-    Account / etc. Spec 70 single `browser` flavor with `commit: true`
-    step marker on the destructive Save click + optional `session_api`
-    (Aura POST) + `mcp` (KirtiJha dml_records) flavors. Writes prefer
-    browser > session_api > mcp per spec 70 §7.
+    create_record atom: parameterized over object_type. Single canonical
+    action for creating Account / Case / Contact / Event / Lead / Note /
+    Opportunity / Task. Spec 70 single `browser` flavor with `commit:
+    true` step marker on the destructive Save click + optional
+    `session_api` (Aura POST) + `mcp` (KirtiJha dml_records) flavors.
+    Writes prefer browser > session_api > mcp per spec 70 §7.
   changelog:
-    - "2.0.0 (2026-05-19): spec 70 shape — rename `dom` → `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. URL match regex + samples carry over from v1.0.0 (live-verified)."
-    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/ — live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
+    - "2.4.0 (2026-07-07): browser recipe gains a `view_prefill` step before fill_fields — lookup (`ref:`) fields (Opportunity/Contact AccountId) are prefilled via RecordNewModal's declared `entry.prefill` URL mechanism (SF defaultFieldValues), server-resolved with no 'recently viewed' DOM race; fill_fields then skips them (ctx.prefilledFields). The prefill is fully data-driven (view manifest owns the param/format/applies-to/ready-signal) — it replaces a hardcoded SF prefill that had leaked into the generic fill_fields engine. The salesforce.lookup widget (lib 4.8.0) stays as the DOM fallback for non-prefill paths (edit forms). No-op for objects with no lookup field."
+    - "2.3.0 (2026-06-09): CANONICAL ACTION FORM v71. (1) result.outcome:text (auto from the winning action: created | cancelled) replaces the `created` boolean; literal/`.success` extracts dropped across all 3 flavors (extract carries payload only — record_id/record_name/record). (2) the `ready_to_save` PSEUDO-OUTCOME is dropped (the filled-&-ready state is the recipe + the commit:true HITL pause, not an LLM terminal — per gmail send_email 0.15.0 / gcal create_event 0.7.0). (3) SPEC 70 SIGNALS MODEL: the flavor-level abandon_signal is replaced by a named signals: map — created_nav (the /r/{id}/view redirect; carries the server-assigned record_id via from_url_match in its OWN extract, read by the outcome via from_signal — the gmail send_email autosave pattern) + abandon (SaveEdit disappears). created = when:[created_nav]; cancelled = when:[abandon] not:[created_nav] (modal closed with no record-view nav — the HITL discard; grace-arbitrated so a real Save's redirect still wins). KEEPS inputs.fields:{type:object} — generic-record verb, Check-6 allowlisted (SObject fields vary by object type). object_types kept. Behaviour-preserving."
+    - "2.2.0 (2026-05-29): spec 72 — add browser `abandon_signal` (selector_disappears SaveEdit) for fast HITL discard detection. The `created` outcome STAYS `url_matches /r/{id}/view`: live-probed 2026-05-29 as discard-safe (a cancelled New modal returns to the list, never a record view) AND it is the only source of the server-assigned record_id. SF success toast captured live as `<Obj> \"<Name>\" was created.` (.toastMessage / .slds-theme--success, role=null — NOT [role='alert']); recorded in salesforce.md. No L4 toaster rung added here to avoid a cross-SPA-nav false-negative + losing the from_url_match record_id."
+    - "2.1.0 (2026-05-24): add Case + Event to object_types (matching the 8 schemas/<Type>.yaml authored from live SF describe). Add schema-typed result.record per v70 signature parity rule (schema_union across the 8 SF objects). Browser populates record.Id from the URL post-save; session_api populates from POST response.id; mcp from .results[0].id."
+    - "2.0.0 (2026-05-19): spec 70 shape: rename `dom` to `browser`, drop emits_when, add mcp_tool + session_api + mcp flavors. URL match regex + samples carry over from v1.0.0 (live-verified)."
+    - "1.0.0 (2026-05-16): initial promote from .tmp-sf-manifest-8of8-2026-05-15/. Live-verified end-to-end on 2026-05-15 (CRUD 8/8 at $0.09)."
 
-description: Create a new Opportunity / Account / Lead record via
-  /lightning/o/{object_type}/new.
+description: Create a new SF record via /lightning/o/{object_type}/new.
 object: "{{inputs.object_type}}"
-object_types: [Opportunity, Lead, Contact, Account, Task, Note]
+object_types: [Opportunity, Lead, Contact, Account, Case, Event, Task, Note]
 commits_changes: true
 depends_on_view: RecordNewModal
 mcp_tool: salesforce.dml_records
@@ -35,14 +38,51 @@ inputs:
       StageName: Prospecting
       CloseDate: 12/31/2026
 result:
+  # v71: outcome = the winning action ("created" | "cancelled"), auto-populated.
+  outcome: text
   record_id: text
   record_name: text
-  created: boolean
+  record:
+    schema_union: [Account, Case, Contact, Event, Lead, Note, Opportunity, Task]
 flavors:
   browser:
     requires_auth: session_cookie
     label: Fill the new-record modal; click Save when commit:true
+    # v71 signals model (replaces the spec-72 flavor-level abandon_signal):
+    #  - created_nav: the post-save redirect to /lightning/r/{id}/view. Live-
+    #    probed discard-safe (a cancelled New modal returns to the list, never a
+    #    record view) AND the only source of the server-assigned record_id — its
+    #    named capture is read by the `created` outcome via from_signal (the
+    #    gmail send_email autosave pattern: from_url_match lives in the signal's
+    #    own extract, the outcome reads from_signal: created_nav.record_id).
+    #  - abandon: the New modal's Save button disappears (the HITL discard:
+    #    SaveEdit gone, no /r/{id}/view nav).
+    # created = when:[created_nav]; cancelled = when:[abandon] not:[created_nav]
+    # (grace-arbitrated so a real Save's redirect, which can beat the abandon by
+    # a beat, still wins). No L4 toaster rung — the redirect is discard-safe AND
+    # the only record_id source (a cross-SPA-nav toast watch would risk a
+    # false-negative + lose the from_url_match id).
+    signals:
+      created_nav:
+        type: url_matches
+        pattern: /lightning/r/(?:[A-Za-z]+/)?(?<record_id>[A-Za-z0-9]{15,18})/view
+        extract:
+          record_id:
+            from_url_match: record_id
+      abandon:
+        type: selector_disappears
+        selector: button[name='SaveEdit']
     recipe:
+      # Prefill lookup (`ref:`) fields via RecordNewModal's declared URL-param
+      # mechanism (SF defaultFieldValues), server-resolved — no "recently viewed"
+      # DOM race. Records them in ctx.prefilledFields; the next fill_fields skips
+      # them. No-op when the object has no lookup field in `fields`.
+      - id: prefill_lookups
+        type: view_prefill
+        args:
+          view: RecordNewModal
+          object: "{{inputs.object_type}}"
+          from: "{{inputs.fields}}"
       - id: fill_fields
         type: fill_fields
         args:
@@ -55,24 +95,21 @@ flavors:
           widget: salesforce.save_button
           op: invoke
     outcomes:
-      - action: ready_to_save
-        signal:
-          type: selector_appears
-          selector: button[name='SaveEdit']
-          timeout_ms: 8000
       - action: created
-        signal:
-          type: url_matches
-          pattern: /lightning/r/(?:[A-Za-z]+/)?(?<record_id>[A-Za-z0-9]{15,18})/view
+        when: [created_nav]
         extract:
           record_id:
-            from_url_match: record_id
-          object_type:
-            from_input: object_type
+            from_signal: created_nav.record_id
           record_name:
             from_input: fields.Name
-          created:
-            literal: true
+          record:
+            Id:
+              from_signal: created_nav.record_id
+            Name:
+              from_input: fields.Name
+      - action: cancelled
+        when: [abandon]
+        not: [created_nav]
   session_api:
     requires_auth: session_cookie
     label: POST /services/data/v62.0/sobjects/{object_type}
@@ -86,8 +123,13 @@ flavors:
         extract:
           record_id:
             from_api_response: ".id"
-          created:
-            from_api_response: ".success"
+          record_name:
+            from_input: fields.Name
+          record:
+            Id:
+              from_api_response: ".id"
+            Name:
+              from_input: fields.Name
   mcp:
     requires_auth: mcp_server
     label: Create via SF MCP server (dml_records insert)
@@ -106,5 +148,10 @@ flavors:
         extract:
           record_id:
             from_api_response: ".results[0].id"
-          created:
-            from_api_response: ".results[0].success"
+          record_name:
+            from_input: fields.Name
+          record:
+            Id:
+              from_api_response: ".results[0].id"
+            Name:
+              from_input: fields.Name

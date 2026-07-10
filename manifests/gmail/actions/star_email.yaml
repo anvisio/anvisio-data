@@ -1,15 +1,22 @@
 _meta:
   name: manifests/gmail/actions/star_email.yaml
-  version: 0.3.0
+  version: 0.8.0
   cdn_schema_version: 70.0.0
   authored_by: cd2k + claude
   authored_at: 2026-05-19
   description: |
-    star_email atom — toggle the star flag on a thread. Spec 70:
+    star_email atom: add STARRED label to a thread. Spec 70:
     `browser` flavor clicks the row star icon; `mcp` flavor calls
-    gmail.modify_email with addLabelIds: [STARRED].
+    gmail.modify_email with addLabelIds: [STARRED]; `oauth_api`
+    flavor calls Gmail REST users.threads.modify directly.
+    Idempotent — callers ensure they're starring (not un-starring).
   changelog:
-    - "0.3.0 (2026-05-19): spec 70 shape — `dom` → `browser`, drop emits_when, add mcp_tool + mcp flavor."
+    - "0.8.0 (2026-06-08): CANONICAL ACTION FORM v71. tab_mode: current (was runs_in_home_tab); result.outcome (auto from the winning action) replaces the `toggled` boolean; the silent-toggle terminal moves to a named signals: map resolved via when:[toggled] (the aria-label='Starred' state probe). ready_to_toggle_star dropped (not an LLM-consumable outcome); NO abandoned terminal — a single click has no surface to close, so a HITL cancel is just the Skip ({cancelled}). mcp/oauth drop the literal toggled flag. Behaviour-preserving (same selector/state-probe)."
+    - "0.7.0 (2026-05-28): C-rest sibling fix. (1) add `runs_in_home_tab: true` — star is an in-place row toggle, but it was UNSET, so the wantsOwnTab gate (commits_changes && browser && !runs_in_home_tab) spawned a fresh edit tab for what should be a single in-place click. (2) `depends_on_view: Inbox -> any` so it works in search / label views, not just inbox. (3) scope the row_star_toggle widget + both outcome selectors to `div[role='main']` (gmail.md #6) — live-probed 2026-05-28 in a search view: the SAME thread_id appeared in 2 rows (1 live in main + 1 in the detached inbox cache), so the unscoped `tr.zA:has(...)` could click/verify the WRONG row. Live-verified the scoped star toggle round-trip (Not starred -> Starred -> restored) on chanu's account. row_star_toggle bumped to widgets 3.13.0."
+    - "0.6.0 (2026-05-28): honest L4 — browser `toggled` outcome now matches the row star's aria-label='Starred' (entity-scoped state probe) instead of the always-present `span[role='button']` false-positive. Live-probed: starring is SILENT (no snackbar), so Rule B state-transition applies. See /debug-atom Rule B + gmail.md snackbar table."
+    - "0.5.0 (2026-05-25): add oauth_api flavor — POST /gmail/v1/users/me/threads/{thread_id}/modify with literal body {addLabelIds: ['STARRED']}. Same shape as archive_email 0.5.0 (modify is Gmail's swiss-army-knife label-mutation endpoint)."
+    - "0.4.0 (2026-05-24): add schema-typed result.thread per v70 signature parity rule. browser echoes thread.Id from input; mcp extracts from modify_email response.message_id."
+    - "0.3.0 (2026-05-19): spec 70 shape: `dom` to `browser`, drop emits_when, add mcp_tool + mcp flavor."
     - "0.2.0 (2026-05-16): migrate to single `dom` flavor with commit marker (Phase 3)."
     - "0.1.0 (2026-05-10): initial seed from cd2k's healed gmail manifest."
 
@@ -20,7 +27,14 @@ description: >
   un-starring.
 object: Thread
 commits_changes: true
-depends_on_view: Inbox
+# Star is an in-place row toggle on the row in whatever list is current
+# (search / label / inbox) — no separate edit URL. runs_in_home_tab: true
+# so the runtime's wantsOwnTab gate doesn't spawn a fresh edit tab for an
+# in-place click; depends_on_view: any so it acts on the current list (no
+# force-nav to #inbox). Same C-rest rationale as archive_email 0.8.0. All
+# row selectors scoped to div[role='main'] (gmail.md #6 — detached cache).
+tab_mode: current
+depends_on_view: any
 mcp_tool: gmail.modify_email
 inputs:
   thread_id:
@@ -28,11 +42,28 @@ inputs:
     required: true
     description: data-legacy-thread-id of the row whose star is being toggled
 result:
-  toggled: boolean
+  # v71: outcome = the winning terminal's action ("toggled"), auto-populated.
+  outcome: text
+  thread:
+    schema: Thread
 flavors:
   browser:
     requires_auth: session_cookie
     label: Click star icon on row when commit:true
+    # v71 signals model: a single state-probe terminal. Starring is SILENT (no
+    # snackbar) — the only backend-committed signal is the row star's aria-label
+    # flipping "Not starred" -> "Starred" (entity-scoped to {{inputs.thread_id}},
+    # scoped to div[role='main'] to skip the detached inbox cache that holds a
+    # stale star state for the same id; gmail.md #6). Idempotent toward starred,
+    # so "Starred" is always the correct post-condition. /debug-atom Rule B. NO
+    # `abandoned` terminal: a single click has no surface to close, so a HITL
+    # cancel is just the Skip ({cancelled}).
+    signals:
+      toggled:
+        type: selector_appears
+        selector: div[role='main'] tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
+          span[role='button'][aria-label='Starred']
+        timeout_ms: 4000
     recipe:
       - id: toggle_star
         type: use_widget
@@ -43,19 +74,12 @@ flavors:
           inputs:
             thread_id: "{{inputs.thread_id}}"
     outcomes:
-      - action: ready_to_toggle_star
-        signal:
-          type: selector_appears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
-            span[role='button'].T-KT
       - action: toggled
-        signal:
-          type: selector_appears
-          selector: tr.zA:has(span[data-legacy-thread-id='{{inputs.thread_id}}'])
-            span[role='button']
+        when: [toggled]
         extract:
-          toggled:
-            literal: true
+          thread:
+            Id:
+              from_input: thread_id
   mcp:
     requires_auth: mcp_server
     label: Star via gmail.modify_email MCP tool
@@ -71,5 +95,21 @@ flavors:
           url_pattern: "*/mcp/*"
           status: 200
         extract:
-          toggled:
-            literal: true
+          thread:
+            Id:
+              from_api_response: ".message_id"
+  oauth_api:
+    requires_auth: oauth_token
+    label: Star thread via Gmail REST users.threads.modify (add STARRED label)
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/threads/{{inputs.thread_id}}/modify
+      body:
+        addLabelIds: ["STARRED"]
+    outcomes:
+      - action: toggled
+        extract:
+          thread:
+            Id:
+              from_input: thread_id

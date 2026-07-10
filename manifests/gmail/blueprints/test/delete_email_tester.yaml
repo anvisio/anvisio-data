@@ -1,0 +1,49 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: delete-email-tester
+  version: '1.0.0'
+  title: Gmail delete_email browser-flavor tester
+  summary: |
+    Live-verifies the delete_email browser flavor end-to-end via
+    the right-click context menu's Delete item (rewritten from the
+    toolbar in delete_email 0.8.0, 2026-05-28 — works in all list
+    views). Proof of success: delete_email's
+    positive snackbar outcome (`selector_appears [role='alert']`
+    + `must_contain_text: 'Conversation moved to Trash.'`). The
+    snackbar IS the L4 proof per /debug-atom skill.
+
+    NOTE — browser-flavor Delete = move to Trash, NOT permanent
+    deletion. (oauth_api flavor IS permanent; semantic mismatch
+    documented in delete_email atom description.) The thread can
+    be restored from Trash within 30 days OR the user can click
+    Undo in the snackbar during the ~5-second window.
+
+    v1.0.0 (2026-05-27): initial. Self-discovers a recent inbox
+    thread; deletes (= Trash) it via the context menu; the snackbar text
+    proves backend commit. Same pattern as archive_email_tester
+    2.0.0.
+
+    Drive via: /run-blueprint gmail delete_email_tester
+
+do:
+  - find_recent:
+      label: Finding a recent inbox thread to delete (move to Trash)
+      call: gmail.atom.search_emails
+      flavor: browser
+      with:
+        query: 'in:inbox newer_than:7d -category:promotions -category:social'
+        maxResults: 1
+
+  - delete_throwaway:
+      label: Delete (= Trash) the picked thread (proof = positive snackbar in atom outcome)
+      for:
+        each: tid
+        in: '${ .find_recent.thread_ids }'
+        item_label: 'delete'
+      do:
+        - delete_call:
+            call: gmail.atom.delete_email
+            flavor: browser
+            with:
+              thread_id: '${ $tid }'

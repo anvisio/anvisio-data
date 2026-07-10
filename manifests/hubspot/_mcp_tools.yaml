@@ -1,0 +1,251 @@
+_meta:
+  name: manifests/hubspot/_mcp_tools.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot MCP tool catalog. HubSpot ships an official remote MCP
+    server at https://mcp.hubspot.com (GA 2026-04-13, OAuth 2.1 +
+    PKCE). The tool surface is small and generic — every CRM object
+    type (Contact, Company, Deal, Ticket, …) goes through the same
+    search / get / manage tools, parameterized by `objectType`.
+
+    Anvisio's atom actions pin `mcp_tool:` to one of these names; the
+    runtime's `mcp` flavor (when wired) dispatches via the configured
+    HubSpot MCP client.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed from developers.hubspot.com/mcp
+       (12 tools at GA). search/get/manage_crm_objects + the
+       properties / owners / campaign helpers."
+
+server:
+  name: hubspot-mcp
+  source_url: https://mcp.hubspot.com
+  transport: http
+  auth: oauth2_pkce
+  fetched_at: 2026-05-23T00:00:00Z
+
+tools:
+  # ── CRUD primitives (the daily-driver surface) ─────────────────────
+  - name: search_crm_objects
+    description: |
+      Search and filter CRM records using filter groups, text queries,
+      sorting, and pagination. The single canonical read atom for
+      contacts / companies / deals / tickets / line items / quotes /
+      invoices / orders / carts / products / subscriptions / segments
+      and engagements (calls / emails / meetings / notes / tasks).
+    input_schema:
+      type: object
+      required: [objectType]
+      properties:
+        objectType:
+          type: string
+          description: >
+            CRM object type slug (`contact`, `company`, `deal`,
+            `ticket`, `line_item`, `quote`, `note`, `task`, …) or
+            numeric type id (`0-1`, `0-2`, `0-3`, `0-5`, …).
+        query:        { type: string, description: free-text search query }
+        filterGroups:
+          type: array
+          description: HubSpot filter-group shape (OR of ANDs).
+          items: { type: object }
+        sorts:
+          type: array
+          items: { type: object, properties: { property: { type: string }, order: { type: string, enum: [ASC, DESC] } } }
+        properties:
+          type: array
+          items: { type: string }
+          description: Property names to return on each result.
+        limit:        { type: integer, maximum: 200 }
+        after:        { type: string, description: cursor for next page }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+        paging:  { type: object, properties: { next: { type: object, properties: { after: { type: string }, link: { type: string } } } } }
+        total:   { type: integer }
+
+  - name: get_crm_objects
+    description: |
+      Fetch one or more CRM objects by their IDs in a single request.
+      Maximum 100 object IDs per request. Use after search_crm_objects
+      returns ids you want to hydrate (with associations / properties).
+    input_schema:
+      type: object
+      required: [objectType, ids]
+      properties:
+        objectType: { type: string }
+        ids:        { type: array, maxItems: 100, items: { type: string } }
+        properties: { type: array, items: { type: string } }
+        associations:
+          type: array
+          items: { type: string }
+          description: e.g. ["contacts", "companies", "deals"]
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object, properties: { id: { type: string }, properties: { type: object }, associations: { type: object } } } }
+
+  - name: manage_crm_objects
+    description: |
+      Create or update CRM records or activities. Mirrors the REST v3
+      batch endpoint shape — pass `operation: create|update|archive`
+      and a records list. For update / archive each record must
+      include its `id`.
+    input_schema:
+      type: object
+      required: [operation, objectType, records]
+      properties:
+        operation:  { type: string, enum: [create, update, archive] }
+        objectType: { type: string }
+        records:
+          type: array
+          items:
+            type: object
+            properties:
+              id:         { type: string, description: required for update / archive }
+              properties: { type: object, description: field name -> value }
+              associations:
+                type: array
+                items: { type: object, properties: { to: { type: object, properties: { id: { type: string } } }, types: { type: array } } }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object, properties: { id: { type: string }, properties: { type: object } } } }
+        status:  { type: string, enum: [COMPLETE, PENDING, ERROR] }
+
+  # ── Property / schema introspection ─────────────────────────────────
+  - name: search_properties
+    description: |
+      Find property definitions for an object type using keyword
+      search. Maximum 5 keywords per request. Cheaper than
+      get_properties when you only need a handful by name.
+    input_schema:
+      type: object
+      required: [objectType, keywords]
+      properties:
+        objectType: { type: string }
+        keywords:   { type: array, maxItems: 5, items: { type: string } }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+
+  - name: get_properties
+    description: |
+      Get full property definitions for an object type — including
+      data types, enumeration values, calculated-flag, hidden-flag,
+      and option labels. The data source for schema/<Object>.yaml
+      generation.
+    input_schema:
+      type: object
+      required: [objectType]
+      properties:
+        objectType: { type: string }
+        propertyNames:
+          type: array
+          items: { type: string }
+          description: when omitted returns the full set
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+
+  # ── Owners + campaigns (auxiliary surfaces) ─────────────────────────
+  - name: search_owners
+    description: Find CRM record owners by name or email, or look up owners by ID. Maximum 100 results.
+    input_schema:
+      type: object
+      properties:
+        query: { type: string }
+        ids:   { type: array, items: { type: string } }
+        limit: { type: integer, maximum: 100 }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object, properties: { id: { type: string }, firstName: { type: string }, lastName: { type: string }, email: { type: string } } } }
+
+  - name: get_campaign_contacts_by_type
+    description: Fetch paginated contact IDs for a campaign filtered by attribution type.
+    input_schema:
+      type: object
+      required: [campaignId, attributionType]
+      properties:
+        campaignId:      { type: string }
+        attributionType: { type: string }
+        limit:           { type: integer }
+        after:           { type: string }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: string } }
+        paging:  { type: object }
+
+  - name: get_campaign_analytics
+    description: Get campaign analytics (metrics or revenue attribution) for one or more campaigns.
+    input_schema:
+      type: object
+      required: [campaignIds]
+      properties:
+        campaignIds: { type: array, items: { type: string } }
+        metricType:  { type: string, enum: [metrics, revenueAttribution] }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+
+  - name: get_campaign_asset_types
+    description: List the asset type names available as campaign assets.
+    input_schema:
+      type: object
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: string } }
+
+  - name: get_campaign_asset_metrics
+    description: Get metrics and properties for specific CRM objects associated with a campaign.
+    input_schema:
+      type: object
+      required: [campaignId, assetType]
+      properties:
+        campaignId: { type: string }
+        assetType:  { type: string }
+        assetIds:   { type: array, items: { type: string } }
+    output_schema:
+      type: object
+      properties:
+        results: { type: array, items: { type: object } }
+
+  # ── User context + telemetry ────────────────────────────────────────
+  - name: get_user_details
+    description: |
+      Returns the authenticated user's information, account details,
+      and per-object access. Use at session start to confirm scopes +
+      portal selection.
+    input_schema:
+      type: object
+    output_schema:
+      type: object
+      properties:
+        userId:    { type: string }
+        portalId:  { type: integer }
+        email:     { type: string }
+        firstName: { type: string }
+        lastName:  { type: string }
+        scopes:    { type: array, items: { type: string } }
+        objectAccess: { type: object }
+
+  - name: submit_feedback
+    description: Send feedback about the MCP server experience to HubSpot.
+    input_schema:
+      type: object
+      required: [feedback]
+      properties:
+        feedback: { type: string }
+        rating:   { type: integer, minimum: 1, maximum: 5 }
+    output_schema:
+      type: object
+      properties:
+        accepted: { type: boolean }

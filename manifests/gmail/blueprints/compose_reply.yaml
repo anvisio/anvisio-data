@@ -1,0 +1,67 @@
+document:
+  dsl: '1.0.0'
+  namespace: gmail
+  name: compose-reply
+  version: '1.0.0'
+  title: Draft a reply to an open thread
+  summary: |
+    Read the currently-open thread, ask the LLM to draft a reply in
+    the user's voice, show the draft for confirmation, then send (or
+    save as draft). Preview-mode send keeps the user in control of
+    the actual click.
+
+do:
+  - thread:
+      label: Reading the open thread
+      call: gmail.atom.read_email
+      with: {}
+
+  - draft:
+      label: Drafting the reply
+      synthesize: |
+        Compose a short reply (under 120 words) in a casual,
+        first-person voice that addresses the sender's main point.
+        Reference the original subject naturally; do NOT echo the
+        whole quoted thread.
+      with:
+        subject: '${ .thread.Subject }'
+        from:    '${ .thread.From }'
+        body:    '${ .thread.Body }'
+
+  - confirm:
+      label: Confirming the draft
+      ask:
+        prompt: |
+          Draft reply to ${ .thread.From }:
+          ---
+          ${ .draft }
+          ---
+          Send it, save as draft, or skip?
+        options:
+          - Send
+          - Save as draft
+          - Skip
+
+  - act:
+      label: Sending or saving the reply
+      switch:
+        - when: '${ .confirm.choice == "Send" }'
+          then:
+            - sent:
+                call: gmail.atom.send_email
+                with:
+                  To: ['${ .thread.From }']
+                  Subject: 'Re: ${ .thread.Subject }'
+                  Body: '${ .draft }'
+                  ThreadId: '${ .thread.ThreadId }'
+        - when: '${ .confirm.choice == "Save as draft" }'
+          then:
+            - drafted:
+                # Wraps gmail.atom.draft_email (flat v71 inputs). Same field set
+                # as send_email but lands in Drafts instead of the wire.
+                call: gmail.atom.draft_email
+                with:
+                  To: ['${ .thread.From }']
+                  Subject: 'Re: ${ .thread.Subject }'
+                  Body: '${ .draft }'
+                  ThreadId: '${ .thread.ThreadId }'

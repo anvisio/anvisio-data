@@ -1,0 +1,85 @@
+_meta:
+  name: manifests/google-calendar/actions/get_freebusy.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    get_freebusy atom — return busy intervals for one or more calendars
+    over a time window. The availability primitive behind the
+    schedule_meeting blueprint. oauth_api + mcp flavors only — free/busy
+    is not exposed as structured data anywhere in the calendar.google.com
+    DOM, so there is no browser flavor (see google-calendar.md known gaps).
+  changelog:
+    - "0.2.0 (2026-06-08): CANONICAL ACTION FORM v71 — add result.outcome:text (auto from the winning action, 'queried'). LIVE-PROBE FINDINGS (2026-06-08, cd2k account): (1) gapi freebusy.query WORKS from the session (200, primary returned 3 busy intervals) — so a session_api flavor IS possible and would let get_freebusy run on the no-OAuth browser-session path (it currently can't: oauth_api 403s on a session cookie, and there's no session_api). (2) BUT freeBusy.query requires items as [{id:...}] OBJECTS — bare-string items silently return EMPTY (status 200, calendars:{}). The input `calendars` is a string list (for MCP parity), so building [{id}] needs a list→object transform the declarative recipe DSL can't express. (3) This means the EXISTING oauth_api flavor is LATENTLY BROKEN: it passes items:'{{inputs.calendars}}' (bare strings) → empty result (never caught because oauth_api 403s on this account). FOLLOW-UP (shared with respond_to_event's session_api): a small runtime args-transform (list of strings → [{id}]) would fix the oauth_api items bug AND unblock a get_freebusy session_api flavor. Flat args (no `resource:` wrapper) confirmed working for gapi."
+    - "0.1.0 (2026-05-22): initial hand-authored manifest (spec 70). mcp_tool google-calendar.get-freebusy. No browser flavor — freebusy is API-only."
+
+description: >
+  Return the busy intervals for one or more calendars (the user's own
+  calendars or attendee emails) over a time window. The availability
+  primitive: schedule_meeting calls this to find an open slot before
+  creating an event. oauth_api and mcp flavors only.
+object: Calendar
+commits_changes: false
+depends_on_view: CalendarGrid
+mcp_tool: google-calendar.get-freebusy
+inputs:
+  calendars:
+    type: list
+    required: true
+    description: |
+      Calendar ids or attendee emails to query availability for. NOTE: the
+      Calendar freeBusy API needs these as [{id:...}] objects; bare strings
+      silently return empty (live-confirmed 2026-06-08). A runtime list→[{id}]
+      transform is a pending follow-up (see _meta changelog 0.2.0) — until then
+      pass items already shaped as [{id:...}] if calling oauth_api directly.
+  time_min:
+    type: text
+    required: true
+    description: Window start, ISO 8601.
+  time_max:
+    type: text
+    required: true
+    description: Window end, ISO 8601.
+result:
+  # v71: outcome = the winning action ("queried"), auto-populated by the runtime.
+  outcome: text
+  busy: object
+flavors:
+  oauth_api:
+    requires_auth: oauth_token
+    label: Query free/busy via the Calendar API (freebusy.query)
+    request:
+      provider: google
+      method: POST
+      url: https://www.googleapis.com/calendar/v3/freeBusy
+      body:
+        timeMin: "{{inputs.time_min}}"
+        timeMax: "{{inputs.time_max}}"
+        # KNOWN BUG (see _meta 0.2.0): freeBusy needs items:[{id:...}]; this
+        # passes bare strings, which return empty. Needs a list→[{id}] transform.
+        items: "{{inputs.calendars}}"
+    outcomes:
+      - action: queried
+        extract:
+          busy:
+            from_api_response: true
+            path: calendars
+  mcp:
+    requires_auth: mcp_server
+    label: Query free/busy via the google-calendar get-freebusy MCP tool
+    server: google-calendar
+    tool: get-freebusy
+    inputs_map:
+      calendars: "{{inputs.calendars}}"
+      timeMin: "{{inputs.time_min}}"
+      timeMax: "{{inputs.time_max}}"
+    outcomes:
+      - action: queried
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          busy:
+            from_api_response: ".calendars"

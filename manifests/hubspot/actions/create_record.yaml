@@ -1,0 +1,123 @@
+_meta:
+  name: manifests/hubspot/actions/create_record.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    create_record atom — create a new CRM record. commits_changes is
+    true so spec 70 §7 picks browser first (the user-clicks-Save
+    launch contract); MCP / REST are wired for headless flows that
+    don't need user confirmation.
+
+    Browser flavor fills the Create-overlay form opened by the
+    global "Create new" button. The submit click is marked `commit:
+    true` so preview-mode fills the dialog without persisting.
+
+    All three flavors populate the record's hs_object_id (HubSpot's
+    canonical id property; the REST top-level `id` and MCP
+    `results[0].id` both map to it).
+  changelog:
+    - "0.2.0 (2026-05-24): adopt schema-typed result.record: schema_union<Contact, Company, Deal, Ticket> per v70 signature parity rule. Drop primitive record_id + record_url; replaced by nested hs_object_id extracts. Convert browser url_matches positional capture to named (?<record_id>...) so from_url_match resolves (was silently undefined)."
+    - "0.1.0 (2026-05-23): initial seed. Browser recipe is a stub
+       (open the Create-new menu + select object type) — the
+       per-field fills + submit step depend on per-property widgets
+       that haven't been authored yet (deferred to heal-time)."
+
+description: Create a new HubSpot CRM record.
+object: "{{inputs.object_type}}"
+object_types: [Contact, Company, Deal, Ticket]
+commits_changes: true
+depends_on_view: any
+mcp_tool: hubspot.manage_crm_objects
+inputs:
+  portal_id:
+    type: text
+    required: true
+    sample: "245597800"
+  object_type_id:
+    type: text
+    required: true
+    description: "Numeric type id — Contact 0-1, Company 0-2, Deal 0-3, Ticket 0-5."
+    sample: "0-1"
+  object_type:
+    type: text
+    required: true
+    description: Slug used by the public REST API (contacts / companies / deals / tickets).
+    sample: contacts
+  fields:
+    type: object
+    required: true
+    description: Property name -> value map. Required properties vary per object type (see schemas/).
+    sample: { firstname: Brian, lastname: Halligan, email: brian.halligan@example.com }
+  associations:
+    type: list<object>
+    required: false
+    default: []
+    description: "[{ to: { id: '...' }, types: [{ associationCategory: HUBSPOT_DEFINED, associationTypeId: 1 }] }]"
+result:
+  record:
+    schema_union: [Contact, Company, Deal, Ticket]
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Click Create-new + fill the overlay (user clicks Save)
+    recipe:
+      - id: open_create_menu
+        type: use_widget
+        args:
+          widget: hubspot.create_new_button
+          op: invoke
+      - id: pick_object_type
+        type: click
+        args:
+          selector: "[role='menuitem'][data-test-id='create-new-{{inputs.object_type}}'], [role='menuitem']:has-text('{{inputs.object_type}}')"
+    outcomes:
+      - action: created
+        signal:
+          type: url_matches
+          pattern: "/record/[0-9]+-[0-9]+/(?<record_id>[0-9]+)"
+          timeout_ms: 30000
+        extract:
+          record:
+            hs_object_id:
+              from_url_match: record_id
+
+  mcp:
+    requires_auth: mcp_server
+    label: Official HubSpot MCP manage_crm_objects (operation=create)
+    server: hubspot
+    tool: manage_crm_objects
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          record:
+            hs_object_id:
+              from_api_response: true
+              path: results[0].id
+
+  oauth_api:
+    requires_auth: oauth_token
+    label: Public REST POST /crm/v3/objects/{type}
+    request:
+      method: POST
+      url: "https://api.hubapi.com/crm/v3/objects/{{inputs.object_type}}"
+      body:
+        properties: "{{inputs.fields}}"
+        associations: "{{inputs.associations}}"
+    outcomes:
+      - action: created
+        signal:
+          type: network_response
+          url_pattern: "api.hubapi.com/crm/v3/objects/*"
+          status: 201
+        extract:
+          record:
+            hs_object_id:
+              from_api_response: true
+              path: id

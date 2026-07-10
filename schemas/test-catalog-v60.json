@@ -4,55 +4,43 @@
   "$comment": {
     "data_cdn_meta": {
       "name": "schemas/test-catalog-v60.json",
-      "version": "1.0.0",
-      "cdn_schema_version": "60.3.0",
+      "version": "2.0.0",
+      "cdn_schema_version": "70.0.0",
       "authored_by": "cd2k + claude",
-      "authored_at": "2026-05-07",
-      "description": "JSON Schema for test_catalog.json (output of stage 3 propose). Enumerates the action × flavor × outcome × user-action-variant test matrix per spec 60 §K test-catalog-as-unit-tests pattern.",
+      "authored_at": "2026-06-08",
+      "description": "JSON Schema for test_catalog.json. v70: id-based tests (a stable `id` keys each test so later tests can chain off an earlier test's extracted outputs, e.g. send -> read -> delete). Body is validated post-_meta-strip. Per-test shape is permissive here (additionalProperties:true) and enforced rigorously by the runtime test runner (parseTestCatalog).",
       "related_prompts": ["prompts/propose.md"],
       "changelog": [
-        "1.0.0 (2026-05-07): initial; matches prompts/propose.md v3.2.1 output shape"
+        "2.0.0 (2026-06-08): v70 id-based shape — tests carry `id` + `commit`; top-level `integration_id` moved to _meta; per-test additionalProperties:true for chaining fields.",
+        "1.0.0 (2026-05-07): initial v60 name-based shape."
       ]
     }
   },
-  "title": "Spec 60 test_catalog.json",
-  "description": "Test enumeration produced by the propose stage. Per spec 60 §K (test-catalog-as-unit-tests), every (action × flavor × outcome × user-action-variant) combination becomes one test the runner executes during the heal-loop phase.",
+  "title": "Spec 70 test_catalog.json",
+  "description": "Self-fixturing test chain for an integration. Each test has a stable id, an action + flavor, a commit flag, an expected outcome, and inputs; later tests may reference earlier tests' extracted outputs by id.",
   "type": "object",
-  "required": ["integration_id", "tests"],
+  "required": ["tests"],
+  "additionalProperties": true,
   "properties": {
-    "integration_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]*$"
-    },
-    "generated_at": {
-      "type": "string",
-      "format": "date-time",
-      "description": "ISO 8601 timestamp of when the propose stage emitted this catalog."
-    },
-    "generated_by": {
-      "type": "object",
-      "description": "Provenance of the catalog (which prompt + which session produced it).",
-      "properties": {
-        "prompt_name": { "type": "string", "const": "prompts/propose.md" },
-        "prompt_version": { "type": "string" },
-        "session_id": { "type": "string" }
-      }
-    },
     "tests": {
       "type": "array",
-      "description": "Enumerated tests. The runner executes each in turn and records the outcome.",
+      "description": "Ordered tests the runner executes in sequence, threading extracted outputs between them by id.",
       "items": { "$ref": "#/$defs/Test" }
     }
   },
   "$defs": {
     "Test": {
       "type": "object",
-      "required": ["name", "action", "flavor", "expected_outcome"],
-      "additionalProperties": false,
+      "required": ["action", "flavor", "expected_outcome"],
+      "additionalProperties": true,
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable id for this test (id-based catalogs); later tests reference its extracted outputs (e.g. {{send.message_id}})."
+        },
         "name": {
           "type": "string",
-          "description": "Human-readable test description (e.g. 'send_email - dom_send - sent - auto-save')."
+          "description": "Human-readable test name (legacy name-based catalogs). FOLLOW-UP: normalize all catalogs to the id-based shape."
         },
         "action": {
           "type": "string",
@@ -61,50 +49,27 @@
         },
         "flavor": {
           "type": "string",
-          "description": "Flavor name from the action's flavors[]."
+          "description": "Flavor name from the action's flavors[] (browser, oauth_api, session_api, mcp, …)."
         },
-        "variant": {
-          "type": "string",
-          "enum": ["auto", "auto-save", "auto-cancel", "auto-x", "auto-confirm", "auto-discard", "manual"],
-          "default": "auto",
-          "description": "User-action variant — what the runner does AFTER the recipe fills the form. 'auto' = let the recipe finish; 'auto-save' = press the save button; 'auto-cancel' = cancel mid-flow; 'manual' = pause for a human."
+        "commit": {
+          "type": "boolean",
+          "description": "Whether the runner commits the write (true) or exercises the discard/cancel path (false)."
         },
         "expected_outcome": {
           "type": "string",
-          "description": "Outcome action name (matches one of the entries in the action's outcomes[])."
-        },
-        "fixture_required": {
-          "type": "boolean",
-          "default": false,
-          "description": "Does this test need a pre-existing fixture record? (Per intent's fixture_dependencies + requires_state.)"
-        },
-        "seed_fixtures": {
-          "type": "array",
-          "description": "Fixtures the harness auto-creates before this test runs. Carries from intent's fixture_dependencies.",
-          "items": {
-            "type": "object",
-            "required": ["type"],
-            "properties": {
-              "type": { "type": "string" },
-              "role": { "type": "string" }
-            }
-          }
-        },
-        "seed_state": {
-          "type": "object",
-          "description": "UI / entity state preconditions the harness ensures before running. Carries from intent's requires_state."
+          "description": "Outcome action name (matches one of the entries in the action's outcomes[] / the result.outcome value)."
         },
         "inputs": {
           "type": "object",
-          "description": "Inputs to pass to the recipe at execution time."
+          "description": "Inputs to pass to the action at execution time. May reference earlier tests' outputs."
         },
         "expected_data": {
           "type": "object",
-          "description": "Optional. Expected shape of the outcome's extracted data. Used for stronger assertions in the test runner."
+          "description": "Optional. Expected shape of the outcome's extracted data, for stronger assertions."
         },
         "skip_reason": {
           "type": "string",
-          "description": "If set, this test is skipped. Records WHY for eval to surface (e.g. 'requires manual fixture setup, not yet automated')."
+          "description": "If set, this test is skipped. Records WHY."
         }
       }
     }

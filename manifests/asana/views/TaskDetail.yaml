@@ -1,0 +1,39 @@
+_meta:
+  name: manifests/asana/views/TaskDetail.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    Task detail view (app.asana.com/0/{projectId}/{taskId}). Anchor
+    for inline updates (name, description, complete) + comments.
+    URL form `/0/0/{taskId}` opens the task without a project
+    context (My Tasks view).
+
+name: TaskDetail
+
+entry:
+  url: "https://app.asana.com/0/{project_id}/{task_id}"
+landmark_probe:
+  selector: "[class*='TaskPane'], [data-testid='task-detail']"
+  timeout_ms: 15000
+verify:
+  - type: url_matches
+    pattern: "/0/[0-9]+/[0-9]+"
+  - type: selector_appears
+    selector: "[class*='TaskPane']"
+    timeout_ms: 12000
+placeholders:
+  project_id:
+    type: text
+    sample: "1213754599092608"
+  task_id:
+    type: id
+    sample: "1213754599099000"
+widgets:
+  - asana.global_search
+  - asana.task_pane_name
+  - asana.task_pane_description
+  - asana.complete_task_button
+  - asana.task_comment_input
+  - asana.submit_comment_button

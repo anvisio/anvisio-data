@@ -1,0 +1,60 @@
+_meta:
+  name: manifests/hubspot/actions/list_records.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    list_records atom — navigate to an object's list view (or board
+    view for deals). Browser-only — there is no canonical MCP "list"
+    verb; for a structured result set without driving the UI, use
+    search_records with empty filters.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. Live-verified 2026-05-23
+       against portal 245597800 deals board."
+
+description: Open a HubSpot object's list or board view.
+object: "{{inputs.object_type}}"
+object_types: [Contact, Company, Deal, Ticket]
+commits_changes: false
+depends_on_view: any
+inputs:
+  portal_id:
+    type: text
+    required: true
+    sample: "245597800"
+  object_type_id:
+    type: text
+    required: true
+    sample: "0-3"
+  view_id:
+    type: text
+    required: false
+    default: all
+    description: View identifier; 'all' = the default 'All ___' view per object.
+  view_kind:
+    type: text
+    required: false
+    default: list
+    description: "'list' (table) or 'board' (kanban). Board only valid for object types with a pipeline."
+result:
+  listed: boolean
+
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Navigate to the object list/board view
+    recipe:
+      - id: nav_list
+        type: navigate
+        args:
+          url: "{instance.origin}/contacts/{{inputs.portal_id}}/objects/{{inputs.object_type_id}}/views/{{inputs.view_id}}/{{inputs.view_kind}}"
+    outcomes:
+      - action: listed
+        signal:
+          type: url_matches
+          pattern: "/objects/[0-9]+-[0-9]+/views/[A-Za-z0-9_-]+/(list|board)"
+          timeout_ms: 10000
+        extract:
+          listed:
+            literal: true

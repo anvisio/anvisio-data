@@ -1,0 +1,95 @@
+_meta:
+  name: manifests/github/schemas/User.yaml
+  version: 0.2.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    GitHub User property schema (REST shape from /users/{login}
+    or /user for the authenticated user via get_me).
+  changelog:
+    - "0.2.0 (2026-05-24): add primary_key:[login] per v70 INTEGRATION_FORMAT signature parity rule. login is GitHub's canonical user identifier."
+    - "0.1.0 (2026-05-23): initial seed."
+
+name: User
+object_type_id: user
+mcp_object_type: user
+primary_key: [login]
+
+properties:
+  login:
+    label: Username
+    type: string
+    field_type: text
+    required: true
+    read_only: true
+    sample: cd2k
+  id:
+    label: User ID
+    type: number
+    field_type: number
+    read_only: true
+  type:
+    label: Type
+    type: enumeration
+    field_type: select
+    read_only: true
+    options:
+      - { value: User,         label: User }
+      - { value: Organization, label: Organization }
+      - { value: Bot,          label: Bot }
+  name:
+    label: Display Name
+    type: string
+    field_type: text
+  email:
+    label: Email
+    type: string
+    field_type: text
+    description: Only returned when the user makes their email public, or via /user for the authenticated user.
+  company:
+    label: Company
+    type: string
+    field_type: text
+  blog:
+    label: Website
+    type: string
+    field_type: text
+  location:
+    label: Location
+    type: string
+    field_type: text
+  bio:
+    label: Bio
+    type: string
+    field_type: textarea
+  public_repos:
+    label: Public Repo Count
+    type: number
+    field_type: number
+    read_only: true
+  followers:
+    label: Follower Count
+    type: number
+    field_type: number
+    read_only: true
+  following:
+    label: Following Count
+    type: number
+    field_type: number
+    read_only: true
+  avatar_url:
+    label: Avatar URL
+    type: string
+    field_type: text
+    read_only: true
+  html_url:
+    label: Profile URL
+    type: string
+    field_type: text
+    read_only: true
+  created_at:
+    label: Joined At
+    type: datetime
+    field_type: date
+    read_only: true

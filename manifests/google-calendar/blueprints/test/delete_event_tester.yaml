@@ -1,0 +1,50 @@
+document:
+  dsl: '1.0.0'
+  namespace: google-calendar
+  name: delete-event-tester
+  version: '1.0.0'
+  title: Google Calendar delete_event tester (self-discover + nav-to-day, preview)
+  summary: |
+    Self-discovers events in a window via list_events (gapi), then for each
+    drives delete_event in PREVIEW (commit:false): the EventDetail entry
+    navigates the grid to the event's day (occurrence_date) so its chip
+    renders even if off the currently-shown range (gotcha #2), opens the
+    EventDetail popup, and STOPS before clicking trash (the destructive step
+    is gated behind commit).
+
+    To actually delete / exercise the RECURRING scope dialog
+    (resolve_recurring_scope): set `commit: true` and add
+    `recurring_scope: single|following|all` under `with:`. WILL DELETE in
+    commit mode (scope=all removes the whole series — live-validated
+    2026-05-28).
+
+    NOTE: iterates every event in the window (preview = safe) — narrow
+    time_min/time_max. Drive via: /run-blueprint google-calendar delete_event_tester
+
+    SPEC 72 DISCARD TEST (the regression guard — run BOTH paths):
+      - HAPPY PATH: at the popup stop, click the trash -> expect action=deleted
+        (the "Event deleted" toaster fires the composite L4).
+      - DISCARD PATH: at the popup stop, CLOSE the popup without deleting
+        (Escape / click-away; do NOT trash) -> expect action=cancelled /
+        not-committed. The OLD bare `selector_disappears [role='dialog']`
+        false-reported `deleted` here — the popup closes on Escape too (Trap 2).
+do:
+  - find:
+      label: Find events in a window to delete
+      call: google-calendar.atom.list_events
+      with:
+        time_min: '2026-05-28T00:00:00-07:00'
+        time_max: '2026-05-30T00:00:00-07:00'
+  - delete_each:
+      for:
+        each: ev
+        in: '${ .find.events }'
+        item_label: '${ $ev.summary }'
+      do:
+        - del:
+            label: 'Nav to the day, open the event popup (trash gated behind commit)'
+            call: google-calendar.atom.delete_event
+            commit: false
+            with:
+              event_id: '${ $ev.id }'
+              occurrence_date: '${ $ev.start.dateTime }'

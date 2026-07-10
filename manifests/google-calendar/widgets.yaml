@@ -1,0 +1,19 @@
+_meta:
+  name: manifests/google-calendar/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    Per-app widgets stub for google-calendar. Inherits the full 16-widget
+    set from widget-libraries/google-calendar.widgets.yaml via the
+    `extends:` field. Per-org overrides would live under a `widgets:` map
+    below; currently empty (the library is sufficient for the canonical
+    Google Calendar web UI).
+  changelog:
+    - "0.1.0 (2026-05-22): initial extends-stub. No per-app overrides."
+
+extends: widget-libraries/google-calendar.widgets.yaml
+
+# Per-app overrides go here. Empty = use extends: library as-is.
+widgets: {}

@@ -1,0 +1,101 @@
+{
+  "_meta": {
+    "format": "id-based chain (parseTestCatalog): depends_on + input_from. SUPERSEDES the prior name-based flat list (2026-06-06), which the runner rejected (no `id`) so it never ran.",
+    "purpose": "Self-fixturing gmail CRUD chain (doc 26 / Phase 2). `send` seeds a real thread and extracts thread_id; every op targets it via input_from; `delete` self-cleans. A green chain proves the browser flavors work end-to-end AND that send's output is real + chainable — the audit's #1 gap (output extraction). Verify live (bridge/BYOK), then close the per-op output extracts so each op also returns its own thread_id/labels (contract fidelity).",
+    "live_todo": [
+      "Subject uniqueness: a re-run's search matches prior runs' threads. Modify ops thread send.thread_id (not search's), so this only affects `search` findability — add a per-run token if the runner templates inputs.",
+      "expected_outcome values are carried from the prior catalog; confirm each against the atom's outcomes[].action on first run and fix any drift.",
+      "reply_email / forward_email omitted from v1: their thread is reached by ThreadView pre-nav, not an atom input — confirm the nav wiring live, then add them between `unread` and `archive`.",
+      "Output-gap closing (Phase 2 core): once each modify op extracts thread_id (h2.hP[data-legacy-thread-id], the send_email template), re-point each op's input_from to its predecessor to PROVE the per-op output, not just thread send's."
+    ]
+  },
+  "tests": [
+    {
+      "id": "send",
+      "action": "send_email",
+      "flavor": "browser",
+      "commit": true,
+      "expected_outcome": "sent",
+      "inputs": {
+        "fields": {
+          "To": ["onboarding-test@anvisio.com"],
+          "Subject": "Anvisio CRUD chain {{run_token}}",
+          "Body": "Self-fixturing CRUD chain seed (doc 26 / Phase 2)."
+        }
+      }
+    },
+    {
+      "id": "search",
+      "action": "search_emails",
+      "flavor": "browser",
+      "depends_on": "send",
+      "expected_outcome": "searched",
+      "inputs": { "query": "subject:{{run_token}}" }
+    },
+    {
+      "id": "read",
+      "action": "read_email",
+      "flavor": "browser",
+      "depends_on": "search",
+      "expected_outcome": "read",
+      "input_from": { "messageId": "search.outcomes.thread_id" }
+    },
+    {
+      "id": "label",
+      "action": "apply_label",
+      "flavor": "browser",
+      "commit": true,
+      "depends_on": "read",
+      "expected_outcome": "applied",
+      "inputs": { "label": "Anvisio" },
+      "input_from": { "thread_id": "send.outcomes.thread_id" }
+    },
+    {
+      "id": "star",
+      "action": "star_email",
+      "flavor": "browser",
+      "commit": true,
+      "depends_on": "label",
+      "expected_outcome": "toggled",
+      "input_from": { "thread_id": "send.outcomes.thread_id" }
+    },
+    {
+      "id": "unread",
+      "action": "mark_read_unread",
+      "flavor": "browser",
+      "commit": true,
+      "depends_on": "star",
+      "expected_outcome": "toggled",
+      "inputs": { "mode": "unread" },
+      "input_from": { "thread_id": "send.outcomes.thread_id" }
+    },
+    {
+      "id": "archive",
+      "action": "archive_email",
+      "flavor": "browser",
+      "commit": true,
+      "depends_on": "unread",
+      "expected_outcome": "archived",
+      "input_from": { "thread_id": "send.outcomes.thread_id" }
+    },
+    {
+      "id": "move",
+      "action": "move_email",
+      "flavor": "browser",
+      "commit": true,
+      "depends_on": "archive",
+      "expected_outcome": "moved",
+      "inputs": { "destination": "Anvisio" },
+      "input_from": { "thread_id": "send.outcomes.thread_id" }
+    },
+    {
+      "id": "delete",
+      "action": "delete_email",
+      "flavor": "browser",
+      "commit": true,
+      "depends_on": "move",
+      "expected_outcome": "deleted",
+      "input_from": { "thread_id": "send.outcomes.thread_id" }
+    }
+  ]
+}

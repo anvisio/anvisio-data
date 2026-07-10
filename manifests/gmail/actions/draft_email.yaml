@@ -1,0 +1,187 @@
+_meta:
+  name: manifests/gmail/actions/draft_email.yaml
+  version: 0.9.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-22
+  description: |
+    draft_email atom: compose an email and save it to Drafts without
+    sending. Sibling of send_email: same compose fields, but the commit
+    step closes the compose panel (persisting the draft to the Drafts
+    folder) instead of clicking Send. browser + mcp flavors today; the
+    mcp flavor calls the gmail.draft_email tool on the community
+    GongRzhe/Gmail-MCP-Server. Authored to close the
+    gmail.atom.draft_email reference in blueprints/compose_reply.yaml.
+
+    Result shape: drafted (bool) + draft_id (the REST drafts resource
+    id, e.g. "r1234567890") + message (schema-typed, NULLABLE). Per
+    Google's docs the underlying Message id changes on every save while
+    the Draft id is stable; LLMs needing the inner Message should treat
+    draft_id as the handle and either send the draft or list/search
+    drafts to materialize the current Message id when needed.
+
+    Per-flavor support for `result.message`:
+      - browser: null (the compose-close DOM signal exposes only the SPA's
+        opaque compose= URL token, not the REST Draft.id or Message.id)
+      - mcp: null (the community GongRzhe wrapper's draft_email tool
+        returns only `{draft_id}`; it does NOT surface the inner message
+        even though Gmail's underlying REST drafts.create response is
+        `{id, message: {id, threadId, ...}}`). An oauth_api flavor
+        calling Gmail REST directly would populate message; not yet
+        authored.
+
+    See platform-notes/gmail.md for the full identifier-namespace model
+    and the per-flavor capability matrix.
+  changelog:
+    - "0.9.0 (2026-06-08): CANONICAL ACTION FORM v71 (mirrors send_email 0.15.0). (1) tab_mode: new — a draft opens its own compose edit tab (the wantsOwnTab default for a write with no runs_in_home_tab; resolveTabPlan maps new+write to wantsOwnTab:true, behaviour-preserving). (2) flat typed inputs (To/Subject/Body/Cc/Bcc/ThreadId/InReplyTo) replace the fields:{type:object} bag; the recipe's fill_fields has NO `from` (fills the Message from the flat inputs, the writable-field filter drops InReplyTo), mcp/oauth map the scalars. (3) result.outcome (auto from the winning action: drafted | discarded) replaces the two booleans; the per-terminal literal extracts are dropped across all flavors (extract carries only payload: draft_id). The `drafted` outcome KEEPS commit_active: true — it IS the commit:true success (the runtime closes the compose to save), unlike the send family's abandon-fallback drafted, which is HITL-only. (4) the ready_to_save pseudo-outcome is dropped. No live-behavior change vs 0.8.0 (same signals/selectors/grace)."
+    - "0.8.0 (2026-06-07): slim outcome extracts to only the values the outcome produces — drop the cross-terminal literal:false + irrelevant literal:null. The result: schema still declares the full type contract; summarizeTaskOutput reads only truthy flags so the feed display is unchanged, and no consumer does a strict ===false (verified). cd2k's contract-is-what-is-returned principle."
+    - "0.7.0 (2026-06-07): SPEC 70 SIGNALS MODEL + live-probed the draft save/discard flow 2026-06-07. Three corrections/additions. (1) browser draft_id is NO LONGER null: the docked compose autosaves to `?compose=<handle>` (live-verified once a recipient lands — captured via a new `autosave` signal), so `drafted` now returns that reopenable web-composer handle via `from_signal: autosave.draft_id` (the same web-composer namespace as send_email's browser draft_id — NOT the REST Draft.id; mcp/oauth return that). (2) NEW `discarded` terminal: a HITL user can discard instead of saving (`Discard draft` → `Draft discarded.` toast, live-verified) — previously a discarded draft fell through to `drafted` (wrong). (3) The model: `drafted` = `when:[closed] not:[discarded]` (Save&close is SILENT — no toast, the compose region disappears, live-verified — so it's `closed` minus a discard) carrying `commit_active: true` — because unlike the send family's abandon-fallback `drafted`, draft_email's `drafted` IS the commit:true success (the runtime closes the compose to save), so the guarded outcome must stay eligible when the runtime drives. Adds `discarded` to result for parity."
+    - "0.6.0 (2026-05-25): add oauth_api flavor — POST /gmail/v1/users/me/drafts with body `{message: {raw: <base64url RFC822>, threadId?}}`. Gmail's drafts.create wraps the message in a `message` key (different from messages.send). Result extracts draft_id from the response's `id` field. result.message stays nullable: the response includes the inner `message: {id, threadId, ...}` but extracting that requires a different path than the flat send response (draft.message.id) — left for caller to extract via from_step if needed."
+    - "0.5.0 (2026-05-25): mcp flavor: add inputs_map (same A1 fix as the 4 send-capable atoms 0.6.0). MCP draft_email shares send_email's input shape — flat snake_case `{to, subject, body, cc, bcc, mimeType}`."
+    - "0.4.0 (2026-05-25): fix PREMATURE-FIRE `drafted` outcome signal. The prior `selector_disappears: div[aria-label^='New Message']` was BROKEN: Gmail renames the compose region's aria-label to the typed Subject text post-fill, so by the time the commit step runs the selector is ALREADY 0 matches → selector_disappears fires immediately, before the close-and-save actually happens. Switched to `selector_disappears: div[role='region'][data-compose-id]` — the data-compose-id attribute is stable through subject changes AND only disappears when the compose region is closed (which is when the draft actually gets persisted). Same G1 lesson as widget compose_send_button: stable container attrs > mutable aria-label strings (see [[reference-gmail-compose-aria-label-mutation]])."
+    - "0.3.0 (2026-05-24): correct mcp extract: result.message is honestly literal:null because the community GongRzhe wrapper does not surface the underlying Message. 0.2.0 mapped .message.id / .message.threadId from the MCP response which never existed — that was a guess from Gmail's REST shape, not the wrapper's actual output_schema. The atom contract (nullable Message) is unchanged; LLMs see a stable result shape regardless of which transport ran."
+    - "0.2.0 (2026-05-24): add schema-typed result.message (nullable) per v70 signature parity rule."
+    - "0.1.0 (2026-05-22): initial: author draft_email atom (browser + mcp). Resolves the Save-as-draft branch in blueprints/compose_reply.yaml."
+
+description: >
+  Compose an email and save it to the Drafts folder without sending. Same
+  field set as send_email (To/Subject/Body required, Cc/Bcc optional). The
+  browser flavor fills the ComposePanel and, on commit, closes the compose
+  window — Gmail persists the draft to Drafts. Preview mode fills the panel
+  and leaves it open so the user can keep editing or send it themselves.
+object: Message
+commits_changes: true
+# v71 tab_mode: new — a draft opens its own compose edit tab (the wantsOwnTab
+# default for a write with no runs_in_home_tab; resolveTabPlan maps new+write to
+# wantsOwnTab:true, behaviour-preserving). Mirrors send_email.
+tab_mode: new
+depends_on_view: ComposePanel
+mcp_tool: gmail.draft_email
+inputs:
+  # v71 flat typed scalars (was fields: {type: object}). The recipe's fill_fields
+  # has NO `from` (fills the Message from these flat inputs, the writable-field
+  # filter drops non-Message keys like InReplyTo); mcp/oauth map the scalars.
+  To: { type: text, required: true }
+  Subject: { type: text, required: true }
+  Body: { type: rich_text, required: true }
+  Cc: { type: text, required: false }
+  Bcc: { type: text, required: false }
+  ThreadId: { type: text, required: false, description: "When drafting a reply." }
+  InReplyTo: { type: text, required: false }
+result:
+  # v71: outcome = the winning terminal's action (drafted | discarded),
+  # auto-populated by the runtime (replaces the two booleans). drafted = the draft
+  # was saved (Save&close is silent); discarded = a HITL user threw it away.
+  outcome: text
+  draft_id: text
+  message:
+    schema: Message
+    nullable: true
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Fill compose; close panel to save draft when commit:true
+    # Spec 70 SIGNALS MODEL (live-probed 2026-06-07). The docked compose
+    # autosaves to ?compose=<handle> once content + a recipient land; Save&close
+    # is SILENT (no toast, the compose region disappears); Discard fires
+    # "Draft discarded.". So: `drafted` = closed minus a discard (the save), and
+    # it carries `commit_active` (it's the commit:true success — see outcomes).
+    signals:
+      autosave:
+        type: url_matches
+        pattern: "[?&]compose=(?<draft_handle>[A-Za-z0-9]{20,})"
+        extract:
+          draft_id:
+            from_url_match: draft_handle
+      discarded:
+        type: transient_appears
+        selector: "div[role='alert']"
+        must_contain_text: "Draft discarded"
+      closed:
+        type: selector_disappears
+        selector: div[role='region'][data-compose-id]
+    recipe:
+      - id: fill
+        type: fill_fields
+        args:
+          # v71: no `from` → fill the Message from the action's flat inputs
+          # (the writable-field filter drops non-Message keys like InReplyTo).
+          object: Message
+      - id: save_draft
+        type: use_widget
+        commit: true
+        args:
+          widget: gmail.compose_close_button
+          op: invoke
+    outcomes:
+      # v71: the ready_to_save pseudo-outcome is DROPPED — outcomes are the
+      # terminals the LLM consumes; the filled-and-ready state is the recipe + the
+      # HITL pause (the runtime needs no inline ready signal to mask).
+      - action: drafted
+        # Save&close is SILENT (no toast) — the compose region disappears, so the
+        # save = the compose CLOSED without a discard. `commit_active: true`: this
+        # guarded outcome IS the commit:true success (the runtime closes to save),
+        # so it stays eligible when the runtime drives — unlike the send family's
+        # `drafted`, which is an abandon fallback and is HITL-only.
+        when: [closed]
+        not: [discarded]
+        commit_active: true
+        extract:
+          # v71: no `drafted: {literal:true}` — result.outcome names the terminal.
+          # browser draft_id = the autosaved ?compose= handle (a reopenable
+          # web-composer token; NOT the REST Draft.id — mcp/oauth return that).
+          draft_id:
+            from_signal: autosave.draft_id
+      - action: discarded
+        # A HITL user discarded the draft instead of saving ("Draft discarded."
+        # toast, live-verified 2026-06-07). v71: no literal extract.
+        when: [discarded]
+  mcp:
+    requires_auth: mcp_server
+    label: Save draft via the gmail.draft_email MCP tool
+    server: gmail
+    tool: draft_email
+    inputs_map:
+      to: "{{inputs.To}}"
+      subject: "{{inputs.Subject}}"
+      body: "{{inputs.Body}}"
+      cc: "{{inputs.Cc}}"
+      bcc: "{{inputs.Bcc}}"
+      threadId: "{{inputs.ThreadId}}"
+      inReplyTo: "{{inputs.InReplyTo}}"
+      mimeType: "text/html"
+    outcomes:
+      - action: drafted
+        signal:
+          type: network_response
+          url_pattern: "*/mcp/*"
+          status: 200
+        extract:
+          draft_id:
+            from_api_response: ".draft_id"
+  oauth_api:
+    requires_auth: oauth_token
+    label: Save draft via Gmail REST users.drafts.create
+    request:
+      provider: google
+      method: POST
+      url: https://gmail.googleapis.com/gmail/v1/users/me/drafts
+      body:
+        message:
+          raw:
+            rfc822:
+              to: "{{inputs.To}}"
+              cc: "{{inputs.Cc}}"
+              bcc: "{{inputs.Bcc}}"
+              subject: "{{inputs.Subject}}"
+              htmlBody: "{{inputs.Body}}"
+              inReplyTo: "{{inputs.InReplyTo}}"
+              references: "{{inputs.InReplyTo}}"
+          threadId: "{{inputs.ThreadId}}"
+    outcomes:
+      - action: drafted
+        extract:
+          # drafts.create response: {id, message: {id, threadId, labelIds}}
+          draft_id:
+            from_api_response: true
+            path: id

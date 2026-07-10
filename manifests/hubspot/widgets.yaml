@@ -1,0 +1,102 @@
+_meta:
+  name: manifests/hubspot/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-23
+  description: |
+    HubSpot widget primitives, archetype-driven. Inline (no library
+    extends:) because this is the initial seed and we don't have
+    enough per-instance variants yet to justify a widget-libraries/
+    file. Once a second HubSpot org reveals real per-tenant
+    customization (custom field widgets, marketplace add-ons), this
+    file becomes the 2-line `extends:` stub and the definitions move
+    to widget-libraries/hubspot.widgets.yaml.
+
+    Coverage: just the global affordances the atom actions need
+    (search, create, edit, board search). Per-property field widgets
+    (Lead Status, Lifecycle Stage, Deal Stage, Amount, ...) are
+    deferred — they need label-scoped selectors that heal-time
+    learning will author from the property-definitions response. See
+    dom-selectors-hubspot.md (2026-03-21) for the per-property
+    selector patterns to wire when those widgets land.
+
+    Source: live inspection of portal 245597800 (2026-05-23) and the
+    spec 41 / hubspot.md / dom-selectors-hubspot.md planning docs.
+  changelog:
+    - "0.1.0 (2026-05-23): initial seed. 6 global widgets — global
+       search, create-new menu, list/board search, edit-record
+       button, board add-deal button, record-card link. Per-property
+       widgets deferred to heal-time authoring."
+
+  archetypes_used: [click_reveals, click_navigates, typeahead_search, read_attribute]
+
+widgets:
+
+  # ─── Top-nav global affordances ────────────────────────────────────
+
+  hubspot.global_search_input:
+    archetype: typeahead_search
+    selectors:
+      trigger:
+        - "input[type='text'][aria-label*='Find']"
+        - "input[type='text'][placeholder*='Find']"
+        - "input[role='combobox'][aria-label*='Find']"
+      verify_target: "[role='listbox'], [role='dialog']"
+    overrides:
+      submit_key: Enter
+      verify_timeout_ms: 4000
+
+  hubspot.create_new_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[aria-label='Create new'][aria-haspopup='menu']"
+        - "button[data-test-id='nav-create-new']"
+      verify_target: "[role='menu']"
+    overrides:
+      verify_timeout_ms: 3000
+
+  # ─── List + board affordances ───────────────────────────────────────
+
+  hubspot.list_search_input:
+    archetype: typeahead_search
+    selectors:
+      trigger:
+        - "input[type='search'][aria-label='Search']"
+        - "[data-test-id='search-input'] input"
+      verify_target: "[data-selenium-test='search-results'], [data-test-id='search-results']"
+    overrides:
+      submit_key: Enter
+      verify_timeout_ms: 4000
+
+  hubspot.board_add_deal_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[aria-label='Add deals'][aria-haspopup='menu']"
+        - "button[data-test-id='add-deals']"
+      verify_target: "[role='menu'], [role='dialog']"
+    overrides:
+      verify_timeout_ms: 3000
+
+  # ─── Record-view affordances ────────────────────────────────────────
+
+  hubspot.edit_record_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "button[data-test-id='edit-button']"
+        - "button[aria-label='Edit']"
+      verify_target: "[role='dialog'], [data-test-id='edit-overlay']"
+    overrides:
+      verify_timeout_ms: 4000
+
+  hubspot.record_card_link:
+    archetype: click_navigates
+    selectors:
+      trigger:
+        - "a[href*='/record/']"
+      verify_target_url_contains: "/record/"
+    overrides:
+      verify_timeout_ms: 6000

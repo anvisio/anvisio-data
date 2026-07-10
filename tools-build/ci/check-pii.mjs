@@ -51,6 +51,9 @@ function isExempt(filePath) {
   if (filePath.includes('test_fixtures/')) return true;
   if (filePath.includes('/_test_')) return true;
   if (filePath.endsWith('.test.json') || filePath.endsWith('.test.yaml')) return true;
+  // CI tooling source is not user data — and this very file carries the
+  // fixture-name detection list, which would otherwise self-flag.
+  if (filePath.startsWith('tools-build/')) return true;
   return false;
 }
 
@@ -97,7 +100,18 @@ await runGate('PII scrub (gate 7)', async () => {
       findings.push(`${file}: email(s) ${emailMatches.slice(0, 2).join(', ')}${emailMatches.length > 2 ? `…+${emailMatches.length - 2}` : ''}`);
     }
 
-    const phoneMatches = [...content.matchAll(PHONE_REGEX)].map((m) => m[0]);
+    const phoneMatches = [...content.matchAll(PHONE_REGEX)]
+      .filter((m) => {
+        // Skip decimal-tailed numbers (Unix timestamps / versions like the
+        // Slack ts "1700000000.000100") — these are not phone numbers.
+        const after = content.slice(m.index + m[0].length, m.index + m[0].length + 2);
+        if (/^\.\d/.test(after)) return false;
+        // Skip NANP reserved-fictional 555-0100..555-0199 (the phone-number
+        // equivalent of example.com) used in sample data.
+        if (/55501\d\d/.test(m[0].replace(/\D/g, ''))) return false;
+        return true;
+      })
+      .map((m) => m[0]);
     if (phoneMatches.length > 0) {
       findings.push(`${file}: phone(s) ${phoneMatches.slice(0, 2).join(', ')}${phoneMatches.length > 2 ? `…+${phoneMatches.length - 2}` : ''}`);
     }

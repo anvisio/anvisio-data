@@ -1,0 +1,203 @@
+_meta:
+  name: manifests/google-calendar/app_model.yaml
+  version: 0.5.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-05-28
+  description: |
+    Semantic-layer model for Google Calendar. Catalogs the screens of the
+    calendar.google.com UI, the affordances on each, current known/
+    suspected dead paths, and the transitions between screens. Consumed
+    by propose / heal / Claude when authoring or auditing atoms. The
+    runtime ignores this file. The companion narrative is
+    google-calendar.md.
+
+    Format-spec: planning/tech_design/integrations/INTEGRATION_FORMAT.md
+    (Surface 1, app_model.yaml section).
+  changelog:
+    - "0.5.0 (2026-05-30): forward-facing cleanup. Removed resolved-status known_dead_paths entries (recurring_scope_dialog, quick_create_popup_not_full_editor, create_flow_buttons_no_aria_label, l4_disappears_fake_success) — once a path is fixed it isn't a dead path; the widget/atom YAMLs document the working state. Removed `FIXED 2026-05-28:` prefixes from affordance notes. No semantic change."
+    - "0.4.0 (2026-05-28): record the L4 fake-success dead path (since resolved + removed in 0.5.0)."
+    - "0.3.0 (2026-05-28): live smoke pass — set_recurrence + resolve_recurring_scope validated; runtime fixes for Wiz-spinbutton setInput + re-render settle/poll. event_recurrence affordance live-validated."
+    - "0.2.0 (2026-05-28): recurring-event browser path shipped. EventEditor reaches the full editor via 'More options'; event_recurrence widget drives the Recurrence combobox + Custom dialog from an RRULE; update/delete carry resolve_recurring_scope. StartTime/EndTime closed via datetime_split."
+    - "0.1.0 (2026-05-28): initial seed. CalendarGrid / EventDetail / EventEditor / SearchResults screens. Headline content: transport_reality (gapi-first for reads, oauth_api 403 on session cookie) + known_dead_paths."
+
+# ─── Transport reality (calendar-specific; the most important block) ──
+# See google-calendar.md "Transport reality table" for the full per-atom
+# matrix + rationale. Summary: calendar is gapi-first for READS (opposite
+# of Gmail). Every oauth_api flavor targets googleapis.com which 403s on a
+# session cookie [verified 2026-04-16]; the no-OAuth path is gapi
+# (session_api). Only list_events currently has a session_api flavor.
+
+transport_reality:
+  verified_at: 2026-05-28   # re-verified live on cd2k's account (gapi list/get/search/freebusy/calendarList all 200); first probe 2026-04-16
+  oauth_api_needs_real_token: true   # googleapis.com → 403 with session cookie
+  gapi_session_works_no_oauth: true  # events.list/get/insert/patch/delete + freebusy.query + calendarList.list (all 200 live)
+  reads_are_gapi_first: true         # browser read flavors return null (degraded fallback)
+  writes_are_browser_first: true     # spec 70 §7; user sees the change
+  session_api_present_on: [list_events, search_events, get_event, list_calendars]   # search/get/list_calendars added 2026-05-28
+  session_api_MISSING_on: [get_freebusy]   # needs items:[{id}] shaping (shared with oauth_api)
+  no_working_transport_in_default_posture: [get_freebusy]   # search/list_calendars FIXED 2026-05-28
+
+# ─── Screens ──────────────────────────────────────────────────────
+
+screens:
+  CalendarGrid:
+    view: CalendarGrid
+    url_pattern: "https://calendar.google.com/calendar/u/<N>/r/(day|week|month|year|agenda|schedule)"
+    purpose: "The primary day/week/month grid. Launchpad for create_event (Create button) and search_events (Search button); operating surface for list_events; event chips open EventDetail."
+    distinctives:
+      - "Path-based routing (NOT hash like Gmail). Range is the last path segment."
+      - "Account index `u/<N>` is in the path — hardcoded `u/0` in atoms breaks for non-default accounts (see known_dead_paths.hardcoded_account_index)."
+      - "Event chips carry `data-eventid` — but whether that equals the API event id is UNVERIFIED and high-risk (see known_dead_paths.api_id_vs_grid_eventid)."
+      - "The grid only renders chips for the currently-loaded range; a chip for an event in another week is absent until you navigate there."
+    status: research_only
+
+  EventEditor:
+    view: EventEditor
+    url_pattern: "https://calendar.google.com/calendar/u/<N>/r/eventedit/<eid>"
+    purpose: "Full create/edit event form. Title / Start / End / Description / Location / Guests + Save. Its own route (not a modal)."
+    distinctives:
+      - "Reached for a NEW event: CalendarGrid → Create button → 'Event' menuitem → 'More options' (Create→Event opens a condensed quick-create popup; the full editor is behind 'More options', wired into the EventEditor entry). For an EXISTING event: EventDetail → edit pencil (update_event drives this hop inside its own recipe)."
+      - "The route `eid` is a base64-ish encoding (captured 2026-05-15: `M2tlODlzZW5kYmExbnF2NmZoN2R`), distinct from the API event id — see known_dead_paths.api_id_vs_grid_eventid."
+      - "Title input is `input[aria-label='Title']` (also `input#xTiIn`). Save is a real `button[aria-label='Save']` ([role='button'] form dead). [live-verified 2026-05-28]"
+      - "Recurrence is `[role='combobox'][aria-label='Recurrence']`; 'Custom…' opens the Custom recurrence dialog (frequency combobox / interval spinbutton / weekday toggles / end radios / Done). Driven by the event_recurrence widget (recurrence_picker archetype) via set_recurrence."
+      - "Saving an edit to a RECURRING event pops a 'This event / This and following / All events' scope dialog before commit — HANDLED by resolve_recurring_scope in commit mode (user-resolved in preview). See known_dead_paths.recurring_scope_dialog."
+    verified_mechanic_at: 2026-05-15   # create/edit fill+Save proven on a sibling storage manifest; widget selectors live-verified 2026-05-28
+    status: documented
+
+  EventDetail:
+    view: EventDetail
+    url_pattern: "(overlay popup on CalendarGrid; no distinct URL)"
+    purpose: "The detail bubble opened by clicking an event chip. Operating surface for get_event (edit pencil → editor → read fields), delete_event (trash), respond_to_event (RSVP Yes/No/Maybe)."
+    distinctives:
+      - "Entry clicks `event_chip[data-eventid='{{event_id}}']`; the event MUST be on the currently-rendered grid range or the chip won't match."
+      - "Container is `[role='dialog']`. Edit pencil `button[aria-label='Edit event']`; trash `button[aria-label='Delete event']`."
+      - "Deleting a RECURRING event pops the same scope dialog as edit — HANDLED by resolve_recurring_scope in commit mode (known_dead_paths.recurring_scope_dialog). NOTE this scope dialog is ALSO a `[role='dialog']`, so the handler keys detection on a scope option label, not a bare dialog."
+      - "RSVP control labels are Yes/No/Maybe in the UI; the atom passes the API enum (accepted/declined/tentative). The aria-pressed verify is speculative."
+    verified_mechanic_at: 2026-05-15   # open-via-chip + delete proven on sibling manifest
+    status: partially_documented
+
+  SearchResults:
+    view: SearchResults
+    url_pattern: "https://calendar.google.com/calendar/u/<N>/r/search?q=<query>"
+    purpose: "Result list after a query through the calendar search bar. Same event-chip affordances as CalendarGrid, scoped to matches."
+    distinctives:
+      - "browser flavor only confirms the URL landed on `/r/search` (events:null). Structured results need the gapi `events.list` with `q` (session_api flavor is MISSING — see google-calendar.md)."
+      - "Identifying selectors: `input[aria-label='Search']` + `[role='main'] [role='list']`."
+    status: research_only
+
+  CalendarListSidebar:
+    view: null   # always-visible chrome, not a routed view
+    url_pattern: "any calendar URL"
+    purpose: "Left rail listing My calendars + Other calendars. Operating surface for list_calendars (browser flavor only confirms it rendered; structured data needs gapi calendarList.list)."
+    distinctives:
+      - "Landmark: `[aria-label='My calendars']` or `[role='list'][aria-label*='calendars' i]`."
+    status: research_only
+
+# ─── Affordances ──────────────────────────────────────────────────
+
+affordances:
+  CalendarGrid:
+    create_flow:
+      - { label: "Create", widget: google-calendar.create_button, opens: "create menu", note: "button has NO aria-label — matched via [aria-haspopup='menu'] + trigger_text 'Create'. Reveals a [role='menu'] with Event/Task/etc." }
+      - { label: "Event (menuitem)", widget: google-calendar.create_event_menuitem, opens: "quick-create popup → (More options) → EventEditor", note: "matched via stable [role='menuitem'][data-key='event']" }
+    search_flow:
+      - { label: "Search", widget: google-calendar.search_button, reveals: "search input" }
+      - { label: "Search input", widget: google-calendar.search_input, behavior: "type query → lands on /r/search", archetype: typeahead_search }
+    grid:
+      - { label: "Event chip", widget: google-calendar.event_chip, opens: EventDetail, key: "data-eventid", risk: "id-format vs API id UNVERIFIED" }
+    status: research_only
+
+  EventEditor:
+    # All selectors below LIVE-VERIFIED + corrected 2026-05-28 (widget lib 0.2.0-0.4.0).
+    fields:
+      - { name: Title, widget: google-calendar.event_title, selector: "input[aria-label='Title']", note: "aria is 'Title' (placeholder is 'Add title' — don't author selectors from placeholder); id #xTiIn." }
+      - { name: StartTime, widget: google-calendar.event_start, archetype: datetime_split, selectors: "date input[aria-label='Start date'] (#xStDaIn) + time input[aria-label='Start time'] (#xStTiIn)", note: "datetime_split fills BOTH date+time from one ISO datetime (0.3.0)" }
+      - { name: EndTime, widget: google-calendar.event_end, archetype: datetime_split, selectors: "date input[aria-label='End date'] (#xEnDaIn) + time input[aria-label='End time'] (#xEnTiIn)" }
+      - { name: Description, widget: google-calendar.event_description, selector: "div[role='textbox'][aria-label='Description']", archetype: contenteditable_input }
+      - { name: Location, widget: google-calendar.event_location, selector: "input[aria-label='Add location']", note: "aria is 'Add location' not 'Location'" }
+      - { name: Attendees, widget: google-calendar.event_guests, selector: "input[aria-label='Guests']", archetype: typeahead_chip, note: "aria is 'Guests' (placeholder 'Add guests')" }
+      - { name: Recurrence, widget: google-calendar.event_recurrence, archetype: recurrence_picker, selector: "[role='combobox'][aria-label='Recurrence'] → Custom dialog", note: "fills from an RRULE via set_recurrence; combobox + Custom recurrence dialog (frequency/interval/weekday/end). LIVE-VALIDATED 2026-05-28: weekly+TU,TH+count6 and daily+interval2+until both produced the correct rule. All selectors confirmed correct." }
+    buttons:
+      - { label: "Save", widget: google-calendar.event_save, irreversible: true, commits: true, selector: "button[aria-label='Save']", note: "real <button>; [role='button'] form is dead", verify: "input[aria-label='Title'] disappears" }
+      - { label: "Back/Close", widget: google-calendar.event_close }
+      - { label: "More options", widget: google-calendar.more_options, opens: "full EventEditor (from the quick-create popup)", note: "clicked in the EventEditor entry. Real button is <button> text 'More options', NO aria-label — matched via [role='dialog'] button + trigger_text 'More options'. See google-calendar.md gotcha #5." }
+    verified_at: 2026-05-28
+    status: documented
+
+  EventDetail:
+    buttons:
+      - { label: "Edit event", widget: google-calendar.event_edit_button, opens: EventEditor, entry_point_for: [get_event, update_event] }
+      - { label: "Delete event", widget: google-calendar.event_delete_button, irreversible: true, commits: true, entry_point_for: [delete_event] }
+      - { label: "RSVP (Yes/No/Maybe)", widget: google-calendar.rsvp_button, templated_on: "{{response}}", entry_point_for: [respond_to_event], note: "data-response-status / aria-label* anchors; UNVERIFIED" }
+    status: research_only   # mechanic of open+delete verified; edit/rsvp button selectors not re-probed
+
+# ─── Known / suspected dead paths ─────────────────────────────────
+
+known_dead_paths:
+  - id: oauth_api_403_on_session_cookie
+    description: "Every oauth_api flavor targets https://www.googleapis.com/calendar/v3/... which returns 403 'Method doesn't allow unregistered callers' when called with only the user's session cookie. The flavor REQUIRES a real OAuth bearer token; it is NOT a no-OAuth path."
+    dead_for: "session-cookie-only posture (no configured OAuth token)"
+    works_for: "BYO-OAuth posture (real bearer token present)"
+    discovered: 2026-04-16
+    discovered_in: reference_google_workspace_api_paths
+    alternative: "gapi session_api (events.list/get/insert/patch/delete + freebusy.query + calendarList.list) works with just the session cookie. list_events 0.3.0 is the only atom that has it; add it to search_events / get_event / get_freebusy / list_calendars."
+    status: verified
+
+  - id: api_id_vs_grid_eventid
+    description: "CONFIRMED 2026-05-28. The API event id (e.g. ac8o6863b3vuumkcpteqhopr68, from events.list/get/search) does NOT equal the grid chip's data-eventid, which is the eid = base64url(apiId + ' ' + calendarId) (e.g. YWM4...QG0 → atob → 'ac8o6863b3vuumkcpteqhopr68 damarlachanu@m…'). The editor route /r/eventedit/<eid> uses the SAME eid form. So event_chip's old primary [data-eventid='{{event_id}}'] matched ZERO chips for an API id (querySelector === null, live)."
+    dead_selector: "[role='button'][data-eventid='{{event_id}}']"   # when {{event_id}} is the API id
+    discovered: 2026-05-28
+    alternative: "FIXED in widget library 0.2.0: the chip's jslog attr embeds the raw API id (2:['<apiId>',…]); div[role='button'][jslog*='{{event_id}}'] matches uniquely → promoted to event_chip's PRIMARY selector. For by-id READS, prefer get_event session_api (gapi events.get) — no chip needed."
+    status: verified
+
+  - id: hardcoded_account_index
+    description: "browser-flavor navigate URLs (list_events, list_calendars) and view entry.urls hardcode `u/0`. Breaks for users whose calendar is u/1+."
+    dead_selector: "https://calendar.google.com/calendar/u/0/r/week"
+    discovered: 2026-05-28
+    alternative: "Use an {account_index} placeholder resolved via view-url-resolver.ts (the harden-loop anti-pattern; same fix outlook needs)."
+    status: suspected
+
+  - id: widget_selectors_not_live_verified
+    description: "The 16-widget library (widget-libraries/google-calendar.widgets.yaml) is research-grounded, header says 'NOT live-DOM-verified this pass'. The 2026-05-15 CRUD chain healed selectors live but on a sibling chrome.storage manifest; those heals were NOT back-ported to the bundled library (live in /tmp/calendar-crud-chain/)."
+    discovered: 2026-05-28
+    alternative: "Re-verify every selector in the /harden-browser-flavor live loop; back-port any heals into the bundled library + bump its version."
+    status: research_only
+
+# ─── Transitions ──────────────────────────────────────────────────
+
+transitions:
+  - { from: CalendarGrid, to: EventEditor, via: "Create button → 'Event' menuitem → 'More options' (full editor)" }
+  - { from: CalendarGrid, to: EventDetail, via: "click event_chip[data-eventid] on the grid" }
+  - { from: CalendarGrid, to: SearchResults, via: "Search button → type query → Enter (lands /r/search)" }
+  - { from: EventDetail, to: EventEditor, via: "edit pencil (button[aria-label='Edit event'])" }
+  - { from: EventEditor, to: CalendarGrid, via: "Save (commit) OR Escape/Back (cancel)" }
+  - { from: EventDetail, to: CalendarGrid, via: "Escape (dismiss popup)" }
+  - { from: SearchResults, to: EventDetail, via: "click a result event_chip" }
+
+# ─── Atoms cross-reference ────────────────────────────────────────
+# Which atoms exercise which screen / widget. Derived from actions/*.yaml;
+# keep in sync by hand. (n/a = atom is API/MCP-only, no DOM affordance.)
+
+atoms_using:
+  CalendarGrid.create_button: [create_event]
+  CalendarGrid.create_event_menuitem: [create_event]
+  CalendarGrid.search_button: [search_events]
+  CalendarGrid.search_input: [search_events]
+  CalendarGrid.event_chip: [get_event, update_event, delete_event, respond_to_event]   # via EventDetail entry
+  EventEditor.event_title: [create_event, update_event, get_event(read)]
+  EventEditor.event_start: [create_event, update_event, get_event(read)]
+  EventEditor.event_end: [create_event, update_event, get_event(read)]
+  EventEditor.event_description: [create_event, update_event, get_event(read)]
+  EventEditor.event_location: [create_event, update_event, get_event(read)]
+  EventEditor.event_guests: [create_event, update_event]
+  EventEditor.event_recurrence: [create_event, update_event]   # via fill_fields when fields.Recurrence (RRULE) is set
+  EventEditor.event_save: [create_event, update_event]
+  EventEditor.more_options: [create_event]   # entry step → full editor
+  EventDetail.event_edit_button: [get_event, update_event]
+  EventDetail.event_delete_button: [delete_event]
+  EventDetail.rsvp_button: [respond_to_event]
+  # resolve_recurring_scope (recipe-level step, not a widget): update_event, delete_event (commit mode)
+  CalendarListSidebar: [list_calendars]   # browser flavor lands only; gapi for data
+  # API/MCP-only (no DOM affordance):
+  get_freebusy: []   # oauth_api/mcp only — NEEDS session_api gapi flavor

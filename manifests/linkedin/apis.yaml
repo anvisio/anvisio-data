@@ -1,0 +1,19 @@
+_meta:
+  name: manifests/linkedin/apis.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude
+  authored_at: 2026-06-01
+  description: |
+    LinkedIn API surface. Empty by design. LinkedIn's official REST API
+    requires partner approval and covers only the member's OWN profile,
+    content posting, and events, NOT arbitrary member reads, people
+    search, messaging, or connections. So the people-research atoms are
+    browser-flavor only and declare no API call. If a future content /
+    posting PR adds an oauth_api create_post, it declares the call inline
+    as a `request:` block per INTEGRATION_FORMAT conventions; this stays
+    empty unless a named endpoint is shared across actions.
+  changelog:
+    - "0.1.0 (2026-06-01): initial. Empty: browser-first integration, no public member-read API."
+
+apis: {}
