@@ -26,9 +26,9 @@ document:
 
     Throwaway data — no real recipients, no other SaaS touched:
       - Title: 'Anvisio attendees smoke'
-      - Two attendees on @anvisio.test (a non-routable testing domain,
-        so even if Save were accidentally clicked + invites sent they
-        bounce harmlessly).
+      - Two attendees on @example.com (a reserved example domain per
+        RFC 2606, so even if Save were accidentally clicked + invites
+        sent they bounce harmlessly).
 
     Drive: /run-blueprint google-calendar create_event_with_attendees_tester
     (DETACH chrome-devtools MCP first — it holds the CDP socket the
@@ -67,8 +67,8 @@ do:
         StartTime: '2026-06-09T14:00:00-07:00'
         EndTime:   '2026-06-09T14:45:00-07:00'
         Attendees:
-          - attendee-one@anvisio.test
-          - attendee-two@anvisio.test
+          - attendee-one@example.com
+          - attendee-two@example.com
         Description: |
           Throwaway tester for the calendar Attendees field.
-          No real recipients; @anvisio.test is non-routable.
+          No real recipients; @example.com is a reserved example domain.
