@@ -1,0 +1,34 @@
+_meta:
+  name: manifests/coffee/actions/update_object.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    update_object - object-generic update. FLAGGED: record is a right-side drawer with an Edit affordance + inline contenteditable fields; commit/toaster need live hardening.
+
+description: Update fields on any coffee object record.
+object: "{{inputs.object}}"
+object_types: [Person, Company, Deal, Task, Note]
+commits_changes: true
+depends_on_view: RecordView
+inputs:
+  object: { type: text, required: true, sample: Person }
+  record_id: { type: text, required: true, sample: "c|ddb|7360|6a502dd8838198a804073dc5" }
+  fields: { type: object, required: true, sample: { title: VP Sales } }
+result:
+  outcome: text
+  record: { schema_union: [Person, Company, Deal, Task, Note] }
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the record drawer, edit inline, save
+    signals:
+      updated: { type: selector_appears, selector: "li.group", must_contain_text: "updated" }
+    recipe:
+      - { id: desc, type: resolve_object, args: { object: "{{inputs.object}}", verb: update } }
+      - { id: goto, type: navigate, args: { url: "{instance.origin}/{{steps.desc.url_segment}}/{{inputs.record_id}}" } }
+      - { id: fill, type: fill_fields, args: { object: "{{inputs.object}}", from: "{{inputs.fields}}" } }
+      - { id: save, type: use_widget, commit: true, args: { widget: coffee.save_generic, op: invoke } }
+    outcomes:
+      - { action: updated, when: [updated] }

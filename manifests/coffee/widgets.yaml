@@ -1,0 +1,79 @@
+_meta:
+  name: manifests/coffee/widgets.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    coffee widget primitives, archetype-driven, object-generic. Person Add-form live-probed 2026-07-09 (stable ids #person-<field> + a primary bg-primary submit). Edit/delete widgets FLAGGED pending a live drive.
+
+  archetypes_used: [text_input, typeahead_search, click_reveals, click_dismisses]
+
+# Writable fields with no explicit widget resolve here by type.
+defaults_by_type:
+  text: coffee.text_input
+
+widgets:
+  # Form text field. Coffee's Add/Edit modal inputs have stable ids #<object>-<field>
+  # (observed #person-first, #person-email). Addressed id-first via the field key,
+  # with a label/placeholder fallback.
+  coffee.text_input:
+    archetype: text_input
+    selectors:
+      fill_target:
+        - "#person-{{field}}"
+        - "[role=dialog] input[placeholder=\"{{field_label}}\"]"
+        - "xpath=//input[@id = //label[normalize-space()=\"{{field_label}}\"]/@for]"
+
+  # The list's "Add <Object>" button — opens the create modal.
+  coffee.add_button:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "xpath=//button[normalize-space()=\"{{add_label}}\"]"
+      verify_target: "[role=dialog]"
+
+  # Live typeahead search box on each object list.
+  coffee.search_input:
+    archetype: typeahead_search
+    selectors:
+      trigger:
+        - "input[placeholder*=\"Search\"]"
+      input:
+        - "input[placeholder*=\"Search\"]"
+    overrides:
+      verify_timeout_ms: 8000
+
+
+  coffee.save_generic:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - "[role=dialog] button.bg-primary"
+      verify_target: "[role=dialog]"
+    overrides:
+      failure_selector: "p.text-destructive"
+      failure_message: "a required field is missing or invalid"
+
+  # Delete flow (FLAGGED — best-guess overflow-menu + confirm; confirm live).
+  coffee.object_actions_menu:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "[aria-label=\"More\"]"
+        - "[aria-haspopup=\"menu\"]"
+      verify_target: "[role=menu]"
+  coffee.delete_menu_item:
+    archetype: click_reveals
+    selectors:
+      trigger:
+        - "xpath=//*[@role=\"menuitem\"][starts-with(normalize-space(),\"Delete\")]"
+      verify_target: "[role=alertdialog], [role=dialog]"
+  coffee.delete_confirm:
+    archetype: click_dismisses
+    irreversible: true
+    selectors:
+      trigger:
+        - "xpath=//*[self::button][normalize-space()=\"Delete\" or normalize-space()=\"Confirm\"]"
+      verify_target: "[role=alertdialog], [role=dialog]"

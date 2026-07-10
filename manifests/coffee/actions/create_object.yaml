@@ -1,0 +1,36 @@
+_meta:
+  name: manifests/coffee/actions/create_object.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    create_object - object-generic create. Browser: navigate list -> click 'Add <Object>' -> fill modal -> submit. Live-observed on People: success li.group toaster 'created successfully'; invalid email -> p.text-destructive.
+
+description: Create any coffee object via its Add form.
+object: "{{inputs.object}}"
+object_types: [Person, Company, Deal, Task, Note]
+commits_changes: true
+depends_on_view: NewRecordForm
+inputs:
+  object: { type: text, required: true, sample: Person }
+  fields: { type: object, required: true, sample: { first: Ada, email: ada@example.com } }
+result:
+  outcome: text
+  record: { schema_union: [Person, Company, Deal, Task, Note] }
+flavors:
+  browser:
+    requires_auth: session_cookie
+    label: Open the Add form, fill the fields, submit
+    signals:
+      created: { type: selector_appears, selector: "li.group", must_contain_text: "created successfully" }
+      invalid: { type: selector_appears, selector: "p.text-destructive", must_contain_text: "valid email address" }
+    recipe:
+      - { id: desc, type: resolve_object, args: { object: "{{inputs.object}}", verb: create } }
+      - { id: goto, type: navigate, args: { url: "{instance.origin}/{{steps.desc.url_segment}}" } }
+      - { id: open, type: use_widget, args: { widget: coffee.add_button, op: invoke } }
+      - { id: fill, type: fill_fields, args: { object: "{{inputs.object}}", from: "{{inputs.fields}}" } }
+      - { id: submit, type: use_widget, commit: true, args: { widget: coffee.save_generic, op: invoke } }
+    outcomes:
+      - { action: created, when: [created] }
+      - { action: rejected, when: [invalid], not: [created] }

@@ -1,0 +1,26 @@
+_meta:
+  name: manifests/coffee/views/NewRecordForm.yaml
+  version: 0.1.0
+  cdn_schema_version: 70.0.0
+  authored_by: cd2k + claude (propose-observe)
+  authored_at: 2026-07-09
+  description: |
+    The Add-object modal form (opened via the list Add button).
+
+name: NewRecordForm
+entry:
+  depends_on_view: ObjectList
+  recipe:
+    - id: open
+      type: use_widget
+      args: { widget: coffee.add_button, op: invoke }
+landmark_probe:
+  selector: "[role=dialog] button.bg-primary"
+  timeout_ms: 8000
+verify:
+  - type: selector_appears
+    selector: "[role=dialog] button.bg-primary"
+    timeout_ms: 8000
+widgets:
+  - coffee.text_input
+  - coffee.save_generic
