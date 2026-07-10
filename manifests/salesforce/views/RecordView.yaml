@@ -1,6 +1,6 @@
 _meta:
   name: manifests/salesforce/views/RecordView.yaml
-  version: 1.0.0
+  version: 1.1.0
   cdn_schema_version: 60.4.2
   authored_by: cd2k + claude
   authored_at: 2026-05-16
